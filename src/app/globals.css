@@ -1,26 +1,150 @@
 @import "tailwindcss";
 
+/* ─── ZeveAI Design Tokens — BTG/XP Light Theme ─────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand Blue (BTG Pactual-inspired) */
+  --blue:        #1764F4;
+  --blue-light:  #4A8FF8;
+  --blue-dark:   #0F4ED4;
+  --blue-dim:    rgba(23, 100, 244, 0.07);
+  --blue-glow:   rgba(23, 100, 244, 0.15);
+
+  /* Surfaces — clean white */
+  --background:    #F0F4FF;
+  --surface-1:     #FFFFFF;
+  --surface-2:     #FFFFFF;
+  --surface-3:     #F0F4FF;
+  --surface-4:     #E4ECFF;
+
+  /* Borders */
+  --border:        #D5E0F5;
+  --border-subtle: #E8EFF9;
+
+  /* Text */
+  --foreground: #111827;
+  --muted:      #6B7280;
+  --muted-lg:   #9CA3AF;
+
+  /* Sidebar */
+  --sidebar: #F0F4FF;
+
+  /* Status */
+  --success:  #059669;
+  --warning:  #D97706;
+  --danger:   #DC2626;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ─── Base ───────────────────────────────────────────────────────── */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+* { box-sizing: border-box; }
+
+/* ─── Keyframes ──────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+/* ─── Animation Classes ──────────────────────────────────────────── */
+.animate-fade-in   { animation: fadeIn   0.2s ease both; }
+.animate-fade-up   { animation: fadeUp   0.28s cubic-bezier(0.16,1,0.3,1) both; }
+.animate-fade-down { animation: fadeDown 0.18s ease both; }
+.animate-scale-in  { animation: scaleIn  0.2s  cubic-bezier(0.16,1,0.3,1) both; }
+
+/* Stagger */
+.stagger > *:nth-child(1) { animation-delay: 0ms;   }
+.stagger > *:nth-child(2) { animation-delay: 50ms;  }
+.stagger > *:nth-child(3) { animation-delay: 100ms; }
+.stagger > *:nth-child(4) { animation-delay: 150ms; }
+.stagger > *:nth-child(5) { animation-delay: 200ms; }
+.stagger > *:nth-child(6) { animation-delay: 250ms; }
+
+/* ─── Skeleton ───────────────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--surface-3) 25%,
+    var(--surface-4) 50%,
+    var(--surface-3) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+  border-radius: 0.375rem;
+}
+
+/* ─── Global Transitions ─────────────────────────────────────────── */
+a, button {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+  transition-duration: 140ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Focus ──────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid rgba(23, 100, 244, 0.55);
+  outline-offset: 2px;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blue-light); }
+
+/* ─── Select ─────────────────────────────────────────────────────── */
+select {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  border-radius: 0.5rem;
+  padding: 0.4rem 2rem 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.625rem center;
+  transition: border-color 140ms;
+}
+select:focus { border-color: rgba(23,100,244,0.5); }
+select option { background: var(--surface-3); }
+
+/* ─── Table ──────────────────────────────────────────────────────── */
+table { border-collapse: collapse; width: 100%; }
+
+/* ─── Modal ──────────────────────────────────────────────────────── */
+.modal-backdrop {
+  background: rgba(15, 24, 39, 0.55);
+  backdrop-filter: blur(6px);
+  animation: fadeIn 0.15s ease both;
+}
+.modal-content { animation: scaleIn 0.22s cubic-bezier(0.16,1,0.3,1) both; }
+
+/* ─── Reduce Motion ──────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

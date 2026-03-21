@@ -95,7 +95,7 @@ export default async function InfluenciadorDetailPage({ params }: { params: Prom
     .eq('influenciador_id', id)
     .order('created_at', { ascending: false })
 
-  const allLeads = (leads ?? []) as Lead[]
+  const allLeads = (leads ?? []) as unknown as Lead[]
 
   const score = calcularScore(allLeads)
   const cls = getClassificacao(score.total)

@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { LogOut, Bell } from 'lucide-react'
+import { LogOut, Bell, Menu } from 'lucide-react'
+import { useSidebar } from '@/lib/sidebar-context'
 
 interface HeaderProps {
   title: string
@@ -10,6 +11,7 @@ interface HeaderProps {
 
 export function Header({ title }: HeaderProps) {
   const router = useRouter()
+  const { toggle } = useSidebar()
 
   async function handleLogout() {
     const supabase = createClient()
@@ -18,7 +20,7 @@ export function Header({ title }: HeaderProps) {
   }
 
   return (
-    <header className="relative h-14 flex items-center justify-between px-6 backdrop-blur-sm"
+    <header className="relative h-14 flex items-center justify-between px-4 sm:px-6 backdrop-blur-sm"
       style={{
         background: 'rgba(255,255,255,0.95)',
         borderBottom: '1px solid var(--border-subtle)',
@@ -29,7 +31,17 @@ export function Header({ title }: HeaderProps) {
         style={{ background: 'linear-gradient(90deg, transparent 0%, var(--blue) 30%, var(--blue-light) 70%, transparent 100%)', opacity: 0.6 }}
       />
 
-      <h1 className="text-base font-semibold text-slate-900 tracking-tight">{title}</h1>
+      <div className="flex items-center gap-3">
+        {/* Hamburger — só aparece no mobile */}
+        <button
+          onClick={toggle}
+          className="lg:hidden p-2 rounded-lg transition-colors"
+          style={{ color: 'var(--muted)' }}
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <h1 className="text-base font-semibold text-slate-900 tracking-tight">{title}</h1>
+      </div>
 
       <div className="flex items-center gap-1">
         <button

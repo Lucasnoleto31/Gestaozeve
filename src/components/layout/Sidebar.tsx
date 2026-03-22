@@ -1,13 +1,15 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Role } from '@/types'
+import { useSidebar } from '@/lib/sidebar-context'
 import {
   LayoutDashboard, Users, Settings, UserCircle, Link2,
   UserCheck, Monitor, ShieldAlert, BarChart2, FileStack, FileDown,
-  TrendingUp, Building2, Bell,
+  TrendingUp, Building2, Bell, X,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -66,15 +68,24 @@ const ROLE_LABELS: Record<Role, string> = {
 
 export function Sidebar({ role, nome }: SidebarProps) {
   const pathname = usePathname()
+  const { isOpen, close } = useSidebar()
+
+  // Fecha o sidebar ao navegar no mobile
+  useEffect(() => { close() }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sections = NAV_SECTIONS.filter((s) => s.roles.includes(role))
 
   return (
-    <aside className="w-64 flex flex-col h-full fixed left-0 top-0 z-40"
+    <aside
+      className={cn(
+        'w-64 flex flex-col h-full fixed left-0 top-0 z-40 transition-transform duration-300',
+        'lg:translate-x-0',
+        isOpen ? 'translate-x-0' : '-translate-x-full'
+      )}
       style={{ background: 'var(--sidebar)', borderRight: '1px solid var(--border-subtle)' }}
     >
       {/* Logo */}
-      <div className="px-5 py-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+      <div className="px-5 py-5 relative" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%)' }}
@@ -85,6 +96,12 @@ export function Sidebar({ role, nome }: SidebarProps) {
             <span className="text-sm font-bold text-slate-900 tracking-wide">ZeveAI</span>
             <p className="text-xs leading-none mt-0.5" style={{ color: 'var(--muted)' }}>Assessoria</p>
           </div>
+          <button
+            onClick={close}
+            className="lg:hidden ml-auto p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       </div>
 

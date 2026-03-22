@@ -1,8 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM_EMAIL = process.env.NOTIFICACOES_FROM ?? 'notificacoes@zeve.ai'
+
+function getResend() {
+  return new Resend(process.env.RESEND_API_KEY)
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -47,7 +50,7 @@ async function enviarEmail(para: string, assunto: string, html: string) {
     console.warn('[notificacoes] RESEND_API_KEY não configurado — e-mail ignorado')
     return
   }
-  await resend.emails.send({ from: FROM_EMAIL, to: para, subject: assunto, html })
+  await getResend().emails.send({ from: FROM_EMAIL, to: para, subject: assunto, html })
 }
 
 // ─── Templates ───────────────────────────────────────────────────────────────

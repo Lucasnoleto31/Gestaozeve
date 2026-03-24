@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { downloadExcel, downloadPDF } from '@/lib/download'
+import { downloadExcel, downloadPDF, downloadReceitasPDF } from '@/lib/download'
 import type { ReportResult } from './actions'
 import {
   TrendingUp, Users, Link2, BarChart2, Monitor,
@@ -19,6 +19,7 @@ interface ReportCard {
   iconBg: string
   filename: string
   action: ReportFn
+  enhanced?: boolean
 }
 
 interface CategorySection {
@@ -39,6 +40,7 @@ interface Props {
     getTopInfluenciadores: ReportFn
     getChurnPorPlataforma: ReportFn
     getClientesPorPeriodo: ReportFn
+    getPlataformasPorMes: ReportFn
   }
 }
 
@@ -58,6 +60,7 @@ export function RelatoriosView({ actions }: Props) {
           iconBg: 'bg-emerald-50',
           filename: 'receita-por-mes',
           action: actions.getReceitaPorMes,
+          enhanced: true,
         },
         {
           id: 'receita-assessor',
@@ -68,6 +71,7 @@ export function RelatoriosView({ actions }: Props) {
           iconBg: 'bg-blue-50',
           filename: 'receita-por-assessor',
           action: actions.getReceitaPorAssessor,
+          enhanced: true,
         },
         {
           id: 'receita-influenciador',
@@ -78,6 +82,7 @@ export function RelatoriosView({ actions }: Props) {
           iconBg: 'bg-violet-50',
           filename: 'receita-por-influenciador',
           action: actions.getReceitaPorInfluenciador,
+          enhanced: true,
         },
         {
           id: 'receita-ativo',
@@ -88,6 +93,7 @@ export function RelatoriosView({ actions }: Props) {
           iconBg: 'bg-amber-50',
           filename: 'receita-por-ativo',
           action: actions.getReceitaPorAtivo,
+          enhanced: true,
         },
         {
           id: 'receita-plataforma',
@@ -98,6 +104,7 @@ export function RelatoriosView({ actions }: Props) {
           iconBg: 'bg-blue-50',
           filename: 'receita-por-plataforma',
           action: actions.getReceitaPorPlataforma,
+          enhanced: true,
         },
       ],
     },
@@ -113,6 +120,21 @@ export function RelatoriosView({ actions }: Props) {
           iconBg: 'bg-red-50',
           filename: 'contratos-girados-zerados',
           action: actions.getContratosGiradosZerados,
+        },
+      ],
+    },
+    {
+      label: 'Plataformas',
+      reports: [
+        {
+          id: 'plataformas-mes',
+          title: 'Plataformas Mensais',
+          description: 'Somatória do valor por plataforma agrupada por mês.',
+          icon: Monitor,
+          iconColor: 'text-indigo-600',
+          iconBg: 'bg-indigo-50',
+          filename: 'plataformas-mensais',
+          action: actions.getPlataformasPorMes,
         },
       ],
     },
@@ -189,6 +211,8 @@ export function RelatoriosView({ actions }: Props) {
       const { columns, rows } = await report.action()
       if (format === 'excel') {
         downloadExcel(columns, rows, report.filename)
+      } else if (report.enhanced) {
+        downloadReceitasPDF(columns, rows, report.title, report.filename)
       } else {
         downloadPDF(columns, rows, report.title, report.filename)
       }

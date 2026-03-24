@@ -368,6 +368,8 @@ export function ContratosView({ contratos, importacoes }: Props) {
             <thead>
               <tr className="bg-gray-100">
                 <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Data</th>
+                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Nº Conta</th>
+                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">CPF/CNPJ</th>
                 <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Cliente</th>
                 <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Barra</th>
                 <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Ativo</th>
@@ -382,11 +384,10 @@ export function ContratosView({ contratos, importacoes }: Props) {
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {c.data ? new Date(c.data + 'T12:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '-'}
                   </td>
-                  <td className="px-4 py-3">
-                    <p className="text-gray-700 text-xs font-medium truncate max-w-[150px]">
-                      {c.cliente?.nome ?? c.cliente_nome ?? '-'}
-                    </p>
-                    <p className="text-gray-400 text-xs">{c.cpf ?? c.cnpj}</p>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{c.numero_conta ?? '-'}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{c.cpf ?? c.cnpj ?? '-'}</td>
+                  <td className="px-4 py-3 text-gray-700 text-xs font-medium truncate max-w-[150px]">
+                    {c.cliente?.nome ?? c.cliente_nome ?? '-'}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{c.assessor_nome ?? '-'}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{c.ativo ?? '-'}</td>
@@ -403,14 +404,14 @@ export function ContratosView({ contratos, importacoes }: Props) {
               ))}
               {contratosFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
+                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">
                     Nenhum contrato encontrado.
                   </td>
                 </tr>
               )}
               {contratosFiltrados.length > 100 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-3 text-center text-xs text-gray-400">
+                  <td colSpan={9} className="px-4 py-3 text-center text-xs text-gray-400">
                     Exibindo os primeiros 100 de {contratosFiltrados.length} registros. Use os filtros para refinar.
                   </td>
                 </tr>

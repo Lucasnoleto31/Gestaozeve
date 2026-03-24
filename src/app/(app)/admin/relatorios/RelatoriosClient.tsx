@@ -18,6 +18,7 @@ interface Props {
     getTopInfluenciadores: ReportFn
     getChurnPorPlataforma: ReportFn
     getClientesPorPeriodo: ReportFn
+    getPlataformasPorMes: ReportFn
   }
 }
 

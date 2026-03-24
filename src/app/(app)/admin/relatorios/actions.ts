@@ -14,13 +14,16 @@ async function adminOnly() {
   return await createClient()
 }
 
+const brl = (v: unknown) =>
+  v == null ? null : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 export async function getReceitaPorMes(): Promise<ReportResult> {
   const supabase = await adminOnly()
   const { data, error } = await supabase.rpc('relatorio_receita_por_mes')
   if (error) throw new Error(error.message)
   return {
     columns: ['Mês', 'Receita Genial (R$)', 'Bruto AAI (R$)', 'Imposto (R$)', 'Líquido AAI (R$)', 'Comissão Assessor (R$)'],
-    rows: (data ?? []).map((r: Record<string, unknown>) => [r.mes, r.receita_genial, r.bruto_aai, r.imposto, r.liquido_aai, r.comissao_assessor]),
+    rows: (data ?? []).map((r: Record<string, unknown>) => [r.mes, brl(r.receita_genial), brl(r.bruto_aai), brl(r.imposto), brl(r.liquido_aai), brl(r.comissao_assessor)]),
   }
 }
 
@@ -30,7 +33,7 @@ export async function getReceitaPorAssessor(): Promise<ReportResult> {
   if (error) throw new Error(error.message)
   return {
     columns: ['Assessor', 'Receita Genial (R$)', 'Bruto AAI (R$)', 'Imposto (R$)', 'Líquido AAI (R$)', 'Comissão (R$)'],
-    rows: (data ?? []).map((r: Record<string, unknown>) => [r.assessor, r.receita_genial, r.bruto_aai, r.imposto, r.liquido_aai, r.comissao_assessor]),
+    rows: (data ?? []).map((r: Record<string, unknown>) => [r.assessor, brl(r.receita_genial), brl(r.bruto_aai), brl(r.imposto), brl(r.liquido_aai), brl(r.comissao_assessor)]),
   }
 }
 
@@ -40,7 +43,7 @@ export async function getReceitaPorInfluenciador(): Promise<ReportResult> {
   if (error) throw new Error(error.message)
   return {
     columns: ['Influenciador', 'Nº Clientes', 'Receita Líquida (R$)'],
-    rows: (data ?? []).map((r: Record<string, unknown>) => [r.influenciador, r.num_clientes, r.liquido_aai]),
+    rows: (data ?? []).map((r: Record<string, unknown>) => [r.influenciador, r.num_clientes, brl(r.liquido_aai)]),
   }
 }
 
@@ -50,7 +53,7 @@ export async function getReceitaPorAtivo(): Promise<ReportResult> {
   if (error) throw new Error(error.message)
   return {
     columns: ['Produto/Ativo', 'Tipo', 'Nº Operações', 'Receita Líquida (R$)'],
-    rows: (data ?? []).map((r: Record<string, unknown>) => [r.produto, r.tipo_produto, r.num_operacoes, r.liquido_aai]),
+    rows: (data ?? []).map((r: Record<string, unknown>) => [r.produto, r.tipo_produto, r.num_operacoes, brl(r.liquido_aai)]),
   }
 }
 
@@ -60,7 +63,7 @@ export async function getReceitaPorPlataforma(): Promise<ReportResult> {
   if (error) throw new Error(error.message)
   return {
     columns: ['Plataforma', 'Receita Líquida (R$)', 'Lotes Operados', 'Lotes Zerados', '% Zeramento'],
-    rows: (data ?? []).map((r: Record<string, unknown>) => [r.plataforma, r.liquido_aai, r.lotes_operados, r.lotes_zerados, r.pct_zeramento]),
+    rows: (data ?? []).map((r: Record<string, unknown>) => [r.plataforma, brl(r.liquido_aai), r.lotes_operados, r.lotes_zerados, r.pct_zeramento]),
   }
 }
 
@@ -80,7 +83,7 @@ export async function getTopClientes(): Promise<ReportResult> {
   if (error) throw new Error(error.message)
   return {
     columns: ['Cliente', 'CPF', 'Assessor', 'Receita Líquida (R$)'],
-    rows: (data ?? []).map((r: Record<string, unknown>) => [r.cliente, r.cpf, r.assessor, r.liquido_aai]),
+    rows: (data ?? []).map((r: Record<string, unknown>) => [r.cliente, r.cpf, r.assessor, brl(r.liquido_aai)]),
   }
 }
 
@@ -100,7 +103,7 @@ export async function getTopInfluenciadores(): Promise<ReportResult> {
   if (error) throw new Error(error.message)
   return {
     columns: ['Influenciador', 'Código', 'Total Leads', 'Convertidos', '% Conversão', 'Receita Gerada (R$)'],
-    rows: (data ?? []).map((r: Record<string, unknown>) => [r.influenciador, r.codigo, r.total_leads, r.convertidos, r.pct_conversao, r.receita_gerada]),
+    rows: (data ?? []).map((r: Record<string, unknown>) => [r.influenciador, r.codigo, r.total_leads, r.convertidos, r.pct_conversao, brl(r.receita_gerada)]),
   }
 }
 
@@ -121,5 +124,15 @@ export async function getClientesPorPeriodo(): Promise<ReportResult> {
   return {
     columns: ['Mês Cadastro', 'Total', 'Ativos', 'Inativos', 'Em Transferência'],
     rows: (data ?? []).map((r: Record<string, unknown>) => [r.mes, r.total, r.ativos, r.inativos, r.em_transferencia]),
+  }
+}
+
+export async function getPlataformasPorMes(): Promise<ReportResult> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('relatorio_plataformas_por_mes')
+  if (error) throw new Error(error.message)
+  return {
+    columns: ['Mês', 'Plataforma', 'Valor Total (R$)'],
+    rows: (data ?? []).map((r: Record<string, unknown>) => [r.mes, r.plataforma, brl(r.valor_total)]),
   }
 }

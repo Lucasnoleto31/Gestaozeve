@@ -245,6 +245,29 @@ LANGUAGE sql SECURITY DEFINER AS $$
   ORDER BY DATE_TRUNC('month', created_at);
 $$;
 
+-- 12. Plataformas únicas e valor total por mês
+CREATE OR REPLACE FUNCTION relatorio_plataformas_por_mes()
+RETURNS TABLE(mes text, plataformas_unicas bigint, valor_total numeric)
+LANGUAGE sql SECURITY DEFINER AS $$
+  WITH plataforma_cliente AS (
+    SELECT DISTINCT ON (cliente_id)
+      cliente_id,
+      COALESCE(plataforma, 'Não informada') AS plataforma
+    FROM public.contratos
+    WHERE cliente_id IS NOT NULL
+    ORDER BY cliente_id, data DESC NULLS LAST
+  )
+  SELECT
+    TO_CHAR(DATE_TRUNC('month', r.data_receita), 'MM/YYYY') AS mes,
+    COUNT(DISTINCT pc.plataforma) AS plataformas_unicas,
+    ROUND(SUM(r.valor_liquido_aai)::numeric, 2) AS valor_total
+  FROM public.receitas r
+  LEFT JOIN plataforma_cliente pc ON r.cliente_id = pc.cliente_id
+  WHERE r.data_receita IS NOT NULL
+  GROUP BY DATE_TRUNC('month', r.data_receita)
+  ORDER BY DATE_TRUNC('month', r.data_receita);
+$$;
+
 -- Permissões
 GRANT EXECUTE ON FUNCTION relatorio_receita_por_mes() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_receita_por_assessor() TO authenticated;
@@ -257,3 +280,4 @@ GRANT EXECUTE ON FUNCTION relatorio_top_clientes_risco() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_top_influenciadores() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_churn_por_plataforma() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_clientes_por_periodo() TO authenticated;
+GRANT EXECUTE ON FUNCTION relatorio_plataformas_por_mes() TO authenticated;

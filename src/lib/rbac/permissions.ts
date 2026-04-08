@@ -1,7 +1,6 @@
 import { Role } from '@/types'
 import {
   LayoutDashboard,
-  Users,
   Settings,
   UserCircle,
   Link2,
@@ -16,7 +15,6 @@ import {
 export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
   '/dashboard': ['admin', 'vendedor', 'influenciador'],
   '/clientes': ['admin', 'vendedor'],
-  '/crm': ['admin', 'vendedor'],
   '/influenciadores': ['admin', 'vendedor'],
   '/plataformas': ['admin', 'vendedor'],
   '/retencao': ['admin', 'vendedor'],
@@ -45,12 +43,6 @@ export const NAV_ITEMS: {
     label: 'Clientes',
     href: '/clientes',
     icon: UserCheck,
-    roles: ['admin', 'vendedor'],
-  },
-  {
-    label: 'CRM/Leads',
-    href: '/crm',
-    icon: Users,
     roles: ['admin', 'vendedor'],
   },
   {

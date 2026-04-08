@@ -8,6 +8,14 @@ export type ReportResult = {
   rows: (string | number | null)[][]
 }
 
+export type CohortItem = {
+  cohort_mes: string
+  dia_num: number
+  lotes_operados: number
+  lotes_zerados: number
+  pct_zeramento: number
+}
+
 async function adminOnly() {
   const profile = await getProfile()
   if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
@@ -125,6 +133,19 @@ export async function getClientesPorPeriodo(): Promise<ReportResult> {
     columns: ['Mês Cadastro', 'Total', 'Ativos', 'Inativos', 'Em Transferência'],
     rows: (data ?? []).map((r: Record<string, unknown>) => [r.mes, r.total, r.ativos, r.inativos, r.em_transferencia]),
   }
+}
+
+export async function getCohortContratosPorDia(): Promise<CohortItem[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('relatorio_cohort_contratos')
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    cohort_mes: String(r.cohort_mes),
+    dia_num: Number(r.dia_num),
+    lotes_operados: Number(r.lotes_operados),
+    lotes_zerados: Number(r.lotes_zerados),
+    pct_zeramento: Number(r.pct_zeramento),
+  }))
 }
 
 export async function getPlataformasPorMes(): Promise<ReportResult> {

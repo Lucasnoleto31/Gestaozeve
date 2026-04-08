@@ -268,6 +268,24 @@ LANGUAGE sql SECURITY DEFINER AS $$
   ORDER BY DATE_TRUNC('month', r.data_receita);
 $$;
 
+-- 13. Cohort de contratos por dia do mês
+CREATE OR REPLACE FUNCTION relatorio_cohort_contratos()
+RETURNS TABLE(cohort_mes text, dia_num integer, lotes_operados numeric, lotes_zerados numeric, pct_zeramento numeric)
+LANGUAGE sql SECURITY DEFINER AS $$
+  SELECT
+    TO_CHAR(DATE_TRUNC('month', data), 'MM/YYYY') AS cohort_mes,
+    EXTRACT(DAY FROM data)::integer AS dia_num,
+    ROUND(SUM(lotes_operados)::numeric, 2) AS lotes_operados,
+    ROUND(SUM(lotes_zerados)::numeric, 2) AS lotes_zerados,
+    CASE WHEN SUM(lotes_operados) > 0
+      THEN ROUND((SUM(lotes_zerados) / SUM(lotes_operados) * 100)::numeric, 2)
+      ELSE 0 END AS pct_zeramento
+  FROM public.contratos
+  WHERE data IS NOT NULL
+  GROUP BY DATE_TRUNC('month', data), EXTRACT(DAY FROM data)::integer
+  ORDER BY DATE_TRUNC('month', data), EXTRACT(DAY FROM data)::integer;
+$$;
+
 -- Permissões
 GRANT EXECUTE ON FUNCTION relatorio_receita_por_mes() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_receita_por_assessor() TO authenticated;
@@ -281,3 +299,4 @@ GRANT EXECUTE ON FUNCTION relatorio_top_influenciadores() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_churn_por_plataforma() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_clientes_por_periodo() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_plataformas_por_mes() TO authenticated;
+GRANT EXECUTE ON FUNCTION relatorio_cohort_contratos() TO authenticated;

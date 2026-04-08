@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import type { ReportResult } from './actions'
+import type { ReportResult, CohortItem } from './actions'
 
 type ReportFn = () => Promise<ReportResult>
 
@@ -19,6 +19,7 @@ interface Props {
     getChurnPorPlataforma: ReportFn
     getClientesPorPeriodo: ReportFn
     getPlataformasPorMes: ReportFn
+    getCohortContratosPorDia: () => Promise<CohortItem[]>
   }
 }
 

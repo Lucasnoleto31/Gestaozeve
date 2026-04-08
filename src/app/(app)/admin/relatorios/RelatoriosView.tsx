@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { downloadExcel, downloadPDF, downloadReceitasPDF } from '@/lib/download'
-import type { ReportResult } from './actions'
+import type { ReportResult, CohortItem } from './actions'
 import {
   TrendingUp, Users, Link2, BarChart2, Monitor,
   FileStack, Award, AlertTriangle, UserCheck, ShieldAlert, Calendar,
+  RefreshCw,
 } from 'lucide-react'
 
 type ReportFn = () => Promise<ReportResult>
@@ -41,7 +42,189 @@ interface Props {
     getChurnPorPlataforma: ReportFn
     getClientesPorPeriodo: ReportFn
     getPlataformasPorMes: ReportFn
+    getCohortContratosPorDia: () => Promise<CohortItem[]>
   }
+}
+
+function heatCell(pct: number | undefined): { bg: string; text: string } {
+  if (pct === undefined) return { bg: 'transparent', text: '#9ca3af' }
+  if (pct === 0) return { bg: '#f9fafb', text: '#d1d5db' }
+  if (pct < 25) return { bg: '#f0fdf4', text: '#166534' }
+  if (pct < 50) return { bg: '#fefce8', text: '#854d0e' }
+  if (pct < 75) return { bg: '#fff7ed', text: '#9a3412' }
+  return { bg: '#fef2f2', text: '#991b1b' }
+}
+
+function CohortTable({ action }: { action: () => Promise<CohortItem[]> }) {
+  const [data, setData] = useState<CohortItem[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      setData(await action())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao carregar cohort.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-8 text-sm text-gray-400">
+        <span className="inline-block w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+        Carregando cohort...
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="py-6 text-sm text-red-500">
+        {error}{' '}
+        <button onClick={load} className="underline ml-1 hover:text-red-700">Tentar novamente</button>
+      </div>
+    )
+  }
+
+  if (!data || data.length === 0) {
+    return <p className="py-6 text-sm text-gray-400">Nenhum dado de contratos encontrado.</p>
+  }
+
+  // Build pivot
+  const cohortOrder: string[] = []
+  const cohortSet = new Set<string>()
+  data.forEach(r => {
+    if (!cohortSet.has(r.cohort_mes)) {
+      cohortSet.add(r.cohort_mes)
+      cohortOrder.push(r.cohort_mes)
+    }
+  })
+  // Sort chronologically (MM/YYYY)
+  cohortOrder.sort((a, b) => {
+    const [ma, ya] = a.split('/').map(Number)
+    const [mb, yb] = b.split('/').map(Number)
+    return ya !== yb ? ya - yb : ma - mb
+  })
+
+  const maxDay = Math.max(...data.map(r => r.dia_num))
+  const days = Array.from({ length: maxDay }, (_, i) => i + 1)
+
+  type CellData = { lotes_operados: number; lotes_zerados: number; pct_zeramento: number }
+  const lookup = new Map<string, CellData>()
+  data.forEach(r => {
+    lookup.set(`${r.cohort_mes}-${r.dia_num}`, {
+      lotes_operados: r.lotes_operados,
+      lotes_zerados: r.lotes_zerados,
+      pct_zeramento: r.pct_zeramento,
+    })
+  })
+
+  function handleExcel() {
+    const columns = ['Cohort', ...days.map(d => `Dia ${d}`)]
+    const rows = cohortOrder.map(cohort => [
+      cohort,
+      ...days.map(d => {
+        const cell = lookup.get(`${cohort}-${d}`)
+        return cell ? `${cell.pct_zeramento}%` : ''
+      }),
+    ])
+    downloadExcel(columns, rows, 'cohort-contratos-por-dia')
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs text-gray-500 leading-snug">
+          % zeramento por dia do mês — cada linha é um mês de operação (cohort).
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={load}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            title="Recarregar"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={handleExcel}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            Excel
+          </button>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        {[
+          { label: '0%', bg: '#f9fafb', text: '#d1d5db' },
+          { label: '< 25%', bg: '#f0fdf4', text: '#166534' },
+          { label: '25–50%', bg: '#fefce8', text: '#854d0e' },
+          { label: '50–75%', bg: '#fff7ed', text: '#9a3412' },
+          { label: '≥ 75%', bg: '#fef2f2', text: '#991b1b' },
+        ].map(l => (
+          <span key={l.label} className="flex items-center gap-1 text-xs">
+            <span className="w-3 h-3 rounded-sm inline-block border border-gray-200" style={{ background: l.bg }} />
+            <span style={{ color: l.text }}>{l.label}</span>
+          </span>
+        ))}
+        <span className="text-xs text-gray-400 ml-1">= % lotes zerados</span>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+        <table className="text-xs border-collapse min-w-max w-full">
+          <thead>
+            <tr style={{ background: 'var(--surface-2)' }}>
+              <th className="px-3 py-2 text-left font-semibold text-gray-600 sticky left-0 z-10 border-r"
+                style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', minWidth: 90 }}>
+                Cohort
+              </th>
+              {days.map(d => (
+                <th key={d} className="px-2 py-2 text-center font-medium text-gray-500 border-r last:border-r-0"
+                  style={{ borderColor: 'var(--border)', minWidth: 52 }}>
+                  Dia {d}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {cohortOrder.map((cohort, ri) => (
+              <tr key={cohort} style={{ borderTop: '1px solid var(--border)', background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                <td className="px-3 py-1.5 font-medium text-gray-700 sticky left-0 z-10 border-r"
+                  style={{ background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)', borderColor: 'var(--border)' }}>
+                  {cohort}
+                </td>
+                {days.map(d => {
+                  const cell = lookup.get(`${cohort}-${d}`)
+                  const { bg, text } = heatCell(cell?.pct_zeramento)
+                  return (
+                    <td key={d} className="px-2 py-1.5 text-center border-r last:border-r-0 font-medium"
+                      style={{ background: bg, color: text, borderColor: 'var(--border)' }}
+                      title={cell ? `Operados: ${cell.lotes_operados} | Zerados: ${cell.lotes_zerados}` : undefined}
+                    >
+                      {cell ? `${cell.pct_zeramento}%` : '—'}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 export function RelatoriosView({ actions }: Props) {
@@ -290,6 +473,24 @@ export function RelatoriosView({ actions }: Props) {
               )
             })}
           </div>
+
+          {cat.label === 'Contratos' && (
+            <div
+              className="mt-4 rounded-2xl p-5"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+                  <FileStack className="w-4 h-4 text-red-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Análise Cohort — % Zeramento por Dia</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Cada cohort é um mês de operação; colunas são os dias do mês.</p>
+                </div>
+              </div>
+              <CohortTable action={actions.getCohortContratosPorDia} />
+            </div>
+          )}
         </section>
       ))}
     </div>

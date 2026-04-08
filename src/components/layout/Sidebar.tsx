@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
 import {
-  LayoutDashboard, Users, Settings, UserCircle, Link2,
+  LayoutDashboard, Settings, UserCircle, Link2,
   UserCheck, Monitor, ShieldAlert, BarChart2, FileStack, FileDown,
   TrendingUp, Building2, Bell, X,
 } from 'lucide-react'
@@ -33,7 +33,6 @@ const NAV_SECTIONS: {
     roles: ['admin', 'vendedor'],
     items: [
       { label: 'Clientes', href: '/clientes', icon: UserCheck },
-      { label: 'CRM / Leads', href: '/crm', icon: Users },
       { label: 'Influenciadores', href: '/influenciadores', icon: Link2 },
       { label: 'Plataformas', href: '/plataformas', icon: Monitor },
       { label: 'Retenção', href: '/retencao', icon: ShieldAlert },

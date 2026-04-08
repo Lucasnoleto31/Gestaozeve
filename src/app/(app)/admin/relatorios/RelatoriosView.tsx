@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { downloadExcel, downloadPDF, downloadReceitasPDF } from '@/lib/download'
-import type { ReportResult, CohortItem } from './actions'
+import type { ReportResult, CohortItem, ComparativoItem } from './actions'
 import {
   TrendingUp, Users, Link2, BarChart2, Monitor,
   FileStack, Award, AlertTriangle, UserCheck, ShieldAlert, Calendar,
@@ -43,187 +43,291 @@ interface Props {
     getClientesPorPeriodo: ReportFn
     getPlataformasPorMes: ReportFn
     getCohortContratosPorDia: () => Promise<CohortItem[]>
+    getLotesComparativo: () => Promise<ComparativoItem[]>
   }
 }
 
-function heatCell(pct: number | undefined): { bg: string; text: string } {
-  if (pct === undefined) return { bg: 'transparent', text: '#9ca3af' }
-  if (pct === 0) return { bg: '#f9fafb', text: '#d1d5db' }
-  if (pct < 25) return { bg: '#f0fdf4', text: '#166534' }
-  if (pct < 50) return { bg: '#fefce8', text: '#854d0e' }
-  if (pct < 75) return { bg: '#fff7ed', text: '#9a3412' }
-  return { bg: '#fef2f2', text: '#991b1b' }
+function lotesHeatCell(value: number, max: number): { bg: string; text: string } {
+  if (value === 0) return { bg: '#f9fafb', text: '#d1d5db' }
+  const t = max > 0 ? value / max : 0
+  if (t < 0.2) return { bg: '#eff6ff', text: '#3b82f6' }
+  if (t < 0.4) return { bg: '#dbeafe', text: '#2563eb' }
+  if (t < 0.6) return { bg: '#bfdbfe', text: '#1d4ed8' }
+  if (t < 0.8) return { bg: '#93c5fd', text: '#1e40af' }
+  return { bg: '#3b82f6', text: '#ffffff' }
 }
 
-function CohortTable({ action }: { action: () => Promise<CohortItem[]> }) {
-  const [data, setData] = useState<CohortItem[] | null>(null)
+function varTag(pct: number | null): { color: string; label: string } {
+  if (pct === null) return { color: '#9ca3af', label: '—' }
+  if (pct > 0) return { color: '#16a34a', label: `+${pct.toFixed(1)}%` }
+  if (pct < 0) return { color: '#dc2626', label: `${pct.toFixed(1)}%` }
+  return { color: '#6b7280', label: '0%' }
+}
+
+function mesLabel(offset: number): string {
+  const d = new Date()
+  d.setDate(1)
+  d.setMonth(d.getMonth() - offset)
+  return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '')
+}
+
+function ExcelBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 transition-colors">
+      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+      </svg>
+      Excel
+    </button>
+  )
+}
+
+function AsyncBlock<T>({
+  action, children, label,
+}: {
+  action: () => Promise<T>
+  children: (data: T, reload: () => void) => React.ReactNode
+  label: string
+}) {
+  const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   async function load() {
-    setLoading(true)
-    setError(null)
-    try {
-      setData(await action())
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao carregar cohort.')
-    } finally {
-      setLoading(false)
-    }
+    setLoading(true); setError(null)
+    try { setData(await action()) }
+    catch (e) { setError(e instanceof Error ? e.message : 'Erro.') }
+    finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-8 text-sm text-gray-400">
-        <span className="inline-block w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-        Carregando cohort...
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="py-6 text-sm text-red-500">
-        {error}{' '}
-        <button onClick={load} className="underline ml-1 hover:text-red-700">Tentar novamente</button>
-      </div>
-    )
-  }
-
-  if (!data || data.length === 0) {
-    return <p className="py-6 text-sm text-gray-400">Nenhum dado de contratos encontrado.</p>
-  }
-
-  // Build pivot
-  const cohortOrder: string[] = []
-  const cohortSet = new Set<string>()
-  data.forEach(r => {
-    if (!cohortSet.has(r.cohort_mes)) {
-      cohortSet.add(r.cohort_mes)
-      cohortOrder.push(r.cohort_mes)
-    }
-  })
-  // Sort chronologically (MM/YYYY)
-  cohortOrder.sort((a, b) => {
-    const [ma, ya] = a.split('/').map(Number)
-    const [mb, yb] = b.split('/').map(Number)
-    return ya !== yb ? ya - yb : ma - mb
-  })
-
-  const maxDay = Math.max(...data.map(r => r.dia_num))
-  const days = Array.from({ length: maxDay }, (_, i) => i + 1)
-
-  type CellData = { lotes_operados: number; lotes_zerados: number; pct_zeramento: number }
-  const lookup = new Map<string, CellData>()
-  data.forEach(r => {
-    lookup.set(`${r.cohort_mes}-${r.dia_num}`, {
-      lotes_operados: r.lotes_operados,
-      lotes_zerados: r.lotes_zerados,
-      pct_zeramento: r.pct_zeramento,
-    })
-  })
-
-  function handleExcel() {
-    const columns = ['Cohort', ...days.map(d => `Dia ${d}`)]
-    const rows = cohortOrder.map(cohort => [
-      cohort,
-      ...days.map(d => {
-        const cell = lookup.get(`${cohort}-${d}`)
-        return cell ? `${cell.pct_zeramento}%` : ''
-      }),
-    ])
-    downloadExcel(columns, rows, 'cohort-contratos-por-dia')
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-gray-500 leading-snug">
-          % zeramento por dia do mês — cada linha é um mês de operação (cohort).
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={load}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-            title="Recarregar"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleExcel}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-            </svg>
-            Excel
-          </button>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-3 mb-3 flex-wrap">
-        {[
-          { label: '0%', bg: '#f9fafb', text: '#d1d5db' },
-          { label: '< 25%', bg: '#f0fdf4', text: '#166534' },
-          { label: '25–50%', bg: '#fefce8', text: '#854d0e' },
-          { label: '50–75%', bg: '#fff7ed', text: '#9a3412' },
-          { label: '≥ 75%', bg: '#fef2f2', text: '#991b1b' },
-        ].map(l => (
-          <span key={l.label} className="flex items-center gap-1 text-xs">
-            <span className="w-3 h-3 rounded-sm inline-block border border-gray-200" style={{ background: l.bg }} />
-            <span style={{ color: l.text }}>{l.label}</span>
-          </span>
-        ))}
-        <span className="text-xs text-gray-400 ml-1">= % lotes zerados</span>
-      </div>
-
-      <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-        <table className="text-xs border-collapse min-w-max w-full">
-          <thead>
-            <tr style={{ background: 'var(--surface-2)' }}>
-              <th className="px-3 py-2 text-left font-semibold text-gray-600 sticky left-0 z-10 border-r"
-                style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', minWidth: 90 }}>
-                Cohort
-              </th>
-              {days.map(d => (
-                <th key={d} className="px-2 py-2 text-center font-medium text-gray-500 border-r last:border-r-0"
-                  style={{ borderColor: 'var(--border)', minWidth: 52 }}>
-                  Dia {d}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {cohortOrder.map((cohort, ri) => (
-              <tr key={cohort} style={{ borderTop: '1px solid var(--border)', background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
-                <td className="px-3 py-1.5 font-medium text-gray-700 sticky left-0 z-10 border-r"
-                  style={{ background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)', borderColor: 'var(--border)' }}>
-                  {cohort}
-                </td>
-                {days.map(d => {
-                  const cell = lookup.get(`${cohort}-${d}`)
-                  const { bg, text } = heatCell(cell?.pct_zeramento)
-                  return (
-                    <td key={d} className="px-2 py-1.5 text-center border-r last:border-r-0 font-medium"
-                      style={{ background: bg, color: text, borderColor: 'var(--border)' }}
-                      title={cell ? `Operados: ${cell.lotes_operados} | Zerados: ${cell.lotes_zerados}` : undefined}
-                    >
-                      {cell ? `${cell.pct_zeramento}%` : '—'}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+  if (loading) return (
+    <div className="flex items-center gap-2 py-8 text-sm text-gray-400">
+      <span className="inline-block w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      Carregando {label}...
     </div>
+  )
+  if (error) return (
+    <div className="py-6 text-sm text-red-500">
+      {error}{' '}
+      <button onClick={load} className="underline ml-1 hover:text-red-700">Tentar novamente</button>
+    </div>
+  )
+  if (!data) return null
+  return <>{children(data, load)}</>
+}
+
+function CohortTable({ action }: { action: () => Promise<CohortItem[]> }) {
+  return (
+    <AsyncBlock action={action} label="cohort">
+      {(data, reload) => {
+        if (!data.length) return <p className="py-6 text-sm text-gray-400">Nenhum dado encontrado.</p>
+
+        const cohortOrder = Array.from(new Set(data.map(r => r.cohort_mes))).sort((a, b) => {
+          const [ma, ya] = a.split('/').map(Number)
+          const [mb, yb] = b.split('/').map(Number)
+          return ya !== yb ? ya - yb : ma - mb
+        })
+        const maxDay = Math.max(...data.map(r => r.dia_num))
+        const days = Array.from({ length: maxDay }, (_, i) => i + 1)
+        const maxLotes = Math.max(...data.map(r => r.lotes_operados))
+        const lookup = new Map(data.map(r => [`${r.cohort_mes}-${r.dia_num}`, r]))
+
+        function handleExcel() {
+          const cols = ['Cohort', ...days.map(d => `Dia ${d}`)]
+          const rows = cohortOrder.map(c => [c, ...days.map(d => lookup.get(`${c}-${d}`)?.lotes_operados ?? '')])
+          downloadExcel(cols, rows, 'cohort-lotes-girados')
+        }
+
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-gray-500">Lotes girados por dia do mês — intensidade = volume relativo.</p>
+              <div className="flex items-center gap-2">
+                <button onClick={reload} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Recarregar">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <ExcelBtn onClick={handleExcel} />
+              </div>
+            </div>
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              {[
+                { label: 'Baixo', bg: '#eff6ff', text: '#3b82f6' },
+                { label: '', bg: '#dbeafe', text: '#2563eb' },
+                { label: '', bg: '#bfdbfe', text: '#1d4ed8' },
+                { label: '', bg: '#93c5fd', text: '#1e40af' },
+                { label: 'Alto', bg: '#3b82f6', text: '#fff' },
+              ].map((l, i) => (
+                <span key={i} className="flex items-center gap-1 text-xs">
+                  <span className="w-4 h-3 rounded-sm inline-block border border-gray-200" style={{ background: l.bg }} />
+                  {l.label && <span style={{ color: l.text }}>{l.label}</span>}
+                </span>
+              ))}
+              <span className="text-xs text-gray-400 ml-1">= volume de lotes girados</span>
+            </div>
+            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+              <table className="text-xs border-collapse min-w-max w-full">
+                <thead>
+                  <tr style={{ background: 'var(--surface-2)' }}>
+                    <th className="px-3 py-2 text-left font-semibold text-gray-600 sticky left-0 z-10 border-r"
+                      style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', minWidth: 90 }}>Cohort</th>
+                    {days.map(d => (
+                      <th key={d} className="px-2 py-2 text-center font-medium text-gray-500 border-r last:border-r-0"
+                        style={{ borderColor: 'var(--border)', minWidth: 50 }}>Dia {d}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cohortOrder.map((cohort, ri) => (
+                    <tr key={cohort} style={{ borderTop: '1px solid var(--border)', background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                      <td className="px-3 py-1.5 font-medium text-gray-700 sticky left-0 z-10 border-r"
+                        style={{ background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)', borderColor: 'var(--border)' }}>
+                        {cohort}
+                      </td>
+                      {days.map(d => {
+                        const cell = lookup.get(`${cohort}-${d}`)
+                        const { bg, text } = lotesHeatCell(cell?.lotes_operados ?? 0, maxLotes)
+                        return (
+                          <td key={d} className="px-2 py-1.5 text-center border-r last:border-r-0 font-medium tabular-nums"
+                            style={{ background: bg, color: text, borderColor: 'var(--border)' }}
+                            title={cell ? `Zerados: ${cell.lotes_zerados} (${cell.pct_zeramento}%)` : undefined}>
+                            {cell ? cell.lotes_operados : '—'}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      }}
+    </AsyncBlock>
+  )
+}
+
+function ComparativoTable({ action }: { action: () => Promise<ComparativoItem[]> }) {
+  return (
+    <AsyncBlock action={action} label="comparativo">
+      {(data, reload) => {
+        if (!data.length) return <p className="py-6 text-sm text-gray-400">Sem dados para comparativo.</p>
+
+        const totalAtual = data.reduce((s, r) => s + r.lotes_mes_atual, 0)
+        const totalMedia = data.reduce((s, r) => s + r.media_3m, 0)
+        const varTotal = totalMedia > 0 ? ((totalAtual - totalMedia) / totalMedia * 100) : null
+        const { color: varColor, label: varLabel } = varTag(varTotal)
+
+        const m0 = mesLabel(0), m1 = mesLabel(1), m2 = mesLabel(2), m3 = mesLabel(3)
+
+        function handleExcel() {
+          const cols = ['Dia', m0, m1, m2, m3, 'Média 3M', 'Variação vs Média']
+          const rows = data.map(r => {
+            const { label } = varTag(r.variacao_pct)
+            return [r.dia_num, r.lotes_mes_atual, r.lotes_m1, r.lotes_m2, r.lotes_m3, r.media_3m, label]
+          })
+          const { label: tl } = varTag(varTotal)
+          rows.push(['Total', totalAtual, '', '', '',
+            Math.round(totalMedia * 100) / 100, tl])
+          downloadExcel(cols, rows, 'comparativo-lotes-por-dia')
+        }
+
+        return (
+          <div>
+            {/* Summary banner */}
+            <div className="flex flex-wrap items-center gap-4 mb-4 p-3 rounded-xl"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">Acumulado {m0}</p>
+                <p className="text-2xl font-bold text-gray-900 tabular-nums">{totalAtual.toLocaleString('pt-BR')}</p>
+                <p className="text-xs text-gray-500">lotes girados</p>
+              </div>
+              <div className="w-px h-10 bg-gray-200 hidden sm:block" />
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">Média mesmo período (3M)</p>
+                <p className="text-2xl font-bold text-gray-900 tabular-nums">{Math.round(totalMedia).toLocaleString('pt-BR')}</p>
+                <p className="text-xs text-gray-500">lotes (média)</p>
+              </div>
+              <div className="w-px h-10 bg-gray-200 hidden sm:block" />
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">Variação</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: varColor }}>{varLabel}</p>
+                <p className="text-xs text-gray-500">vs média 3 meses</p>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <button onClick={reload} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Recarregar">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <ExcelBtn onClick={handleExcel} />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+              <table className="text-xs border-collapse min-w-max w-full">
+                <thead>
+                  <tr style={{ background: 'var(--surface-2)' }}>
+                    {['Dia', m0, m1, m2, m3, 'Média 3M', 'Variação vs Média'].map((h, i) => (
+                      <th key={i}
+                        className={`px-3 py-2 font-semibold border-r last:border-r-0 ${i === 0 ? 'text-left text-gray-600 sticky left-0 z-10' : 'text-center text-gray-500'}`}
+                        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', minWidth: i === 0 ? 54 : 80 }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.map((r, ri) => {
+                    const { color, label } = varTag(r.variacao_pct)
+                    const rowBg = ri % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)'
+                    return (
+                      <tr key={r.dia_num} style={{ borderTop: '1px solid var(--border)', background: rowBg }}>
+                        <td className="px-3 py-1.5 font-semibold text-gray-700 sticky left-0 z-10 border-r tabular-nums"
+                          style={{ background: rowBg, borderColor: 'var(--border)' }}>
+                          {r.dia_num}
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-semibold text-blue-700 border-r tabular-nums"
+                          style={{ borderColor: 'var(--border)' }}>
+                          {r.lotes_mes_atual > 0 ? r.lotes_mes_atual : <span className="text-gray-300">—</span>}
+                        </td>
+                        {[r.lotes_m1, r.lotes_m2, r.lotes_m3].map((v, i) => (
+                          <td key={i} className="px-3 py-1.5 text-center text-gray-500 border-r tabular-nums"
+                            style={{ borderColor: 'var(--border)' }}>
+                            {v > 0 ? v : <span className="text-gray-300">—</span>}
+                          </td>
+                        ))}
+                        <td className="px-3 py-1.5 text-center text-gray-600 border-r tabular-nums"
+                          style={{ borderColor: 'var(--border)' }}>
+                          {r.media_3m > 0 ? r.media_3m : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-semibold tabular-nums"
+                          style={{ color }}>
+                          {label}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {/* Total row */}
+                  <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
+                    <td className="px-3 py-2 font-bold text-gray-700 sticky left-0 z-10 border-r"
+                      style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}>Total</td>
+                    <td className="px-3 py-2 text-center font-bold text-blue-700 border-r tabular-nums"
+                      style={{ borderColor: 'var(--border)' }}>{totalAtual.toLocaleString('pt-BR')}</td>
+                    <td colSpan={3} className="border-r" style={{ borderColor: 'var(--border)' }} />
+                    <td className="px-3 py-2 text-center font-bold text-gray-600 border-r tabular-nums"
+                      style={{ borderColor: 'var(--border)' }}>{Math.round(totalMedia).toLocaleString('pt-BR')}</td>
+                    <td className="px-3 py-2 text-center font-bold tabular-nums" style={{ color: varColor }}>{varLabel}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      }}
+    </AsyncBlock>
   )
 }
 
@@ -475,21 +579,39 @@ export function RelatoriosView({ actions }: Props) {
           </div>
 
           {cat.label === 'Contratos' && (
-            <div
-              className="mt-4 rounded-2xl p-5"
-              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <FileStack className="w-4 h-4 text-red-500" />
+            <>
+              {/* Comparativo dia a dia vs últimos 3 meses */}
+              <div className="mt-4 rounded-2xl p-5"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Lotes Girados — Mês Atual vs Últimos 3 Meses</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Compare cada dia do mês atual com o mesmo dia nos 3 meses anteriores. Dias abaixo da média indicam momento ideal para intensificar campanhas.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Análise Cohort — % Zeramento por Dia</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Cada cohort é um mês de operação; colunas são os dias do mês.</p>
-                </div>
+                <ComparativoTable action={actions.getLotesComparativo} />
               </div>
-              <CohortTable action={actions.getCohortContratosPorDia} />
-            </div>
+
+              {/* Cohort por dia */}
+              <div className="mt-4 rounded-2xl p-5"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+                    <FileStack className="w-4 h-4 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Cohort — Lotes Girados por Dia</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Cada linha é um mês (cohort); colunas são os dias. Intensidade = volume relativo de lotes girados.</p>
+                  </div>
+                </div>
+                <CohortTable action={actions.getCohortContratosPorDia} />
+              </div>
+            </>
           )}
         </section>
       ))}

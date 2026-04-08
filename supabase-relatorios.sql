@@ -286,6 +286,61 @@ LANGUAGE sql SECURITY DEFINER AS $$
   ORDER BY DATE_TRUNC('month', data), EXTRACT(DAY FROM data)::integer;
 $$;
 
+-- 14. Lotes girados: mês atual vs últimos 3 meses por dia
+CREATE OR REPLACE FUNCTION relatorio_lotes_comparativo()
+RETURNS TABLE(
+  dia_num integer,
+  lotes_mes_atual numeric,
+  lotes_m1 numeric,
+  lotes_m2 numeric,
+  lotes_m3 numeric,
+  media_3m numeric,
+  variacao_pct numeric
+)
+LANGUAGE sql SECURITY DEFINER AS $$
+WITH daily AS (
+  SELECT
+    DATE_TRUNC('month', data) AS mes,
+    EXTRACT(DAY FROM data)::integer AS dia,
+    ROUND(SUM(lotes_operados)::numeric, 2) AS lotes
+  FROM public.contratos
+  WHERE data >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '3 months'
+    AND data <= CURRENT_DATE
+  GROUP BY 1, 2
+),
+all_days AS (
+  SELECT DISTINCT dia FROM daily
+),
+pivoted AS (
+  SELECT
+    d.dia,
+    COALESCE(MAX(dy.lotes) FILTER (WHERE dy.mes = DATE_TRUNC('month', CURRENT_DATE)), 0) AS lotes_mes_atual,
+    COALESCE(MAX(dy.lotes) FILTER (WHERE dy.mes = DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 month'), 0) AS lotes_m1,
+    COALESCE(MAX(dy.lotes) FILTER (WHERE dy.mes = DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '2 months'), 0) AS lotes_m2,
+    COALESCE(MAX(dy.lotes) FILTER (WHERE dy.mes = DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '3 months'), 0) AS lotes_m3
+  FROM all_days d
+  LEFT JOIN daily dy ON dy.dia = d.dia
+  GROUP BY d.dia
+)
+SELECT
+  dia::integer AS dia_num,
+  lotes_mes_atual,
+  lotes_m1,
+  lotes_m2,
+  lotes_m3,
+  ROUND((lotes_m1 + lotes_m2 + lotes_m3) / 3, 2) AS media_3m,
+  CASE
+    WHEN (lotes_m1 + lotes_m2 + lotes_m3) > 0
+    THEN ROUND(
+      (lotes_mes_atual - (lotes_m1 + lotes_m2 + lotes_m3) / 3) /
+      ((lotes_m1 + lotes_m2 + lotes_m3) / 3) * 100
+    , 2)
+    ELSE NULL
+  END AS variacao_pct
+FROM pivoted
+ORDER BY dia;
+$$;
+
 -- Permissões
 GRANT EXECUTE ON FUNCTION relatorio_receita_por_mes() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_receita_por_assessor() TO authenticated;
@@ -300,3 +355,4 @@ GRANT EXECUTE ON FUNCTION relatorio_churn_por_plataforma() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_clientes_por_periodo() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_plataformas_por_mes() TO authenticated;
 GRANT EXECUTE ON FUNCTION relatorio_cohort_contratos() TO authenticated;
+GRANT EXECUTE ON FUNCTION relatorio_lotes_comparativo() TO authenticated;

@@ -16,6 +16,16 @@ export type CohortItem = {
   pct_zeramento: number
 }
 
+export type ComparativoItem = {
+  dia_num: number
+  lotes_mes_atual: number
+  lotes_m1: number
+  lotes_m2: number
+  lotes_m3: number
+  media_3m: number
+  variacao_pct: number | null
+}
+
 async function adminOnly() {
   const profile = await getProfile()
   if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
@@ -145,6 +155,21 @@ export async function getCohortContratosPorDia(): Promise<CohortItem[]> {
     lotes_operados: Number(r.lotes_operados),
     lotes_zerados: Number(r.lotes_zerados),
     pct_zeramento: Number(r.pct_zeramento),
+  }))
+}
+
+export async function getLotesComparativo(): Promise<ComparativoItem[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('relatorio_lotes_comparativo')
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    dia_num: Number(r.dia_num),
+    lotes_mes_atual: Number(r.lotes_mes_atual),
+    lotes_m1: Number(r.lotes_m1),
+    lotes_m2: Number(r.lotes_m2),
+    lotes_m3: Number(r.lotes_m3),
+    media_3m: Number(r.media_3m),
+    variacao_pct: r.variacao_pct != null ? Number(r.variacao_pct) : null,
   }))
 }
 

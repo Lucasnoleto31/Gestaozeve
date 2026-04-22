@@ -28,11 +28,11 @@ export async function importarReceitas(nomeArquivo: string, rows: ReceitaRow[]) 
 
   const supabase = createAdminClient()
 
-  // Busca clientes, contas e barras para matching
+  // Busca clientes, contas e barras para matching (range 0-49999 cobre até 50k linhas)
   const [{ data: clientes }, { data: contas }, { data: barras }] = await Promise.all([
-    supabase.from('clientes').select('id, nome, cpf'),
-    supabase.from('cliente_contas').select('cliente_id, numero_conta'),
-    supabase.from('barras').select('nome, assessor_id, influenciador_id'),
+    supabase.from('clientes').select('id, nome, cpf').range(0, 49999),
+    supabase.from('cliente_contas').select('cliente_id, numero_conta').range(0, 49999),
+    supabase.from('barras').select('nome, assessor_id, influenciador_id').range(0, 49999),
   ])
 
   // Mapas para lookup rápido
@@ -114,11 +114,24 @@ export async function importarReceitas(nomeArquivo: string, rows: ReceitaRow[]) 
     }
   })
 
-  const { error: insertError } = await supabase.from('receitas').insert(receitasToInsert)
-  if (insertError) throw new Error(insertError.message)
+  // Insere em lotes para evitar estouro de payload/timeout
+  const BATCH = 500
+  let inseridas = 0
+  for (let i = 0; i < receitasToInsert.length; i += BATCH) {
+    const chunk = receitasToInsert.slice(i, i + BATCH)
+    const { error: insertError } = await supabase.from('receitas').insert(chunk)
+    if (insertError) {
+      // Desfaz o lote de importação em caso de falha parcial
+      await supabase.from('receitas_importacoes').delete().eq('id', importacao.id)
+      throw new Error(
+        `Falha ao inserir linhas ${i + 1}-${i + chunk.length}: ${insertError.message}`
+      )
+    }
+    inseridas += chunk.length
+  }
 
   revalidatePath('/admin/receitas')
-  return { ok: rows.length, importacaoId: importacao.id }
+  return { ok: inseridas, importacaoId: importacao.id }
 }
 
 export async function deletarReceitas(ids: string[]) {

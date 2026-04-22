@@ -24,9 +24,9 @@ export async function importarContratos(nomeArquivo: string, rows: ContratoRow[]
   const supabase = createAdminClient()
 
   const [{ data: clientes }, { data: contas }, { data: barras }] = await Promise.all([
-    supabase.from('clientes').select('id, nome, cpf'),
-    supabase.from('cliente_contas').select('cliente_id, numero_conta'),
-    supabase.from('barras').select('nome, assessor_id, influenciador_id'),
+    supabase.from('clientes').select('id, nome, cpf').range(0, 49999),
+    supabase.from('cliente_contas').select('cliente_id, numero_conta').range(0, 49999),
+    supabase.from('barras').select('nome, assessor_id, influenciador_id').range(0, 49999),
   ])
 
   const clientesByCpf = new Map<string, string>()
@@ -100,11 +100,23 @@ export async function importarContratos(nomeArquivo: string, rows: ContratoRow[]
     }
   })
 
-  const { error: insertError } = await supabase.from('contratos').insert(contratosToInsert)
-  if (insertError) throw new Error(insertError.message)
+  // Insere em lotes para evitar estouro de payload/timeout
+  const BATCH = 500
+  let inseridos = 0
+  for (let i = 0; i < contratosToInsert.length; i += BATCH) {
+    const chunk = contratosToInsert.slice(i, i + BATCH)
+    const { error: insertError } = await supabase.from('contratos').insert(chunk)
+    if (insertError) {
+      await supabase.from('contratos_importacoes').delete().eq('id', importacao.id)
+      throw new Error(
+        `Falha ao inserir linhas ${i + 1}-${i + chunk.length}: ${insertError.message}`
+      )
+    }
+    inseridos += chunk.length
+  }
 
   revalidatePath('/admin/contratos')
-  return { ok: rows.length }
+  return { ok: inseridos }
 }
 
 export async function deletarImportacaoContrato(importacaoId: string) {

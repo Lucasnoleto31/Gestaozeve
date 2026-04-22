@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/Button'
-import { X, Upload, CheckCircle, AlertCircle, FileSpreadsheet } from 'lucide-react'
+import { X, Upload, CheckCircle, AlertCircle, FileSpreadsheet, Download } from 'lucide-react'
 import { importarReceitas, ReceitaRow } from './actions'
 
 interface Props {
@@ -156,6 +156,49 @@ export function ImportarReceitasModal({ open, onClose }: Props) {
     onClose()
   }
 
+  async function baixarModelo() {
+    const XLSX = await import('xlsx')
+    const headers = [
+      'ASSESSOR',
+      'TIPO PRODUTO',
+      'PRODUTO',
+      'COD SINACOR CLIENTE',
+      'CPF/CNPJ',
+      'CLIENTE',
+      'DATA DE RECEITA',
+      'RECEITA GENIAL (*)',
+      'REPASSE AAI (% DE REPASSE)',
+      'REPASSE ASSESSOR',
+      'VALOR BRUTO AAI (QUANTO ENTRA BRUTO PARA O ESCRITORIO)',
+      'IMPOSTO (GENIAL DESCONTA ESSE IMPOSTO)',
+      'VALOR LÍQUIDO AAI ( VALOR LÍQUIDO QUE ENTRA PARA A ZEVE)',
+      'COMISSÃO ASSESSOR',
+      'DESCRIÇÃO',
+    ]
+    const exemplo = [
+      'BARRA A',
+      'FUNDOS',
+      'FUNDO XP RENDA FIXA',
+      '123456',
+      '123.456.789-00',
+      'CLIENTE EXEMPLO',
+      '01/04/2026',
+      100.5,
+      70,
+      30,
+      100.5,
+      15,
+      85.5,
+      30,
+      'exemplo de lançamento',
+    ]
+    const ws = XLSX.utils.aoa_to_sheet([headers, exemplo])
+    ws['!cols'] = headers.map((h) => ({ wch: Math.max(h.length, 14) }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Receitas')
+    XLSX.writeFile(wb, 'modelo-receitas.xlsx')
+  }
+
   if (!open) return null
 
   const totalLiquido = preview?.reduce((sum, r) => sum + (r.valor_liquido_aai || 0), 0) ?? 0
@@ -248,6 +291,15 @@ export function ImportarReceitasModal({ open, onClose }: Props) {
               Suba o arquivo Excel exportado da Genial. As colunas serão mapeadas automaticamente e os
               clientes serão vinculados por conta Sinacor, CPF ou nome.
             </p>
+
+            <button
+              type="button"
+              onClick={baixarModelo}
+              className="w-full flex items-center justify-center gap-2 text-sm text-blue-600 hover:text-blue-700 border border-blue-200 bg-blue-50/50 hover:bg-blue-50 rounded-lg px-4 py-2 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Baixar modelo (.xlsx) com as colunas esperadas
+            </button>
 
             <div
               onClick={() => inputRef.current?.click()}

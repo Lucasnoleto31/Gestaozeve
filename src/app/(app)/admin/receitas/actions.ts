@@ -22,20 +22,44 @@ export interface ReceitaRow {
   descricao: string
 }
 
-export async function importarReceitas(nomeArquivo: string, rows: ReceitaRow[]) {
+// ── Importação em 3 fases (resolve payload/timeout em planilhas grandes) ─────
+
+export async function criarImportacaoReceitas(nomeArquivo: string): Promise<{ id: string }> {
   const profile = await getProfile()
   if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
+  const supabase = createAdminClient()
+
+  const { data, error } = await supabase
+    .from('receitas_importacoes')
+    .insert({
+      nome_arquivo: nomeArquivo,
+      total_linhas: 0,
+      valor_liquido_total: 0,
+      criado_por: profile.id,
+    })
+    .select('id')
+    .single()
+
+  if (error) throw new Error(error.message)
+  return { id: data.id }
+}
+
+export async function inserirReceitasLote(
+  importacaoId: string,
+  rows: ReceitaRow[]
+): Promise<{ ok: number }> {
+  const profile = await getProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
+  if (!rows.length) return { ok: 0 }
 
   const supabase = createAdminClient()
 
-  // Busca clientes, contas e barras para matching (range 0-49999 cobre até 50k linhas)
   const [{ data: clientes }, { data: contas }, { data: barras }] = await Promise.all([
     supabase.from('clientes').select('id, nome, cpf').range(0, 49999),
     supabase.from('cliente_contas').select('cliente_id, numero_conta').range(0, 49999),
     supabase.from('barras').select('nome, assessor_id, influenciador_id').range(0, 49999),
   ])
 
-  // Mapas para lookup rápido
   const clientesByCpf = new Map<string, string>()
   const clientesByNome = new Map<string, string>()
   const contasByNumero = new Map<string, string>()
@@ -52,28 +76,11 @@ export async function importarReceitas(nomeArquivo: string, rows: ReceitaRow[]) 
     barraMap.set(b.nome.toUpperCase().trim(), { assessor_id: b.assessor_id, influenciador_id: b.influenciador_id })
   }
 
-  // Cria o lote de importação
-  const valorTotal = rows.reduce((sum, r) => sum + (r.valor_liquido_aai || 0), 0)
-  const { data: importacao, error: impError } = await supabase
-    .from('receitas_importacoes')
-    .insert({
-      nome_arquivo: nomeArquivo,
-      total_linhas: rows.length,
-      valor_liquido_total: valorTotal,
-      criado_por: profile.id,
-    })
-    .select('id')
-    .single()
-
-  if (impError) throw new Error(impError.message)
-
-  // Mapeia cada linha e tenta vincular ao cliente/assessor do sistema
   const receitasToInsert = rows.map((row) => {
     const cpfLimpo = row.cpf_cnpj?.replace(/\D/g, '') ?? ''
     const codSinacor = row.cod_sinacor?.trim() ?? ''
 
     let clienteId: string | null = null
-    // Prioridade: conta sinacor > CPF > nome
     if (codSinacor && contasByNumero.has(codSinacor)) {
       clienteId = contasByNumero.get(codSinacor)!
     } else if (cpfLimpo && clientesByCpf.has(cpfLimpo)) {
@@ -83,17 +90,14 @@ export async function importarReceitas(nomeArquivo: string, rows: ReceitaRow[]) 
       clienteId = clientesByNome.get(nomeKey) ?? null
     }
 
-    // Resolve assessor/influenciador via barras (mesmo padrão da página de clientes)
     let assessorId: string | null = null
     if (row.assessor_nome) {
       const barra = barraMap.get(row.assessor_nome.toUpperCase().trim())
-      if (barra) {
-        assessorId = barra.assessor_id
-      }
+      if (barra) assessorId = barra.assessor_id
     }
 
     return {
-      importacao_id: importacao.id,
+      importacao_id: importacaoId,
       cliente_id: clienteId,
       assessor_id: assessorId,
       assessor_nome: row.assessor_nome || null,
@@ -114,24 +118,35 @@ export async function importarReceitas(nomeArquivo: string, rows: ReceitaRow[]) 
     }
   })
 
-  // Insere em lotes para evitar estouro de payload/timeout
-  const BATCH = 500
-  let inseridas = 0
-  for (let i = 0; i < receitasToInsert.length; i += BATCH) {
-    const chunk = receitasToInsert.slice(i, i + BATCH)
-    const { error: insertError } = await supabase.from('receitas').insert(chunk)
-    if (insertError) {
-      // Desfaz o lote de importação em caso de falha parcial
-      await supabase.from('receitas_importacoes').delete().eq('id', importacao.id)
-      throw new Error(
-        `Falha ao inserir linhas ${i + 1}-${i + chunk.length}: ${insertError.message}`
-      )
-    }
-    inseridas += chunk.length
-  }
+  const { error } = await supabase.from('receitas').insert(receitasToInsert)
+  if (error) throw new Error(error.message)
+
+  return { ok: receitasToInsert.length }
+}
+
+export async function finalizarImportacaoReceitas(
+  importacaoId: string,
+  totalLinhas: number,
+  valorLiquidoTotal: number
+): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
+  const supabase = createAdminClient()
+
+  await supabase
+    .from('receitas_importacoes')
+    .update({ total_linhas: totalLinhas, valor_liquido_total: valorLiquidoTotal })
+    .eq('id', importacaoId)
 
   revalidatePath('/admin/receitas')
-  return { ok: inseridas, importacaoId: importacao.id }
+}
+
+export async function cancelarImportacaoReceitas(importacaoId: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
+  const supabase = createAdminClient()
+  await supabase.from('receitas_importacoes').delete().eq('id', importacaoId)
+  revalidatePath('/admin/receitas')
 }
 
 export async function deletarReceitas(ids: string[]) {

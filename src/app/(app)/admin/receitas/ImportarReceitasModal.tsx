@@ -3,7 +3,15 @@
 import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/Button'
 import { X, Upload, CheckCircle, AlertCircle, FileSpreadsheet, Download } from 'lucide-react'
-import { importarReceitas, ReceitaRow } from './actions'
+import {
+  criarImportacaoReceitas,
+  inserirReceitasLote,
+  finalizarImportacaoReceitas,
+  cancelarImportacaoReceitas,
+  ReceitaRow,
+} from './actions'
+
+const CHUNK_SIZE = 300
 
 interface Props {
   open: boolean
@@ -82,6 +90,7 @@ export function ImportarReceitasModal({ open, onClose }: Props) {
   const [nomeArquivo, setNomeArquivo] = useState('')
   const [resultado, setResultado] = useState<{ ok: number } | null>(null)
   const [erro, setErro] = useState('')
+  const [progresso, setProgresso] = useState<{ feito: number; total: number } | null>(null)
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -138,12 +147,31 @@ export function ImportarReceitasModal({ open, onClose }: Props) {
     if (!preview) return
     setLoading(true)
     setErro('')
+    setProgresso({ feito: 0, total: preview.length })
+
+    let importacaoId: string | null = null
     try {
-      const result = await importarReceitas(nomeArquivo, preview)
-      setResultado({ ok: result.ok })
+      const criada = await criarImportacaoReceitas(nomeArquivo)
+      importacaoId = criada.id
+
+      let totalOk = 0
+      for (let i = 0; i < preview.length; i += CHUNK_SIZE) {
+        const chunk = preview.slice(i, i + CHUNK_SIZE)
+        const { ok } = await inserirReceitasLote(importacaoId, chunk)
+        totalOk += ok
+        setProgresso({ feito: Math.min(i + CHUNK_SIZE, preview.length), total: preview.length })
+      }
+
+      const valorTotal = preview.reduce((s, r) => s + (r.valor_liquido_aai || 0), 0)
+      await finalizarImportacaoReceitas(importacaoId, totalOk, valorTotal)
+      setResultado({ ok: totalOk })
     } catch (err: unknown) {
+      if (importacaoId) {
+        try { await cancelarImportacaoReceitas(importacaoId) } catch {}
+      }
       setErro(err instanceof Error ? err.message : 'Erro ao importar.')
     }
+    setProgresso(null)
     setLoading(false)
   }
 
@@ -269,6 +297,21 @@ export function ImportarReceitasModal({ open, onClose }: Props) {
               )}
             </div>
 
+            {progresso && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Enviando em lotes de {CHUNK_SIZE}…</span>
+                  <span>{progresso.feito} / {progresso.total}</span>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-all"
+                    style={{ width: `${(progresso.feito / progresso.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             {erro && (
               <div className="flex items-center gap-2 bg-red-900/20 border border-red-700/30 rounded-lg px-3 py-2">
                 <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -277,7 +320,7 @@ export function ImportarReceitasModal({ open, onClose }: Props) {
             )}
 
             <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setPreview(null)}>
+              <Button variant="secondary" className="flex-1" onClick={() => setPreview(null)} disabled={loading}>
                 Voltar
               </Button>
               <Button className="flex-1" loading={loading} onClick={handleImportar}>

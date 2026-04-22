@@ -19,6 +19,8 @@ import { ImportarClientesModal } from './ImportarClientesModal'
 
 interface Props {
   clientes: (Cliente & { ultimo_score?: { score_total: number; classificacao: string; tendencia: string }[] })[]
+  total: number
+  kpis: { saudaveis: number; atencao: number; risco: number }
   assessores: { id: string; nome: string }[]
   filtros: { q?: string; status?: string; classificacao?: string }
   isAdmin: boolean
@@ -45,7 +47,7 @@ function Initials({ nome }: { nome: string }) {
   )
 }
 
-export function ClientesTable({ clientes, assessores, filtros, isAdmin }: Props) {
+export function ClientesTable({ clientes, total, kpis, assessores, filtros, isAdmin }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -87,7 +89,7 @@ export function ClientesTable({ clientes, assessores, filtros, isAdmin }: Props)
   }
 
   async function handleRecalcularTodos() {
-    if (!confirm(`Recalcular score de todos os ${clientes.length} clientes? Pode demorar alguns segundos.`)) return
+    if (!confirm(`Recalcular score de todos os ${total} clientes? Pode demorar alguns segundos.`)) return
     setRecalculando(true)
     setRecalcMsg('')
     try {
@@ -152,9 +154,7 @@ export function ClientesTable({ clientes, assessores, filtros, isAdmin }: Props)
     })
   }
 
-  const saudaveis = clientes.filter((c) => c.ultimo_score?.[0]?.classificacao === 'saudavel').length
-  const atencao   = clientes.filter((c) => c.ultimo_score?.[0]?.classificacao === 'atencao').length
-  const risco     = clientes.filter((c) => c.ultimo_score?.[0]?.classificacao === 'risco').length
+  const { saudaveis, atencao, risco } = kpis
 
   return (
     <div>
@@ -184,7 +184,7 @@ export function ClientesTable({ clientes, assessores, filtros, isAdmin }: Props)
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-300 mb-1.5">Gestão</p>
               <h1 className="text-2xl font-bold text-white tracking-tight">Carteira de Clientes</h1>
               <p className="text-sm text-blue-100/60 mt-1">
-                {clientes.length} cliente{clientes.length !== 1 ? 's' : ''} cadastrado{clientes.length !== 1 ? 's' : ''}
+                {total} cliente{total !== 1 ? 's' : ''} cadastrado{total !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
@@ -231,7 +231,7 @@ export function ClientesTable({ clientes, assessores, filtros, isAdmin }: Props)
           {/* KPI strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { icon: Users, label: 'Total', value: clientes.length, color: 'text-white', bg: 'rgba(255,255,255,0.1)' },
+              { icon: Users, label: 'Total', value: total, color: 'text-white', bg: 'rgba(255,255,255,0.1)' },
               { icon: CheckCircle, label: 'Saudáveis', value: saudaveis, color: 'text-emerald-300', bg: 'rgba(16,185,129,0.15)' },
               { icon: AlertTriangle, label: 'Em atenção', value: atencao, color: 'text-amber-300', bg: 'rgba(245,158,11,0.15)' },
               { icon: AlertOctagon, label: 'Em risco', value: risco, color: 'text-red-300', bg: 'rgba(239,68,68,0.15)' },
@@ -460,7 +460,11 @@ export function ClientesTable({ clientes, assessores, filtros, isAdmin }: Props)
           {/* Footer */}
           {clientes.length > 0 && (
             <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--surface-3)' }}>
-              <p className="text-xs text-gray-400">{clientes.length} registro{clientes.length !== 1 ? 's' : ''}</p>
+              <p className="text-xs text-gray-400">
+                {total > clientes.length
+                  ? `Exibindo ${clientes.length} de ${total} registros · use a busca para refinar`
+                  : `${clientes.length} registro${clientes.length !== 1 ? 's' : ''}`}
+              </p>
               {selected.size > 0 && (
                 <p className="text-xs font-medium" style={{ color: 'var(--blue)' }}>{selected.size} selecionado{selected.size !== 1 ? 's' : ''}</p>
               )}

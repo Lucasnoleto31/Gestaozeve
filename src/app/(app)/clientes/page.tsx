@@ -6,6 +6,8 @@ import { Header } from '@/components/layout/Header'
 import { redirect } from 'next/navigation'
 import { ClientesTable } from './ClientesTable'
 
+const PAGE_LIMIT = 1000
+
 export default async function ClientesPage({
   searchParams,
 }: {
@@ -18,69 +20,51 @@ export default async function ClientesPage({
   const { q, status, classificacao } = await searchParams
   const supabase = createAdminClient()
 
-  // Fetch clients and latest scores in parallel
-  const PAGE_SIZE = 1000
-  let allClientes: Record<string, unknown>[] = []
-  let page = 0
-
-  while (true) {
-    let query = supabase
-      .from('clientes')
-      .select(`
-        *,
-        assessor:profiles(nome),
-        influenciador:influenciadores(nome, codigo)
-      `)
-      .order('created_at', { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-
-    if (q) query = query.or(`nome.ilike.%${q}%,cpf.ilike.%${q}%,email.ilike.%${q}%`)
-    if (status) query = query.eq('status', status)
-
-    const { data } = await query
-    if (!data || data.length === 0) break
-    allClientes = allClientes.concat(data as Record<string, unknown>[])
-    if (data.length < PAGE_SIZE) break
-    page++
-  }
-
-  // Fetch latest score per client separately (join ordering is unreliable)
-  const { data: allScores } = await supabase
-    .from('cliente_scores')
-    .select('cliente_id, score_total, classificacao, tendencia, created_at')
+  let query = supabase
+    .from('clientes_com_score')
+    .select(
+      `*, assessor:profiles(nome), influenciador:influenciadores(nome, codigo)`,
+      { count: 'exact' }
+    )
     .order('created_at', { ascending: false })
 
-  const latestScoreMap = new Map<string, { score_total: number; classificacao: string; tendencia: string }>()
-  for (const s of allScores ?? []) {
-    if (!latestScoreMap.has(s.cliente_id)) {
-      latestScoreMap.set(s.cliente_id, { score_total: s.score_total, classificacao: s.classificacao, tendencia: s.tendencia })
-    }
-  }
+  if (q) query = query.or(`nome.ilike.%${q}%,cpf.ilike.%${q}%,email.ilike.%${q}%`)
+  if (status) query = query.eq('status', status)
+  if (classificacao) query = query.eq('classificacao', classificacao)
 
-  // Attach latest score to each client
-  const clientes = allClientes.map((c) => ({
+  const [
+    { data: clientesRows, count },
+    { data: classificacaoCounts },
+    { data: assessores },
+  ] = await Promise.all([
+    query.range(0, PAGE_LIMIT - 1),
+    supabase.rpc('clientes_classificacao_counts'),
+    supabase.from('profiles').select('id, nome').in('role', ['admin', 'vendedor']).order('nome'),
+  ])
+
+  const clientes = (clientesRows ?? []).map((c) => ({
     ...c,
-    ultimo_score: latestScoreMap.has(c.id as string)
-      ? [latestScoreMap.get(c.id as string)]
+    ultimo_score: c.score_total != null
+      ? [{ score_total: c.score_total, classificacao: c.classificacao, tendencia: c.tendencia }]
       : [],
   }))
 
-  // Filtrar por classificação do score
-  const clientesFiltrados = classificacao
-    ? clientes.filter((c) => (c.ultimo_score as any[])[0]?.classificacao === classificacao)
-    : clientes
-
-  const { data: assessores } = await supabase
-    .from('profiles')
-    .select('id, nome')
-    .in('role', ['admin', 'vendedor'])
-    .order('nome')
+  const classCountMap = new Map<string, number>(
+    (classificacaoCounts ?? []).map((r: { classificacao: string; total: number }) => [r.classificacao, Number(r.total)])
+  )
+  const kpis = {
+    saudaveis: classCountMap.get('saudavel') ?? 0,
+    atencao: classCountMap.get('atencao') ?? 0,
+    risco: classCountMap.get('risco') ?? 0,
+  }
 
   return (
     <div>
       <Header title="Clientes" />
       <ClientesTable
-        clientes={clientesFiltrados as any}
+        clientes={clientes as any}
+        total={count ?? clientes.length}
+        kpis={kpis}
         assessores={assessores ?? []}
         filtros={{ q, status, classificacao }}
         isAdmin={profile.role === 'admin'}

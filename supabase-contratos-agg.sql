@@ -61,8 +61,8 @@ AS $$
   LIMIT 10;
 $$;
 
--- Permissões
-GRANT EXECUTE ON FUNCTION contratos_resumo() TO authenticated;
-GRANT EXECUTE ON FUNCTION contratos_por_mes() TO authenticated;
-GRANT EXECUTE ON FUNCTION contratos_por_assessor() TO authenticated;
-GRANT EXECUTE ON FUNCTION contratos_por_cliente() TO authenticated;
+-- Permissões (service_role precisa de GRANT explícito em RPCs custom)
+GRANT EXECUTE ON FUNCTION contratos_resumo() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION contratos_por_mes() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION contratos_por_assessor() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION contratos_por_cliente() TO authenticated, service_role;

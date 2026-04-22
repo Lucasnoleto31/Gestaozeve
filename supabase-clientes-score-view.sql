@@ -21,7 +21,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) s ON true;
 
-GRANT SELECT ON public.clientes_com_score TO authenticated;
+GRANT SELECT ON public.clientes_com_score TO authenticated, service_role, anon;
 
 -- Contagem por classificação (para KPIs da toolbar de clientes)
 CREATE OR REPLACE FUNCTION public.clientes_classificacao_counts()
@@ -33,4 +33,4 @@ AS $$
   GROUP BY classificacao;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.clientes_classificacao_counts() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.clientes_classificacao_counts() TO authenticated, service_role;

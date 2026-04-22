@@ -43,20 +43,7 @@ export default async function ClientesPage({
 
   if (clientesError) {
     console.error('[clientes/page] query falhou:', clientesError)
-    return (
-      <div>
-        <Header title="Clientes" />
-        <div className="p-8">
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 max-w-2xl">
-            <h2 className="text-base font-semibold text-red-800 mb-2">Erro ao carregar clientes</h2>
-            <p className="text-sm text-red-700 mb-4">{clientesError.message}</p>
-            <pre className="text-xs bg-white border border-red-200 rounded-lg p-3 overflow-auto text-red-700">
-              {JSON.stringify(clientesError, null, 2)}
-            </pre>
-          </div>
-        </div>
-      </div>
-    )
+    throw new Error(`Erro ao carregar clientes: ${clientesError.message}`)
   }
 
   // Monta os joins em JS (views não propagam FKs do PostgREST)

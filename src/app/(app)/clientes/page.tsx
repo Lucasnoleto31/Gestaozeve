@@ -30,7 +30,7 @@ export default async function ClientesPage({
   if (classificacao) query = query.eq('classificacao', classificacao)
 
   const [
-    { data: clientesRows, count },
+    { data: clientesRows, count, error: clientesError },
     { data: classificacaoCounts },
     { data: assessores },
     { data: influenciadores },
@@ -40,6 +40,14 @@ export default async function ClientesPage({
     supabase.from('profiles').select('id, nome').in('role', ['admin', 'vendedor']).order('nome'),
     supabase.from('influenciadores').select('id, nome, codigo'),
   ])
+
+  if (clientesError) {
+    console.error('[clientes/page] query falhou:', clientesError)
+    throw new Error(
+      `Erro ao carregar clientes: ${clientesError.message}` +
+      (clientesError.code ? ` (code ${clientesError.code})` : '')
+    )
+  }
 
   // Monta os joins em JS (views não propagam FKs do PostgREST)
   const assessorMap = new Map((assessores ?? []).map((a) => [a.id, { nome: a.nome }]))

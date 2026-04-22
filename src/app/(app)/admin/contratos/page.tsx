@@ -6,7 +6,6 @@ import { Header } from '@/components/layout/Header'
 import { HeroBanner } from '@/components/layout/HeroBanner'
 import { redirect } from 'next/navigation'
 import { ContratosView } from './ContratosView'
-import { FileStack } from 'lucide-react'
 
 export default async function ContratosPage() {
   const profile = await getProfile()
@@ -15,26 +14,30 @@ export default async function ContratosPage() {
 
   const supabase = await createClient()
 
-  const PAGE_SIZE = 1000
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let allContratos: any[] = []
-  let from = 0
-  while (true) {
-    const { data } = await supabase
+  const [
+    { data: resumo },
+    { data: porMes },
+    { data: porAssessor },
+    { data: porCliente },
+    { data: contratos },
+    { data: importacoes },
+  ] = await Promise.all([
+    supabase.rpc('contratos_resumo').single(),
+    supabase.rpc('contratos_por_mes'),
+    supabase.rpc('contratos_por_assessor'),
+    supabase.rpc('contratos_por_cliente'),
+    supabase
       .from('contratos')
       .select('*, cliente:clientes(id, nome)')
       .order('data', { ascending: false })
-      .range(from, from + PAGE_SIZE - 1)
-    if (!data?.length) break
-    allContratos = [...allContratos, ...data]
-    if (data.length < PAGE_SIZE) break
-    from += PAGE_SIZE
-  }
+      .limit(1000),
+    supabase
+      .from('contratos_importacoes')
+      .select('*')
+      .order('created_at', { ascending: false }),
+  ])
 
-  const { data: importacoes } = await supabase
-    .from('contratos_importacoes')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const res = resumo ?? { total_operados: 0, total_zerados: 0, num_contratos: 0 }
 
   return (
     <div>
@@ -57,7 +60,7 @@ export default async function ContratosPage() {
               style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
             >
               <p className="text-xs text-blue-200/70 uppercase tracking-wide mb-1">Registros</p>
-              <p className="text-2xl font-bold text-white">{allContratos.length.toLocaleString('pt-BR')}</p>
+              <p className="text-2xl font-bold text-white">{Number(res.num_contratos ?? 0).toLocaleString('pt-BR')}</p>
             </div>
             <div
               className="rounded-xl px-4 py-3 text-center"
@@ -71,7 +74,11 @@ export default async function ContratosPage() {
       </HeroBanner>
 
       <ContratosView
-        contratos={allContratos}
+        resumo={res}
+        porMes={porMes ?? []}
+        porAssessor={porAssessor ?? []}
+        porCliente={porCliente ?? []}
+        contratos={contratos ?? []}
         importacoes={importacoes ?? []}
       />
     </div>

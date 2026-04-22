@@ -11,6 +11,24 @@ import {
 import { ImportarContratosModal } from './ImportarContratosModal'
 import { deletarImportacaoContrato } from './actions'
 
+interface Resumo {
+  total_operados: number
+  total_zerados: number
+  num_contratos: number
+}
+
+interface PorMesRow {
+  mes: string
+  operados: number
+  zerados: number
+}
+
+interface PorNomeRow {
+  nome: string
+  operados: number
+  zerados: number
+}
+
 interface Contrato {
   id: string
   importacao_id: string
@@ -39,11 +57,16 @@ interface Importacao {
 }
 
 interface Props {
+  resumo: Resumo
+  porMes: PorMesRow[]
+  porAssessor: PorNomeRow[]
+  porCliente: PorNomeRow[]
   contratos: Contrato[]
   importacoes: Importacao[]
 }
 
-const formatNum = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
+const formatNum = (v: number) =>
+  Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 
 const formatMonth = (mes: string) =>
   new Date(Number(mes.split('-')[0]), Number(mes.split('-')[1]) - 1)
@@ -63,14 +86,14 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   return null
 }
 
-const selectClass = "bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+const selectClass = "bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
 
-export function ContratosView({ contratos, importacoes }: Props) {
+export function ContratosView({ resumo, porMes, porAssessor, porCliente, contratos, importacoes }: Props) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Filtros globais (afetam cards, gráficos e tabela)
+  // Filtros (afetam apenas a tabela)
   const [filtroCliente, setFiltroCliente] = useState('')
   const [filtroAssessor, setFiltroAssessor] = useState('')
   const [filtroAtivo, setFiltroAtivo] = useState('')
@@ -78,7 +101,6 @@ export function ContratosView({ contratos, importacoes }: Props) {
   const [filtroPeriodoFim, setFiltroPeriodoFim] = useState('')
   const [filtroPlataforma, setFiltroPlataforma] = useState('')
 
-  // Opções dinâmicas dos selects
   const assessores = useMemo(() => {
     const set = new Set(contratos.map((c) => c.assessor_nome).filter(Boolean))
     return Array.from(set).sort() as string[]
@@ -105,7 +127,6 @@ export function ContratosView({ contratos, importacoes }: Props) {
 
   const temFiltro = filtroCliente || filtroAssessor || filtroAtivo || filtroPeriodoInicio || filtroPeriodoFim || filtroPlataforma
 
-  // Base filtrada usada em tudo
   const contratosFiltrados = useMemo(() => {
     return contratos.filter((c) => {
       if (filtroCliente) {
@@ -121,61 +142,36 @@ export function ContratosView({ contratos, importacoes }: Props) {
     })
   }, [contratos, filtroCliente, filtroAssessor, filtroAtivo, filtroPlataforma, filtroPeriodoInicio, filtroPeriodoFim])
 
-  // Cards
-  const totalOperados = useMemo(() => contratosFiltrados.reduce((s, c) => s + (c.lotes_operados || 0), 0), [contratosFiltrados])
-  const totalZerados = useMemo(() => contratosFiltrados.reduce((s, c) => s + (c.lotes_zerados || 0), 0), [contratosFiltrados])
+  const totalOperados = Number(resumo.total_operados ?? 0)
+  const totalZerados = Number(resumo.total_zerados ?? 0)
   const pctZerado = totalOperados > 0 ? ((totalZerados / totalOperados) * 100).toFixed(1) : '0'
 
-  // Evolução mensal (linha)
-  const porMes = useMemo(() => {
-    const map = new Map<string, { operados: number; zerados: number }>()
-    contratosFiltrados.forEach((c) => {
-      if (!c.data) return
-      const mes = c.data.substring(0, 7)
-      const cur = map.get(mes) ?? { operados: 0, zerados: 0 }
-      map.set(mes, {
-        operados: cur.operados + (c.lotes_operados || 0),
-        zerados: cur.zerados + (c.lotes_zerados || 0),
-      })
-    })
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([mes, v]) => ({ mes, label: formatMonth(mes), ...v }))
-  }, [contratosFiltrados])
+  const chartMes = useMemo(
+    () => porMes.map((r) => ({
+      label: formatMonth(r.mes),
+      operados: Number(r.operados),
+      zerados: Number(r.zerados),
+    })),
+    [porMes]
+  )
 
-  // Por barra
-  const porAssessor = useMemo(() => {
-    const map = new Map<string, { operados: number; zerados: number }>()
-    contratosFiltrados.forEach((c) => {
-      const nome = c.assessor_nome ?? 'Sem barra'
-      const cur = map.get(nome) ?? { operados: 0, zerados: 0 }
-      map.set(nome, {
-        operados: cur.operados + (c.lotes_operados || 0),
-        zerados: cur.zerados + (c.lotes_zerados || 0),
-      })
-    })
-    return Array.from(map.entries())
-      .sort(([, a], [, b]) => (b.operados + b.zerados) - (a.operados + a.zerados))
-      .slice(0, 10)
-      .map(([nome, v]) => ({ nome, ...v }))
-  }, [contratosFiltrados])
+  const chartAssessor = useMemo(
+    () => porAssessor.map((r) => ({
+      nome: r.nome,
+      operados: Number(r.operados),
+      zerados: Number(r.zerados),
+    })),
+    [porAssessor]
+  )
 
-  // Top clientes
-  const porCliente = useMemo(() => {
-    const map = new Map<string, { operados: number; zerados: number }>()
-    contratosFiltrados.forEach((c) => {
-      const nome = c.cliente?.nome ?? c.cliente_nome ?? 'Sem cliente'
-      const cur = map.get(nome) ?? { operados: 0, zerados: 0 }
-      map.set(nome, {
-        operados: cur.operados + (c.lotes_operados || 0),
-        zerados: cur.zerados + (c.lotes_zerados || 0),
-      })
-    })
-    return Array.from(map.entries())
-      .sort(([, a], [, b]) => (b.operados + b.zerados) - (a.operados + a.zerados))
-      .slice(0, 10)
-      .map(([nome, v]) => ({ nome, ...v }))
-  }, [contratosFiltrados])
+  const chartCliente = useMemo(
+    () => porCliente.map((r) => ({
+      nome: r.nome,
+      operados: Number(r.operados),
+      zerados: Number(r.zerados),
+    })),
+    [porCliente]
+  )
 
   function limparFiltros() {
     setFiltroCliente('')
@@ -196,7 +192,6 @@ export function ContratosView({ contratos, importacoes }: Props) {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex justify-end">
         <Button onClick={() => setModalOpen(true)}>
           <Upload className="w-4 h-4" />
@@ -204,55 +199,7 @@ export function ContratosView({ contratos, importacoes }: Props) {
         </Button>
       </div>
 
-      {/* Filtros globais */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Cliente</label>
-            <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} className={selectClass}>
-              <option value="">Todos</option>
-              {clientes.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Barra</label>
-            <select value={filtroAssessor} onChange={(e) => setFiltroAssessor(e.target.value)} className={selectClass}>
-              <option value="">Todas</option>
-              {assessores.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Ativo</label>
-            <select value={filtroAtivo} onChange={(e) => setFiltroAtivo(e.target.value)} className={selectClass}>
-              <option value="">Todos</option>
-              {ativos.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Plataforma</label>
-            <select value={filtroPlataforma} onChange={(e) => setFiltroPlataforma(e.target.value)} className={selectClass}>
-              <option value="">Todas</option>
-              {plataformas.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Período — de</label>
-            <input type="month" value={filtroPeriodoInicio} onChange={(e) => setFiltroPeriodoInicio(e.target.value)} className={selectClass} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">até</label>
-            <input type="month" value={filtroPeriodoFim} onChange={(e) => setFiltroPeriodoFim(e.target.value)} className={selectClass} />
-          </div>
-          {temFiltro && (
-            <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-400 pb-1.5">
-              <X className="w-3.5 h-3.5" /> Limpar
-            </button>
-          )}
-          <span className="ml-auto text-xs text-gray-500 pb-1.5">{contratosFiltrados.length} registros</span>
-        </div>
-      </div>
-
-      {/* Cards */}
+      {/* Cards — totais globais da tabela */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-gray-200 rounded-2xl p-5">
           <div className="flex items-center gap-3 mb-3">
@@ -285,47 +232,29 @@ export function ContratosView({ contratos, importacoes }: Props) {
         </div>
       </div>
 
-      {/* Gráficos */}
-      {porMes.length > 0 && (
+      {/* Gráficos — globais */}
+      {chartMes.length > 0 && (
         <>
-          {/* Evolução mensal — gráfico de linhas */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Evolução Mensal</h3>
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={porMes}>
+              <LineChart data={chartMes}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E8EEF8" />
                 <XAxis dataKey="label" tick={{ fill: '#6B7280', fontSize: 11 }} />
                 <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                <Line
-                  type="monotone"
-                  dataKey="operados"
-                  name="Operados"
-                  stroke="#1764F4"
-                  strokeWidth={2}
-                  dot={{ fill: '#1764F4', r: 3 }}
-                  activeDot={{ r: 5 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="zerados"
-                  name="Zerados"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  dot={{ fill: '#ef4444', r: 3 }}
-                  activeDot={{ r: 5 }}
-                />
+                <Line type="monotone" dataKey="operados" name="Operados" stroke="#1764F4" strokeWidth={2} dot={{ fill: '#1764F4', r: 3 }} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="zerados" name="Zerados" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444', r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Por barra */}
             <div className="bg-white border border-gray-200 rounded-2xl p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Por Barra</h3>
               <ResponsiveContainer width="100%" height={210}>
-                <BarChart data={porAssessor} layout="vertical">
+                <BarChart data={chartAssessor} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#E8EEF8" />
                   <XAxis type="number" tick={{ fill: '#6B7280', fontSize: 11 }} />
                   <YAxis dataKey="nome" type="category" width={80} tick={{ fill: '#6B7280', fontSize: 10 }} />
@@ -337,11 +266,10 @@ export function ContratosView({ contratos, importacoes }: Props) {
               </ResponsiveContainer>
             </div>
 
-            {/* Top clientes */}
             <div className="bg-white border border-gray-200 rounded-2xl p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Top 10 Clientes</h3>
               <ResponsiveContainer width="100%" height={210}>
-                <BarChart data={porCliente} layout="vertical">
+                <BarChart data={chartCliente} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#E8EEF8" />
                   <XAxis type="number" tick={{ fill: '#6B7280', fontSize: 11 }} />
                   <YAxis dataKey="nome" type="category" width={120} tick={{ fill: '#6B7280', fontSize: 10 }} />
@@ -356,11 +284,38 @@ export function ContratosView({ contratos, importacoes }: Props) {
         </>
       )}
 
-      {/* Tabela */}
+      {/* Tabela + filtros (filtros afetam só a tabela) */}
       <div className="bg-white border border-gray-200 rounded-2xl">
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-gray-200 flex flex-wrap items-center gap-3">
           <h3 className="text-sm font-semibold text-gray-900">Lançamentos</h3>
-          <span className="text-xs text-gray-500">{contratosFiltrados.length} registros</span>
+
+          <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} className={selectClass}>
+            <option value="">Todos clientes</option>
+            {clientes.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={filtroAssessor} onChange={(e) => setFiltroAssessor(e.target.value)} className={selectClass}>
+            <option value="">Todas barras</option>
+            {assessores.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select value={filtroAtivo} onChange={(e) => setFiltroAtivo(e.target.value)} className={selectClass}>
+            <option value="">Todos ativos</option>
+            {ativos.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select value={filtroPlataforma} onChange={(e) => setFiltroPlataforma(e.target.value)} className={selectClass}>
+            <option value="">Todas plataformas</option>
+            {plataformas.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <input type="month" value={filtroPeriodoInicio} onChange={(e) => setFiltroPeriodoInicio(e.target.value)} className={selectClass} />
+          <input type="month" value={filtroPeriodoFim} onChange={(e) => setFiltroPeriodoFim(e.target.value)} className={selectClass} />
+
+          {temFiltro && (
+            <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-400">
+              <X className="w-3.5 h-3.5" /> Limpar
+            </button>
+          )}
+          <span className="ml-auto text-xs text-gray-500">
+            {contratosFiltrados.length} de {contratos.length} registros (últimos 1000)
+          </span>
         </div>
 
         <div className="overflow-x-auto">
@@ -412,7 +367,7 @@ export function ContratosView({ contratos, importacoes }: Props) {
               {contratosFiltrados.length > 100 && (
                 <tr>
                   <td colSpan={9} className="px-4 py-3 text-center text-xs text-gray-400">
-                    Exibindo os primeiros 100 de {contratosFiltrados.length} registros. Use os filtros para refinar.
+                    Exibindo 100 de {contratosFiltrados.length}. Use os filtros para refinar.
                   </td>
                 </tr>
               )}

@@ -22,10 +22,7 @@ export default async function ClientesPage({
 
   let query = supabase
     .from('clientes_com_score')
-    .select(
-      `*, assessor:profiles(nome), influenciador:influenciadores(nome, codigo)`,
-      { count: 'exact' }
-    )
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
 
   if (q) query = query.or(`nome.ilike.%${q}%,cpf.ilike.%${q}%,email.ilike.%${q}%`)
@@ -36,14 +33,24 @@ export default async function ClientesPage({
     { data: clientesRows, count },
     { data: classificacaoCounts },
     { data: assessores },
+    { data: influenciadores },
   ] = await Promise.all([
     query.range(0, PAGE_LIMIT - 1),
     supabase.rpc('clientes_classificacao_counts'),
     supabase.from('profiles').select('id, nome').in('role', ['admin', 'vendedor']).order('nome'),
+    supabase.from('influenciadores').select('id, nome, codigo'),
   ])
+
+  // Monta os joins em JS (views não propagam FKs do PostgREST)
+  const assessorMap = new Map((assessores ?? []).map((a) => [a.id, { nome: a.nome }]))
+  const influenciadorMap = new Map(
+    (influenciadores ?? []).map((i) => [i.id, { nome: i.nome, codigo: i.codigo }])
+  )
 
   const clientes = (clientesRows ?? []).map((c) => ({
     ...c,
+    assessor: c.assessor_id ? assessorMap.get(c.assessor_id) ?? null : null,
+    influenciador: c.influenciador_id ? influenciadorMap.get(c.influenciador_id) ?? null : null,
     ultimo_score: c.score_total != null
       ? [{ score_total: c.score_total, classificacao: c.classificacao, tendencia: c.tendencia }]
       : [],

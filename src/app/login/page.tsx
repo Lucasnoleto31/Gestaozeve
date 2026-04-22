@@ -3,25 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { TrendingUp, BarChart2, ShieldCheck, Users } from 'lucide-react'
-
-const FEATURES = [
-  {
-    icon: BarChart2,
-    title: 'Análise em tempo real',
-    desc: 'Acompanhe o desempenho da sua carteira com dados atualizados ao vivo.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Score de saúde CHS',
-    desc: 'Monitore o risco de churn de cada cliente com inteligência preditiva.',
-  },
-  {
-    icon: Users,
-    title: 'Gestão completa de clientes',
-    desc: 'CRM, retenção e relatórios em um único ambiente integrado.',
-  },
-]
+import { TrendingUp } from 'lucide-react'
+import Image from 'next/image'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -47,27 +30,32 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex" style={{ background: '#F0F4FF' }}>
 
-      {/* ── Left panel — institutional ── */}
-      <div
-        className="hidden lg:flex lg:w-[58%] xl:w-[60%] flex-col relative overflow-hidden"
-        style={{
-          background: 'linear-gradient(140deg, #0A1628 0%, #0F2550 45%, #1764F4 100%)',
-        }}
-      >
-        {/* Subtle grid overlay */}
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
-            backgroundSize: '48px 48px',
-          }}
+      {/* ── Left panel — GIF background ── */}
+      <div className="hidden lg:flex lg:w-[58%] xl:w-[60%] flex-col relative overflow-hidden bg-black">
+
+        {/* GIF background */}
+        <Image
+          src="/login-bg.gif"
+          alt=""
+          fill
+          className="object-cover opacity-60"
+          priority
+          unoptimized
         />
 
-        {/* Radial glow */}
+        {/* Dark gradient overlay — top and bottom for text readability */}
         <div
           className="absolute inset-0"
           style={{
-            background: 'radial-gradient(ellipse 70% 60% at 30% 60%, rgba(23,100,244,0.35) 0%, transparent 70%)',
+            background: 'linear-gradient(to bottom, rgba(8,8,16,0.75) 0%, rgba(8,8,16,0.15) 40%, rgba(8,8,16,0.15) 60%, rgba(8,8,16,0.85) 100%)',
+          }}
+        />
+
+        {/* Blue vignette sides */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse 90% 80% at 50% 50%, transparent 50%, rgba(0,17,40,0.6) 100%)',
           }}
         />
 
@@ -78,50 +66,32 @@ export default function LoginPage() {
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
+              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)' }}
             >
               <TrendingUp className="w-5 h-5 text-white" />
             </div>
             <span className="text-xl font-bold text-white tracking-tight">ZeveAI</span>
           </div>
 
-          {/* Main copy */}
+          {/* Main copy — bottom aligned */}
           <div className="mt-auto mb-16">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-5" style={{ color: '#7CB9FF' }}>
               Plataforma de assessoria
             </p>
             <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight">
-              Gerencie sua<br />
-              <span style={{ color: '#7CB9FF' }}>carteira de traders</span><br />
-              com inteligência.
+              Seus trades contam<br />
+              <span style={{ color: '#7CB9FF' }}>uma história.</span><br />
+              Você já a leu?
             </h1>
-            <p className="text-base text-blue-100/70 mt-5 max-w-md leading-relaxed">
-              Centralize clientes, monitore saúde financeira e antecipe riscos com análises preditivas em tempo real.
+            <p className="text-base mt-5 max-w-md leading-relaxed" style={{ color: 'rgba(220,232,255,0.65)' }}>
+              Importe seus relatórios do Profit e descubra com clareza o que está funcionando e o que está te custando dinheiro.
             </p>
-
-            {/* Feature list */}
-            <div className="mt-10 space-y-5">
-              {FEATURES.map(({ icon: Icon, title, desc }) => (
-                <div key={title} className="flex items-start gap-4">
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)' }}
-                  >
-                    <Icon className="w-4 h-4 text-blue-200" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">{title}</p>
-                    <p className="text-sm text-blue-100/60 mt-0.5 leading-snug">{desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Bottom badge */}
           <div
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full self-start"
-            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}
           >
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs text-white/80 font-medium">Sistema disponível 24/7</span>

@@ -229,7 +229,7 @@ export async function rodarEngineNotificacoes(): Promise<{
   const followupsPorAssessor = new Map<string, { clienteNome: string; diasAtraso: number; observacao: string | null; clienteId: string }[]>()
 
   for (const f of followupsPendentes ?? []) {
-    const clienteData = f.cliente as { nome: string; assessor_id: string | null } | null
+    const clienteData = f.cliente as unknown as { nome: string; assessor_id: string | null } | null
     if (!clienteData?.assessor_id) continue
 
     const diasAtraso = diasDesde(f.agendado_para)

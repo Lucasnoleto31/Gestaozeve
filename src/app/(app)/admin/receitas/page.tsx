@@ -56,7 +56,8 @@ export default async function ReceitasPage() {
     supabaseSession.rpc('receitas_total_bruto'),
   ])
 
-  const res = resumo ?? { total_liquido: 0, mes_atual: 0, num_meses: 0 }
+  type ReceitasResumo = { total_liquido: number; mes_atual: number; num_meses: number }
+  const res = (resumo as ReceitasResumo | null) ?? { total_liquido: 0, mes_atual: 0, num_meses: 0 }
   const totalBruto = Number(totalBrutoData ?? 0)
 
   return (
@@ -99,7 +100,7 @@ export default async function ReceitasPage() {
         porMes={porMes ?? []}
         porAssessor={porAssessor ?? []}
         porCliente={porCliente ?? []}
-        registros={registros ?? []}
+        registros={(registros ?? []) as never}
         importacoes={importacoes ?? []}
         assessores={assessores ?? []}
         influenciadores={influenciadores ?? []}

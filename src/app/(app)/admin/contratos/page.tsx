@@ -7,6 +7,10 @@ import { HeroBanner } from '@/components/layout/HeroBanner'
 import { redirect } from 'next/navigation'
 import { ContratosView } from './ContratosView'
 
+type ContratosResumo = { total_operados: number; total_zerados: number; num_contratos: number }
+type PorMesRow = { mes: string; operados: number; zerados: number }
+type PorNomeRow = { nome: string; operados: number; zerados: number }
+
 export default async function ContratosPage() {
   const profile = await getProfile()
   if (!profile) redirect('/login')
@@ -37,7 +41,7 @@ export default async function ContratosPage() {
       .order('created_at', { ascending: false }),
   ])
 
-  const res = resumo ?? { total_operados: 0, total_zerados: 0, num_contratos: 0 }
+  const res = (resumo as ContratosResumo | null) ?? { total_operados: 0, total_zerados: 0, num_contratos: 0 }
 
   return (
     <div>
@@ -75,9 +79,9 @@ export default async function ContratosPage() {
 
       <ContratosView
         resumo={res}
-        porMes={porMes ?? []}
-        porAssessor={porAssessor ?? []}
-        porCliente={porCliente ?? []}
+        porMes={(porMes as PorMesRow[] | null) ?? []}
+        porAssessor={(porAssessor as PorNomeRow[] | null) ?? []}
+        porCliente={(porCliente as PorNomeRow[] | null) ?? []}
         contratos={contratos ?? []}
         importacoes={importacoes ?? []}
       />

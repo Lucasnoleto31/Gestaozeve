@@ -54,7 +54,7 @@ export function ImportarPlataformasModal({ open, onClose }: Props) {
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][]
 
       if (raw.length < 2) {
-        setResultado({ ok: 0, erros: ['Planilha vazia ou sem dados.'] })
+        setResultado({ ok: 0, erros: ['Planilha vazia ou sem dados.'], mes: null })
         setLoading(false)
         return
       }
@@ -79,7 +79,7 @@ export function ImportarPlataformasModal({ open, onClose }: Props) {
         router.push(`/plataformas?mes=${result.mes}`)
       }
     } catch (err) {
-      setResultado({ ok: 0, erros: ['Erro ao processar arquivo: ' + (err instanceof Error ? err.message : String(err))] })
+      setResultado({ ok: 0, erros: ['Erro ao processar arquivo: ' + (err instanceof Error ? err.message : String(err))], mes: null })
     }
 
     setLoading(false)

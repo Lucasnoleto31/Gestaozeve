@@ -54,10 +54,13 @@ export function CarteiraPie({ distribuicao, total }: CarteiraPieProps) {
             </Pie>
             <Tooltip
               contentStyle={tooltipStyle}
-              formatter={(value: number, name: string) => [
-                `${value} cliente${value !== 1 ? 's' : ''} (${Math.round((value / total) * 100)}%)`,
-                name,
-              ]}
+              formatter={((value: number | string, name: string) => {
+                const n = Number(value)
+                return [
+                  `${n} cliente${n !== 1 ? 's' : ''} (${Math.round((n / total) * 100)}%)`,
+                  name,
+                ]
+              }) as never}
             />
           </PieChart>
         </ResponsiveContainer>

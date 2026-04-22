@@ -10,6 +10,7 @@ type PlataformaRow = {
   data_receita?: string
   valor?: string
   descricao?: string
+  assessor?: string
 }
 
 function parseDateToMes(value: string): string | null {

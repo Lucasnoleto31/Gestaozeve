@@ -345,8 +345,8 @@ export function downloadReceitasPDF(
   // ════════════════════════════════════════════
   doc.addPage()
 
-  const colStyles = currencyIdxs.reduce<Record<number, { halign: string }>>((acc, i) => {
-    acc[i] = { halign: 'right' }
+  const colStyles = currencyIdxs.reduce<Record<number, { halign: 'right' }>>((acc, i) => {
+    acc[i] = { halign: 'right' as const }
     return acc
   }, {})
 

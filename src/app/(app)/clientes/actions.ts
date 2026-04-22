@@ -146,7 +146,7 @@ async function fetchAllRows<T>(
   return all
 }
 
-export async function recalcularScoreTodos(): Promise<{ ok: number; erros: number }> {
+export async function recalcularScoreTodos(): Promise<{ ok: number; erros: number; inativos: number }> {
   const supabase = createAdminClient()
   const hoje = new Date()
   const mesAtualKey = mesKey(hoje, 0)
@@ -174,7 +174,7 @@ export async function recalcularScoreTodos(): Promise<{ ok: number; erros: numbe
     ),
   ])
 
-  if (!clientes?.length) return { ok: 0, erros: 0 }
+  if (!clientes?.length) return { ok: 0, erros: 0, inativos: 0 }
 
   const dadosMap = new Map((dadosCHS ?? []).map((d) => [d.cliente_id, d]))
 

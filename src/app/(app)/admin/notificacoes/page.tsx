@@ -35,7 +35,7 @@ export default async function NotificacoesPage() {
   return (
     <div>
       <Header title="Notificações" />
-      <NotificacoesClient logs={logs ?? []} contagem={contagem} />
+      <NotificacoesClient logs={(logs ?? []) as never} contagem={contagem} />
     </div>
   )
 }

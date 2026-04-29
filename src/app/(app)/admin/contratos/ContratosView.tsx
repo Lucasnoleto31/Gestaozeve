@@ -203,12 +203,13 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
           : '',
         'Número Conta': r.numero_conta ?? '',
         Cliente: r.cliente_nome ?? '',
+        Ativo: r.ativo ?? '',
         'Lotes Operados': r.lotes_operados,
         'Lotes Zerados': r.lotes_zerados,
       }))
 
       const ws = XLSX.utils.json_to_sheet(dataFormatada)
-      ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 40 }, { wch: 16 }, { wch: 16 }]
+      ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 40 }, { wch: 14 }, { wch: 16 }, { wch: 16 }]
 
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Contratos')

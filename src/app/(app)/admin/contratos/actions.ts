@@ -132,6 +132,7 @@ export interface ContratoExportRow {
   data: string | null
   numero_conta: string | null
   cliente_nome: string | null
+  ativo: string | null
   lotes_operados: number
   lotes_zerados: number
 }
@@ -149,7 +150,7 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
   while (true) {
     const { data, error } = await supabase
       .from('contratos')
-      .select('data, numero_conta, cliente_nome, lotes_operados, lotes_zerados, cliente:clientes(nome)')
+      .select('data, numero_conta, cliente_nome, ativo, lotes_operados, lotes_zerados, cliente:clientes(nome)')
       .order('data', { ascending: false })
       .range(from, from + PAGE - 1)
 
@@ -160,6 +161,7 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
       data: string | null
       numero_conta: string | null
       cliente_nome: string | null
+      ativo: string | null
       lotes_operados: number
       lotes_zerados: number
       cliente: { nome: string } | { nome: string }[] | null
@@ -169,6 +171,7 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
         data: c.data,
         numero_conta: c.numero_conta,
         cliente_nome: clienteRel?.nome ?? c.cliente_nome,
+        ativo: c.ativo,
         lotes_operados: Number(c.lotes_operados ?? 0),
         lotes_zerados: Number(c.lotes_zerados ?? 0),
       })

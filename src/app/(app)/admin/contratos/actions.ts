@@ -127,3 +127,56 @@ export async function deletarImportacaoContrato(importacaoId: string) {
   await supabase.from('contratos_importacoes').delete().eq('id', importacaoId)
   revalidatePath('/admin/contratos')
 }
+
+export interface ContratoExportRow {
+  data: string | null
+  numero_conta: string | null
+  cliente_nome: string | null
+  lotes_operados: number
+  lotes_zerados: number
+}
+
+export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
+  const profile = await getProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
+
+  const supabase = createAdminClient()
+
+  const PAGE = 1000
+  let from = 0
+  const all: ContratoExportRow[] = []
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('contratos')
+      .select('data, numero_conta, cliente_nome, lotes_operados, lotes_zerados, cliente:clientes(nome)')
+      .order('data', { ascending: false })
+      .range(from, from + PAGE - 1)
+
+    if (error) throw new Error(error.message)
+    if (!data || data.length === 0) break
+
+    for (const c of data as Array<{
+      data: string | null
+      numero_conta: string | null
+      cliente_nome: string | null
+      lotes_operados: number
+      lotes_zerados: number
+      cliente: { nome: string } | { nome: string }[] | null
+    }>) {
+      const clienteRel = Array.isArray(c.cliente) ? c.cliente[0] : c.cliente
+      all.push({
+        data: c.data,
+        numero_conta: c.numero_conta,
+        cliente_nome: clienteRel?.nome ?? c.cliente_nome,
+        lotes_operados: Number(c.lotes_operados ?? 0),
+        lotes_zerados: Number(c.lotes_zerados ?? 0),
+      })
+    }
+
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+
+  return all
+}

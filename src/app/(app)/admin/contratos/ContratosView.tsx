@@ -3,13 +3,13 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
-import { Upload, Trash2, Activity, TrendingUp, AlertTriangle, X } from 'lucide-react'
+import { Upload, Trash2, Activity, TrendingUp, AlertTriangle, X, Download } from 'lucide-react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts'
 import { ImportarContratosModal } from './ImportarContratosModal'
-import { deletarImportacaoContrato } from './actions'
+import { deletarImportacaoContrato, exportarTodosContratos } from './actions'
 
 interface Resumo {
   total_operados: number
@@ -92,6 +92,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [exportando, setExportando] = useState(false)
 
   // Filtros (afetam apenas a tabela)
   const [filtroCliente, setFiltroCliente] = useState('')
@@ -190,9 +191,43 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
     setDeletingId(null)
   }
 
+  async function handleBaixarExcel() {
+    setExportando(true)
+    try {
+      const rows = await exportarTodosContratos()
+      const XLSX = await import('xlsx')
+
+      const dataFormatada = rows.map((r) => ({
+        Data: r.data
+          ? new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+          : '',
+        'Número Conta': r.numero_conta ?? '',
+        Cliente: r.cliente_nome ?? '',
+        'Lotes Operados': r.lotes_operados,
+        'Lotes Zerados': r.lotes_zerados,
+      }))
+
+      const ws = XLSX.utils.json_to_sheet(dataFormatada)
+      ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 40 }, { wch: 16 }, { wch: 16 }]
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Contratos')
+
+      const hoje = new Date().toISOString().split('T')[0]
+      XLSX.writeFile(wb, `contratos-${hoje}.xlsx`)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao gerar Excel.')
+    }
+    setExportando(false)
+  }
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={handleBaixarExcel} loading={exportando}>
+          <Download className="w-4 h-4" />
+          Baixar Excel
+        </Button>
         <Button onClick={() => setModalOpen(true)}>
           <Upload className="w-4 h-4" />
           Importar Excel

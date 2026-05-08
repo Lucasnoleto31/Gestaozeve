@@ -9,7 +9,7 @@ import { useSidebar } from '@/lib/sidebar-context'
 import {
   LayoutDashboard, Settings, UserCircle, Link2,
   UserCheck, Monitor, ShieldAlert, BarChart2, FileStack, FileDown,
-  TrendingUp, Building2, Bell, X,
+  TrendingUp, Building2, Bell, X, DollarSign, Target,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -53,6 +53,9 @@ const NAV_SECTIONS: {
       { label: 'Barras', href: '/admin/barras', icon: Building2 },
       { label: 'Receitas', href: '/admin/receitas', icon: BarChart2 },
       { label: 'Contratos', href: '/admin/contratos', icon: FileStack },
+      { label: 'Dashboard Contratos', href: '/admin/contratos-dashboard', icon: BarChart2 },
+      { label: 'Tarifas por Barra', href: '/admin/assessor-pricing', icon: DollarSign },
+      { label: 'Metas Anuais', href: '/admin/metas', icon: Target },
       { label: 'Relatórios', href: '/admin/relatorios', icon: FileDown },
       { label: 'Notificações', href: '/admin/notificacoes', icon: Bell },
     ],

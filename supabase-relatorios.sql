@@ -286,59 +286,49 @@ LANGUAGE sql SECURITY DEFINER AS $$
   ORDER BY DATE_TRUNC('month', data), EXTRACT(DAY FROM data)::integer;
 $$;
 
--- 14. Lotes girados: mês atual vs últimos 3 meses por dia
+-- 14. Lotes girados: mês atual vs meses anteriores por dia (formato long)
+-- Retorna 12 meses pra trás. Frontend filtra/agrega:
+--   modo padrão = is_ano_corrente (jan..mês atual de YYYY)
+--   fallback    = mes_offset 0..3 quando o ano corrente só tem o mês atual (janeiro)
 CREATE OR REPLACE FUNCTION relatorio_lotes_comparativo()
 RETURNS TABLE(
   dia_num integer,
-  lotes_mes_atual numeric,
-  lotes_m1 numeric,
-  lotes_m2 numeric,
-  lotes_m3 numeric,
-  media_3m numeric,
-  variacao_pct numeric
+  mes_data date,
+  mes_offset integer,
+  ano integer,
+  is_ano_corrente boolean,
+  lotes_operados numeric,
+  lotes_zerados numeric
 )
 LANGUAGE sql SECURITY DEFINER AS $$
-WITH daily AS (
+  WITH bounds AS (
+    SELECT
+      DATE_TRUNC('month', CURRENT_DATE)::date AS mes_atual,
+      (DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '12 months')::date AS lookback
+  ),
+  daily AS (
+    SELECT
+      DATE_TRUNC('month', c.data)::date AS mes,
+      EXTRACT(DAY FROM c.data)::integer AS dia,
+      ROUND(SUM(c.lotes_operados)::numeric, 2) AS operados,
+      ROUND(SUM(c.lotes_zerados)::numeric, 2) AS zerados
+    FROM public.contratos c, bounds b
+    WHERE c.data IS NOT NULL
+      AND c.data >= b.lookback
+      AND c.data <= CURRENT_DATE
+    GROUP BY 1, 2
+  )
   SELECT
-    DATE_TRUNC('month', data) AS mes,
-    EXTRACT(DAY FROM data)::integer AS dia,
-    ROUND(SUM(lotes_operados)::numeric, 2) AS lotes
-  FROM public.contratos
-  WHERE data >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '3 months'
-    AND data <= CURRENT_DATE
-  GROUP BY 1, 2
-),
-all_days AS (
-  SELECT DISTINCT dia FROM daily
-),
-pivoted AS (
-  SELECT
-    d.dia,
-    COALESCE(MAX(dy.lotes) FILTER (WHERE dy.mes = DATE_TRUNC('month', CURRENT_DATE)), 0) AS lotes_mes_atual,
-    COALESCE(MAX(dy.lotes) FILTER (WHERE dy.mes = DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '1 month'), 0) AS lotes_m1,
-    COALESCE(MAX(dy.lotes) FILTER (WHERE dy.mes = DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '2 months'), 0) AS lotes_m2,
-    COALESCE(MAX(dy.lotes) FILTER (WHERE dy.mes = DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '3 months'), 0) AS lotes_m3
-  FROM all_days d
-  LEFT JOIN daily dy ON dy.dia = d.dia
-  GROUP BY d.dia
-)
-SELECT
-  dia::integer AS dia_num,
-  lotes_mes_atual,
-  lotes_m1,
-  lotes_m2,
-  lotes_m3,
-  ROUND((lotes_m1 + lotes_m2 + lotes_m3) / 3, 2) AS media_3m,
-  CASE
-    WHEN (lotes_m1 + lotes_m2 + lotes_m3) > 0
-    THEN ROUND(
-      (lotes_mes_atual - (lotes_m1 + lotes_m2 + lotes_m3) / 3) /
-      ((lotes_m1 + lotes_m2 + lotes_m3) / 3) * 100
-    , 2)
-    ELSE NULL
-  END AS variacao_pct
-FROM pivoted
-ORDER BY dia;
+    d.dia AS dia_num,
+    d.mes AS mes_data,
+    ((EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM d.mes)) * 12
+     + (EXTRACT(MONTH FROM CURRENT_DATE) - EXTRACT(MONTH FROM d.mes)))::integer AS mes_offset,
+    EXTRACT(YEAR FROM d.mes)::integer AS ano,
+    (EXTRACT(YEAR FROM d.mes) = EXTRACT(YEAR FROM CURRENT_DATE)) AS is_ano_corrente,
+    d.operados AS lotes_operados,
+    d.zerados AS lotes_zerados
+  FROM daily d
+  ORDER BY d.mes DESC, d.dia;
 $$;
 
 -- Permissões

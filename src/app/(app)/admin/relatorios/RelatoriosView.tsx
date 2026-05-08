@@ -211,28 +211,136 @@ function CohortTable({ action }: { action: () => Promise<CohortItem[]> }) {
   )
 }
 
+// Formata uma data 'YYYY-MM-01' como 'mai 26' (pt-BR)
+function formatMesShort(isoDate: string): string {
+  const d = new Date(isoDate)
+  if (isNaN(d.getTime())) return isoDate
+  return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+    .replace('.', '')
+    .toLowerCase()
+}
+
+// Média móvel simples de janela `window` sobre uma série numérica.
+// Retorna o array com null nos primeiros (window-1) pontos sem janela cheia.
+function rollingMean(values: (number | null)[], window: number): (number | null)[] {
+  const out: (number | null)[] = []
+  let acc = 0
+  let count = 0
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i]
+    if (v != null) { acc += v; count++ }
+    if (i >= window) {
+      const old = values[i - window]
+      if (old != null) { acc -= old; count-- }
+    }
+    out.push(i >= window - 1 && count > 0 ? Math.round((acc / count) * 100) / 100 : null)
+  }
+  return out
+}
+
 function ComparativoTable({ action }: { action: () => Promise<ComparativoItem[]> }) {
   return (
     <AsyncBlock action={action} label="comparativo">
-      {(data, reload) => {
-        if (!data.length) return <p className="py-6 text-sm text-gray-400">Sem dados para comparativo.</p>
+      {(raw, reload) => {
+        if (!raw.length) return <p className="py-6 text-sm text-gray-400">Sem dados para comparativo.</p>
 
-        const totalAtual = data.reduce((s, r) => s + r.lotes_mes_atual, 0)
-        const totalMedia = data.reduce((s, r) => s + r.media_3m, 0)
+        // ---- Modo de exibição ---------------------------------------------
+        // Padrão: meses do ano corrente (jan..mês atual de YYYY).
+        // Fallback: se em janeiro não houver mais nada do ano corrente
+        //   (só o offset 0), cai pros últimos 3 meses (mistura anos).
+        const anoCorrenteRows = raw.filter(r => r.is_ano_corrente)
+        const offsetsAnoCorrente = new Set(anoCorrenteRows.map(r => r.mes_offset))
+        const fallback = offsetsAnoCorrente.size <= 1
+        const data = fallback
+          ? raw.filter(r => r.mes_offset >= 0 && r.mes_offset <= 3)
+          : anoCorrenteRows
+
+        // Mês atual em destaque (offset 0) à esquerda; meses anteriores ordenados crescente
+        const offsets = Array.from(new Set(data.map(r => r.mes_offset))).sort((a, b) => a - b)
+        const mesAtualOffset = 0
+        const mesesAnteriores = offsets.filter(o => o !== mesAtualOffset)
+
+        // Mapa rápido para acesso por (offset, dia)
+        const cell = new Map<string, number>()
+        const mesData = new Map<number, string>()
+        for (const r of data) {
+          cell.set(`${r.mes_offset}|${r.dia_num}`, r.lotes_operados)
+          if (!mesData.has(r.mes_offset)) mesData.set(r.mes_offset, r.mes_data)
+        }
+
+        // Dias presentes em qualquer mês exibido — eixo Y da tabela
+        const dias = Array.from(new Set(data.map(r => r.dia_num))).sort((a, b) => a - b)
+
+        // Série do mês atual + média móvel 7d
+        const serieAtual: (number | null)[] = dias.map(d => {
+          const v = cell.get(`${mesAtualOffset}|${d}`)
+          return v == null ? null : v
+        })
+        const mm7 = rollingMean(serieAtual, 7)
+
+        // Média do "ano" (ou dos 3 meses no fallback) por dia — ignora zeros e mês atual
+        const mediaPorDia: number[] = dias.map(d => {
+          const vals: number[] = []
+          for (const o of mesesAnteriores) {
+            const v = cell.get(`${o}|${d}`)
+            if (v != null && v > 0) vals.push(v)
+          }
+          if (!vals.length) return 0
+          return Math.round((vals.reduce((s, x) => s + x, 0) / vals.length) * 100) / 100
+        })
+
+        const variacaoPorDia: (number | null)[] = dias.map((_, i) => {
+          const atual = serieAtual[i] ?? 0
+          const media = mediaPorDia[i]
+          if (media <= 0) return null
+          return Math.round(((atual - media) / media) * 100 * 100) / 100
+        })
+
+        // Acumulados / variação total
+        const totalAtual = serieAtual.reduce<number>((s, v) => s + (v ?? 0), 0)
+        const totalMedia = mediaPorDia.reduce((s, v) => s + v, 0)
         const varTotal = totalMedia > 0 ? ((totalAtual - totalMedia) / totalMedia * 100) : null
         const { color: varColor, label: varLabel } = varTag(varTotal)
 
-        const m0 = mesLabel(0), m1 = mesLabel(1), m2 = mesLabel(2), m3 = mesLabel(3)
+        // Labels das colunas
+        const labelMesAtual = mesData.has(0)
+          ? formatMesShort(mesData.get(0)!)
+          : mesLabel(0)
+        const colsMeses = mesesAnteriores.map(o => ({
+          offset: o,
+          label: mesData.has(o) ? formatMesShort(mesData.get(o)!) : mesLabel(o),
+        }))
+
+        const headerLabel = fallback ? 'Média 3M' : 'Média do ano'
+        const subLabelMedia = fallback ? 'média 3 meses' : 'média do ano'
 
         function handleExcel() {
-          const cols = ['Dia', m0, m1, m2, m3, 'Média 3M', 'Variação vs Média']
-          const rows = data.map(r => {
-            const { label } = varTag(r.variacao_pct)
-            return [r.dia_num, r.lotes_mes_atual, r.lotes_m1, r.lotes_m2, r.lotes_m3, r.media_3m, label]
+          const cols = ['Dia', labelMesAtual, 'MM7d', ...colsMeses.map(c => c.label), headerLabel, 'Variação vs Média']
+          const rows = dias.map((dia, i) => {
+            const v = serieAtual[i]
+            const m = mm7[i]
+            const linha: (string | number)[] = [
+              dia,
+              v == null ? '' : v,
+              m == null ? '' : m,
+            ]
+            for (const c of colsMeses) {
+              const cv = cell.get(`${c.offset}|${dia}`)
+              linha.push(cv == null ? '' : cv)
+            }
+            linha.push(mediaPorDia[i] || '')
+            const vp = variacaoPorDia[i]
+            linha.push(vp == null ? '' : `${vp.toFixed(1)}%`)
+            return linha
           })
-          const { label: tl } = varTag(varTotal)
-          rows.push(['Total', totalAtual, '', '', '',
-            Math.round(totalMedia * 100) / 100, tl])
+          rows.push([
+            'Total',
+            totalAtual,
+            '',
+            ...colsMeses.map(() => ''),
+            Math.round(totalMedia * 100) / 100,
+            varTotal == null ? '' : `${varTotal.toFixed(1)}%`,
+          ])
           downloadExcel(cols, rows, 'comparativo-lotes-por-dia')
         }
 
@@ -242,13 +350,13 @@ function ComparativoTable({ action }: { action: () => Promise<ComparativoItem[]>
             <div className="flex flex-wrap items-center gap-4 mb-4 p-3 rounded-xl"
               style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">Acumulado {m0}</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">Acumulado {labelMesAtual}</p>
                 <p className="text-2xl font-bold text-gray-900 tabular-nums">{totalAtual.toLocaleString('pt-BR')}</p>
                 <p className="text-xs text-gray-500">lotes girados</p>
               </div>
               <div className="w-px h-10 bg-gray-200 hidden sm:block" />
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">Média mesmo período (3M)</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">{subLabelMedia}</p>
                 <p className="text-2xl font-bold text-gray-900 tabular-nums">{Math.round(totalMedia).toLocaleString('pt-BR')}</p>
                 <p className="text-xs text-gray-500">lotes (média)</p>
               </div>
@@ -256,8 +364,14 @@ function ComparativoTable({ action }: { action: () => Promise<ComparativoItem[]>
               <div>
                 <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-0.5">Variação</p>
                 <p className="text-2xl font-bold tabular-nums" style={{ color: varColor }}>{varLabel}</p>
-                <p className="text-xs text-gray-500">vs média 3 meses</p>
+                <p className="text-xs text-gray-500">vs {subLabelMedia}</p>
               </div>
+              {fallback && (
+                <span className="text-[10px] uppercase tracking-widest font-semibold px-2 py-1 rounded"
+                  style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa' }}>
+                  Modo fallback · sem histórico no ano corrente
+                </span>
+              )}
               <div className="ml-auto flex items-center gap-2">
                 <button onClick={reload} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Recarregar">
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -270,38 +384,50 @@ function ComparativoTable({ action }: { action: () => Promise<ComparativoItem[]>
               <table className="text-xs border-collapse min-w-max w-full">
                 <thead>
                   <tr style={{ background: 'var(--surface-2)' }}>
-                    {['Dia', m0, m1, m2, m3, 'Média 3M', 'Variação vs Média'].map((h, i) => (
-                      <th key={i}
-                        className={`px-3 py-2 font-semibold border-r last:border-r-0 ${i === 0 ? 'text-left text-gray-600 sticky left-0 z-10' : 'text-center text-gray-500'}`}
-                        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', minWidth: i === 0 ? 54 : 80 }}>
-                        {h}
-                      </th>
-                    ))}
+                    {(['Dia', labelMesAtual, 'MM 7d', ...colsMeses.map(c => c.label), headerLabel, 'Variação'] as string[])
+                      .map((h, i) => (
+                        <th key={i}
+                          className={`px-3 py-2 font-semibold border-r last:border-r-0 ${i === 0 ? 'text-left text-gray-600 sticky left-0 z-10' : 'text-center text-gray-500'}`}
+                          style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', minWidth: i === 0 ? 54 : 80 }}>
+                          {h}
+                        </th>
+                      ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((r, ri) => {
-                    const { color, label } = varTag(r.variacao_pct)
+                  {dias.map((dia, ri) => {
+                    const v = serieAtual[ri]
+                    const m = mm7[ri]
+                    const media = mediaPorDia[ri]
+                    const varPct = variacaoPorDia[ri]
+                    const { color, label } = varTag(varPct)
                     const rowBg = ri % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)'
                     return (
-                      <tr key={r.dia_num} style={{ borderTop: '1px solid var(--border)', background: rowBg }}>
+                      <tr key={dia} style={{ borderTop: '1px solid var(--border)', background: rowBg }}>
                         <td className="px-3 py-1.5 font-semibold text-gray-700 sticky left-0 z-10 border-r tabular-nums"
                           style={{ background: rowBg, borderColor: 'var(--border)' }}>
-                          {r.dia_num}
+                          {dia}
                         </td>
                         <td className="px-3 py-1.5 text-center font-semibold text-blue-700 border-r tabular-nums"
                           style={{ borderColor: 'var(--border)' }}>
-                          {r.lotes_mes_atual > 0 ? r.lotes_mes_atual : <span className="text-gray-300">—</span>}
+                          {v != null && v > 0 ? v : <span className="text-gray-300">—</span>}
                         </td>
-                        {[r.lotes_m1, r.lotes_m2, r.lotes_m3].map((v, i) => (
-                          <td key={i} className="px-3 py-1.5 text-center text-gray-500 border-r tabular-nums"
-                            style={{ borderColor: 'var(--border)' }}>
-                            {v > 0 ? v : <span className="text-gray-300">—</span>}
-                          </td>
-                        ))}
+                        <td className="px-3 py-1.5 text-center text-gray-500 italic border-r tabular-nums"
+                          style={{ borderColor: 'var(--border)' }} title="Média móvel 7 dias">
+                          {m != null ? m : <span className="text-gray-300">—</span>}
+                        </td>
+                        {colsMeses.map((c) => {
+                          const cv = cell.get(`${c.offset}|${dia}`)
+                          return (
+                            <td key={c.offset} className="px-3 py-1.5 text-center text-gray-500 border-r tabular-nums"
+                              style={{ borderColor: 'var(--border)' }}>
+                              {cv != null && cv > 0 ? cv : <span className="text-gray-300">—</span>}
+                            </td>
+                          )
+                        })}
                         <td className="px-3 py-1.5 text-center text-gray-600 border-r tabular-nums"
                           style={{ borderColor: 'var(--border)' }}>
-                          {r.media_3m > 0 ? r.media_3m : <span className="text-gray-300">—</span>}
+                          {media > 0 ? media : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-1.5 text-center font-semibold tabular-nums"
                           style={{ color }}>
@@ -316,7 +442,10 @@ function ComparativoTable({ action }: { action: () => Promise<ComparativoItem[]>
                       style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}>Total</td>
                     <td className="px-3 py-2 text-center font-bold text-blue-700 border-r tabular-nums"
                       style={{ borderColor: 'var(--border)' }}>{totalAtual.toLocaleString('pt-BR')}</td>
-                    <td colSpan={3} className="border-r" style={{ borderColor: 'var(--border)' }} />
+                    <td className="border-r" style={{ borderColor: 'var(--border)' }} />
+                    {colsMeses.map((c) => (
+                      <td key={c.offset} className="border-r" style={{ borderColor: 'var(--border)' }} />
+                    ))}
                     <td className="px-3 py-2 text-center font-bold text-gray-600 border-r tabular-nums"
                       style={{ borderColor: 'var(--border)' }}>{Math.round(totalMedia).toLocaleString('pt-BR')}</td>
                     <td className="px-3 py-2 text-center font-bold tabular-nums" style={{ color: varColor }}>{varLabel}</td>
@@ -588,9 +717,9 @@ export function RelatoriosView({ actions }: Props) {
                     <TrendingUp className="w-4 h-4 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">Lotes Girados — Mês Atual vs Últimos 3 Meses</p>
+                    <p className="text-sm font-semibold text-gray-900">Lotes Girados — Mês Atual vs Ano Corrente</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Compare cada dia do mês atual com o mesmo dia nos 3 meses anteriores. Dias abaixo da média indicam momento ideal para intensificar campanhas.
+                      Cada dia do mês atual comparado com o mesmo dia nos demais meses do ano. Inclui média móvel de 7 dias e variação contra a média do ano. Em janeiro, cai automaticamente nos últimos 3 meses.
                     </p>
                   </div>
                 </div>

@@ -16,14 +16,15 @@ export type CohortItem = {
   pct_zeramento: number
 }
 
+// Formato long: uma linha por (dia × mês). O componente faz pivot.
 export type ComparativoItem = {
   dia_num: number
-  lotes_mes_atual: number
-  lotes_m1: number
-  lotes_m2: number
-  lotes_m3: number
-  media_3m: number
-  variacao_pct: number | null
+  mes_data: string         // 'YYYY-MM-01'
+  mes_offset: number       // 0 = mês atual, 1 = mês anterior, ...
+  ano: number
+  is_ano_corrente: boolean
+  lotes_operados: number
+  lotes_zerados: number
 }
 
 async function adminOnly() {
@@ -164,12 +165,12 @@ export async function getLotesComparativo(): Promise<ComparativoItem[]> {
   if (error) throw new Error(error.message)
   return (data ?? []).map((r: Record<string, unknown>) => ({
     dia_num: Number(r.dia_num),
-    lotes_mes_atual: Number(r.lotes_mes_atual),
-    lotes_m1: Number(r.lotes_m1),
-    lotes_m2: Number(r.lotes_m2),
-    lotes_m3: Number(r.lotes_m3),
-    media_3m: Number(r.media_3m),
-    variacao_pct: r.variacao_pct != null ? Number(r.variacao_pct) : null,
+    mes_data: String(r.mes_data),
+    mes_offset: Number(r.mes_offset),
+    ano: Number(r.ano),
+    is_ano_corrente: Boolean(r.is_ano_corrente),
+    lotes_operados: Number(r.lotes_operados),
+    lotes_zerados: Number(r.lotes_zerados),
   }))
 }
 

@@ -6,14 +6,19 @@
 -- já manda os limites do filtro de período.
 -- =============================================
 
--- Helper: extrai o símbolo do produto do campo ativo (ex: 'WINK26' → 'WIN').
--- Pega o prefixo alfabético; cai em 'OUTRO' quando vazio.
+-- Helper: extrai o símbolo do produto do campo ativo (ex: 'WINM26' → 'WIN').
+-- Os ativos da B3 vêm com código de vencimento ('WINM26' = WIN + mês M + ano 26),
+-- então pegamos *exatamente os 3 primeiros caracteres alfabéticos*. Versão antiga
+-- usava `^[A-Za-z]+` e pegava 'WINM' inteiro, quebrando o filtro IN ('WIN','WDO').
 DROP FUNCTION IF EXISTS public.contratos_produto(text) CASCADE;
 CREATE OR REPLACE FUNCTION public.contratos_produto(p_ativo text)
 RETURNS text
 LANGUAGE sql IMMUTABLE
 AS $$
-  SELECT COALESCE(NULLIF(UPPER(SUBSTRING(COALESCE(p_ativo, '') FROM '^[A-Za-z]+')), ''), 'OUTRO');
+  SELECT COALESCE(
+    NULLIF(UPPER(SUBSTRING(COALESCE(p_ativo, '') FROM '^[A-Za-z]{3}')), ''),
+    'OUTRO'
+  );
 $$;
 
 -- 1. KPIs principais do período

@@ -314,7 +314,8 @@ AS $$
   SELECT tipo, rk, cliente_id, nome, assessor_nome, lotes_op, lotes_ze FROM top_op
   UNION ALL
   SELECT tipo, rk, cliente_id, nome, assessor_nome, lotes_op, lotes_ze FROM top_ze
-  ORDER BY tipo, rank;
+  -- Ordena por índice porque "rank" colide com a função window homônima
+  ORDER BY 1, 2;
 $$;
 
 -- =============================================

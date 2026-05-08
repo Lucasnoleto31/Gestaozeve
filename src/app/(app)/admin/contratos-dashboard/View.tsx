@@ -1069,10 +1069,22 @@ export function ContratosDashboardView({ actions }: { actions: Actions }) {
         if (id) window.location.href = `/clientes/${id}`
       }} />
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <AlertasBlock data={alertas} onPickCliente={(id) => { if (id) window.location.href = `/clientes/${id}` }} />
-        <AcuracidadeBlock resumo={acuracidade} serie={acuracidadeSerie} />
-      </div>
+      {/* Fase 3 — alertas + acuracidade ficam recolhidos por padrão pra
+          reduzir ruído visual no topo do dashboard. */}
+      <details className="rounded-2xl"
+        style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+        <summary className="cursor-pointer select-none px-5 py-4 flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900">
+          <span className="text-blue-600">▸</span>
+          Mais ferramentas — alertas de qualidade e acuracidade do modelo
+          <span className="ml-auto text-xs text-gray-500 font-normal">
+            {alertas.length} alerta{alertas.length === 1 ? '' : 's'} · acuracidade {acuracidade?.num_dias ?? 0} dias
+          </span>
+        </summary>
+        <div className="p-5 pt-0 grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <AlertasBlock data={alertas} onPickCliente={(id) => { if (id) window.location.href = `/clientes/${id}` }} />
+          <AcuracidadeBlock resumo={acuracidade} serie={acuracidadeSerie} />
+        </div>
+      </details>
 
       {drillData && <DrilldownModal data={drillData} rows={drillRows} onClose={() => setDrillData(null)} />}
     </div>

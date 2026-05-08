@@ -57,7 +57,7 @@ INSERT INTO public.assessor_pricing
   (barra_nome, numero, preco_lote_futuros, modelo_zeragem, preco_zeragem, pct_volume_bovespa, observacao)
 VALUES
   -- Casos especiais (pessoas)
-  ('ARTUR AILTON FONSECA MARANHÃO', '14342', 0.25, 'tiered', 0,     0.05, 'Tabela escalonada'),
+  ('ARTUR AILTON FONSECA MARANHAO', '14342', 0.25, 'tiered', 0,     0.05, 'Tabela escalonada'),
   ('Lucas Gomes Noleto Lopes',      '14253', 0.25, 'fixo',   29.90, 0.05, 'Zeragem fixa R$29,90'),
   -- Barras ZEVE 1..19 (atualiza número se já existe; senão cria)
   ('ZEVE INVESTIMENTOS 1',  '14525', 0.20, 'tiered', 0, 0.05, 'Tabela escalonada'),

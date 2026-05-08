@@ -31,19 +31,58 @@ function parseExcelDate(value: unknown): string {
   return ''
 }
 
+// Variações de cabeçalho que já vimos em planilhas reais. Tudo é
+// comparado em lowercase + trim, então acentos e capitalização contam
+// só pra legibilidade aqui (a lookup ignora ambos).
 const HEADER_MAP: Record<string, keyof ContratoRow> = {
+  // Data
   'data': 'data',
+  'data pregão': 'data',
+  'data pregao': 'data',
+  'dt': 'data',
+  // Conta
   'número conta': 'numero_conta',
   'numero conta': 'numero_conta',
   'número de conta': 'numero_conta',
+  'numero de conta': 'numero_conta',
+  'conta': 'numero_conta',
+  'nº conta': 'numero_conta',
+  'no conta': 'numero_conta',
+  // CPF / CNPJ
   'cpf': 'cpf',
   'cnpj': 'cnpj',
+  'cpf/cnpj': 'cpf',
+  'cpf cnpj': 'cpf',
+  // Cliente
   'cliente': 'cliente_nome',
+  'nome cliente': 'cliente_nome',
+  'nome do cliente': 'cliente_nome',
+  // Assessor / barra — o ponto que estava silenciando assessor antes
   'assessor': 'assessor_nome',
+  'aai': 'assessor_nome',
+  'agente': 'assessor_nome',
+  'barra': 'assessor_nome',
+  'nome assessor': 'assessor_nome',
+  'nome do assessor': 'assessor_nome',
+  'cód. assessor': 'assessor_nome',
+  'cod. assessor': 'assessor_nome',
+  'código assessor': 'assessor_nome',
+  'codigo assessor': 'assessor_nome',
+  'assessoria': 'assessor_nome',
+  // Ativo
   'ativo': 'ativo',
+  'produto': 'ativo',
+  // Plataforma
   'plataforma': 'plataforma',
+  // Lotes
   'lotes operados': 'lotes_operados',
+  'qtd operada': 'lotes_operados',
+  'quantidade operada': 'lotes_operados',
+  'qtd lotes operados': 'lotes_operados',
   'lotes zerados': 'lotes_zerados',
+  'qtd zerada': 'lotes_zerados',
+  'quantidade zerada': 'lotes_zerados',
+  'qtd lotes zerados': 'lotes_zerados',
 }
 
 const NUMBER_FIELDS = new Set<keyof ContratoRow>(['lotes_operados', 'lotes_zerados'])

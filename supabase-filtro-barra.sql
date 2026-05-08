@@ -250,11 +250,14 @@ AS $$
   ),
   ina AS (
     SELECT
-      'inativo'::text, 'media'::text,
-      b.cliente_id, b.nome, b.assessor_nome,
-      'Última operação'::text,
-      TO_CHAR(b.ultima_op, 'DD/MM/YYYY'),
-      ('Sem operar há ' || (CURRENT_DATE - b.ultima_op)::text || ' dias')::text
+      'inativo'::text AS tipo,
+      'media'::text   AS severidade,
+      b.cliente_id    AS cliente_id,
+      b.nome          AS cliente_nome,
+      b.assessor_nome AS assessor_nome,
+      'Última operação'::text AS metric_label,
+      TO_CHAR(b.ultima_op, 'DD/MM/YYYY') AS metric_value,
+      ('Sem operar há ' || (CURRENT_DATE - b.ultima_op)::text || ' dias')::text AS detalhe
     FROM base b
     WHERE b.lotes_op > 0
       AND b.ultima_op < CURRENT_DATE - (p_inativo_dias || ' days')::interval
@@ -262,12 +265,12 @@ AS $$
   ),
   esfr AS (
     SELECT
-      'esfriando'::text,
-      CASE WHEN queda >= 0.8 THEN 'alta' ELSE 'media' END::text,
-      cliente_id, nome, assessor_nome,
-      'Queda de volume'::text,
-      ROUND(queda * 100, 1)::text || '%',
-      ('30d últimos: ' || lotes_recentes || ' · 30d anteriores: ' || lotes_anteriores)::text
+      'esfriando'::text AS tipo,
+      CASE WHEN queda >= 0.8 THEN 'alta' ELSE 'media' END::text AS severidade,
+      cliente_id, nome AS cliente_nome, assessor_nome,
+      'Queda de volume'::text AS metric_label,
+      ROUND(queda * 100, 1)::text || '%' AS metric_value,
+      ('30d últimos: ' || lotes_recentes || ' · 30d anteriores: ' || lotes_anteriores)::text AS detalhe
     FROM (
       SELECT ct.cliente_id,
         COALESCE(c.nome, ct.cliente_nome, 'Sem cliente') AS nome,
@@ -298,12 +301,12 @@ AS $$
   ),
   zalt AS (
     SELECT
-      'zeragem_alta'::text,
-      CASE WHEN pct >= 0.7 THEN 'alta' ELSE 'media' END::text,
-      cliente_id, nome, assessor_nome,
-      '% zeragem'::text,
-      ROUND(pct * 100, 1)::text || '%',
-      ('Op: ' || lotes_op || ' · Ze: ' || lotes_ze || ' (últimos 30d)')::text
+      'zeragem_alta'::text AS tipo,
+      CASE WHEN pct >= 0.7 THEN 'alta' ELSE 'media' END::text AS severidade,
+      cliente_id, nome AS cliente_nome, assessor_nome,
+      '% zeragem'::text AS metric_label,
+      ROUND(pct * 100, 1)::text || '%' AS metric_value,
+      ('Op: ' || lotes_op || ' · Ze: ' || lotes_ze || ' (últimos 30d)')::text AS detalhe
     FROM (
       SELECT ct.cliente_id,
         COALESCE(c.nome, ct.cliente_nome, 'Sem cliente') AS nome,
@@ -323,12 +326,12 @@ AS $$
   ),
   zcon AS (
     SELECT
-      'zeragem_concentrada'::text,
-      'alta'::text,
-      cliente_id, nome, assessor_nome,
-      'Zeragem em 7 dias'::text,
-      lotes_ze::text || ' lotes',
-      ('Concentrado em ' || TO_CHAR(janela_inicio, 'DD/MM') || ' a ' || TO_CHAR(janela_fim, 'DD/MM'))::text
+      'zeragem_concentrada'::text AS tipo,
+      'alta'::text AS severidade,
+      cliente_id, nome AS cliente_nome, assessor_nome,
+      'Zeragem em 7 dias'::text AS metric_label,
+      lotes_ze::text || ' lotes' AS metric_value,
+      ('Concentrado em ' || TO_CHAR(janela_inicio, 'DD/MM') || ' a ' || TO_CHAR(janela_fim, 'DD/MM'))::text AS detalhe
     FROM (
       SELECT ct.cliente_id,
         COALESCE(c.nome, ct.cliente_nome, 'Sem cliente') AS nome,

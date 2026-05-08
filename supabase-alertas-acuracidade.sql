@@ -139,14 +139,17 @@ AS $$
       GROUP BY ct.cliente_id, COALESCE(c.nome, ct.cliente_nome, 'Sem cliente')
     ) s
     WHERE lotes_ze >= 50  -- limiar arbitrário; refinar depois
+  ),
+  -- Postgres não aceita ORDER BY com expressão (CASE) direto após UNION ALL —
+  -- envolvemos num CTE pra poder ordenar pela severidade calculada.
+  todos AS (
+    SELECT * FROM ina
+    UNION ALL SELECT * FROM esfr
+    UNION ALL SELECT * FROM zalt
+    UNION ALL SELECT * FROM zcon
   )
-  SELECT * FROM ina
-  UNION ALL
-  SELECT * FROM esfr
-  UNION ALL
-  SELECT * FROM zalt
-  UNION ALL
-  SELECT * FROM zcon
+  SELECT *
+  FROM todos
   ORDER BY
     CASE severidade WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,
     tipo,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import {
   TrendingUp, TrendingDown, Calendar, Trophy, Activity,
   Users, FileStack, Layers, Target, RefreshCw, Download, X,
@@ -12,22 +12,27 @@ import type {
   ReceitaTotal, ReceitaPorAssessor, ReceitaProjecao, MetaAnual,
   AlertaRow, AcuracidadeResumo, AcuracidadePonto,
 } from './actions'
+import {
+  WinVsWdoChart, EvolucaoMensalChart, AcuracidadeChart,
+  BlockSkeleton, KpiSkeleton,
+} from './Charts'
 
 interface Actions {
-  getKpis: (p: Periodo) => Promise<DashboardKpis>
-  getPorProduto: (p: Periodo) => Promise<ProdutoRow[]>
-  getTopClientes: (p: Periodo, limit?: number) => Promise<TopClienteRow[]>
-  getDiarioProduto: (p: Periodo) => Promise<DiarioProdutoRow[]>
-  getHeatmapDow: (p: Periodo) => Promise<HeatmapCell[]>
+  getKpis: (p: Periodo, barra?: string | null) => Promise<DashboardKpis>
+  getPorProduto: (p: Periodo, barra?: string | null) => Promise<ProdutoRow[]>
+  getTopClientes: (p: Periodo, limit?: number, barra?: string | null) => Promise<TopClienteRow[]>
+  getDiarioProduto: (p: Periodo, barra?: string | null) => Promise<DiarioProdutoRow[]>
+  getHeatmapDow: (p: Periodo, barra?: string | null) => Promise<HeatmapCell[]>
   getEvolucaoMensal: () => Promise<EvolucaoMensalRow[]>
   getDrilldownDia: (data: string) => Promise<DrilldownRow[]>
   getReceitaTotal: (p: Periodo) => Promise<ReceitaTotal>
   getReceitaPorAssessor: (p: Periodo) => Promise<ReceitaPorAssessor[]>
   getReceitaProjecao: () => Promise<ReceitaProjecao>
   getMetaAnual: () => Promise<MetaAnual>
-  getAlertas: (inativoDias?: number) => Promise<AlertaRow[]>
+  getAlertas: (inativoDias?: number, barra?: string | null) => Promise<AlertaRow[]>
   getAcuracidadeResumo: (lookbackDays?: number) => Promise<AcuracidadeResumo>
   getAcuracidadeSerie: (lookbackDays?: number) => Promise<AcuracidadePonto[]>
+  getBarrasAtivas: () => Promise<{ barra_nome: string; numero: string | null }[]>
 }
 
 const PERIODOS: { id: Periodo; label: string }[] = [
@@ -50,25 +55,6 @@ function fmtDataPt(iso: string | null): string {
   const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''))
   if (isNaN(d.getTime())) return iso
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
-function fmtMesShort(iso: string): string {
-  const d = new Date(iso + 'T00:00:00')
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
-    .replace('.', '').toLowerCase()
-}
-
-function rollingMean(values: number[], window: number): (number | null)[] {
-  const out: (number | null)[] = []
-  let acc = 0
-  let count = 0
-  for (let i = 0; i < values.length; i++) {
-    acc += values[i]; count++
-    if (i >= window) { acc -= values[i - window]; count-- }
-    out.push(i >= window - 1 ? Math.round((acc / count) * 100) / 100 : null)
-  }
-  return out
 }
 
 const PRODUTO_COLOR: Record<string, string> = {
@@ -124,8 +110,11 @@ function KpiCard({ icon: Icon, label, value, sub, color = 'text-gray-900', bg = 
 // ===========================================================
 // Filtro de período (pílulas)
 // ===========================================================
-function PeriodoFilter({ value, onChange, isLoading, datasetMax }: {
+function PeriodoFilter({ value, onChange, isLoading, datasetMax, barras, barraSelecionada, onBarraChange }: {
   value: Periodo; onChange: (p: Periodo) => void; isLoading: boolean; datasetMax: string | null;
+  barras: { barra_nome: string; numero: string | null }[];
+  barraSelecionada: string | null;
+  onBarraChange: (b: string | null) => void;
 }) {
   return (
     <div className="rounded-2xl p-4 flex flex-wrap items-center gap-3"
@@ -145,6 +134,24 @@ function PeriodoFilter({ value, onChange, isLoading, datasetMax }: {
           )
         })}
       </div>
+
+      <span className="text-xs uppercase tracking-widest text-gray-400 font-semibold ml-2">Barra</span>
+      <select
+        value={barraSelecionada ?? ''}
+        onChange={e => onBarraChange(e.target.value || null)}
+        disabled={isLoading}
+        className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 cursor-pointer"
+        style={{ background: barraSelecionada ? 'var(--blue)' : 'var(--surface)',
+                 color: barraSelecionada ? '#fff' : 'var(--muted)',
+                 border: '1px solid var(--border)', minWidth: 200 }}>
+        <option value="">Todas as barras</option>
+        {barras.map(b => (
+          <option key={b.barra_nome} value={b.barra_nome}>
+            {b.barra_nome}{b.numero ? ` · ${b.numero}` : ''}
+          </option>
+        ))}
+      </select>
+
       <div className="ml-auto flex items-center gap-3 text-xs text-gray-500">
         {isLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
         {datasetMax && (
@@ -295,98 +302,11 @@ function TopClientesParetoBlock({ data, onPickCliente }:
 // WIN vs WDO diário (gráfico SVG simples + média móvel 7d)
 // ===========================================================
 function WinVsWdoBlock({ data, onClickDia }: { data: DiarioProdutoRow[]; onClickDia: (data: string) => void }) {
-  // Pivot { data → { WIN, WDO, ... } }
-  const byDay = useMemo(() => {
-    const m = new Map<string, Record<string, number>>()
-    for (const r of data) {
-      if (!m.has(r.data)) m.set(r.data, {})
-      m.get(r.data)![r.produto] = r.lotes_operados
-    }
-    return m
-  }, [data])
-
-  const dias = useMemo(() => Array.from(byDay.keys()).sort(), [byDay])
-  const produtosUnicos = useMemo(() => {
-    const s = new Set<string>()
-    data.forEach(r => s.add(r.produto))
-    // Foca em WIN e WDO; outros viram "OUTROS"
-    const principais = ['WIN', 'WDO'].filter(p => s.has(p))
-    return principais
-  }, [data])
-
-  const series = produtosUnicos.map(p => {
-    const points = dias.map(d => byDay.get(d)?.[p] ?? 0)
-    return { produto: p, color: colorFor(p), points, mm7: rollingMean(points, 7) }
-  })
-
-  const maxY = Math.max(1, ...series.flatMap(s => s.points))
-  const W = 900, H = 280, padL = 40, padR = 16, padT = 16, padB = 28
-  const innerW = W - padL - padR
-  const innerH = H - padT - padB
-
-  const xFor = (i: number) => padL + (dias.length <= 1 ? innerW / 2 : (i / (dias.length - 1)) * innerW)
-  const yFor = (v: number) => padT + innerH - (v / maxY) * innerH
-
-  // Eixo X: ticks (até 8)
-  const tickStep = Math.max(1, Math.ceil(dias.length / 8))
-
   return (
     <Block title="WIN vs WDO — diário"
-      subtitle="Lotes operados por dia. Linha pontilhada = média móvel 7 dias."
+      subtitle="Lotes operados por dia. Linha pontilhada = média móvel 7 dias. Clique num ponto pra abrir o dia."
     >
-      {dias.length === 0
-        ? <p className="text-sm text-gray-400 py-4">Sem dados no período.</p>
-        : (
-          <div className="overflow-x-auto">
-            <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: 600 }}>
-              {/* grid horizontal */}
-              {[0, 0.25, 0.5, 0.75, 1].map((p, i) => (
-                <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * p} y2={padT + innerH * p}
-                  stroke="var(--border)" strokeDasharray="2 3" />
-              ))}
-              {/* eixos labels y */}
-              {[0, 0.5, 1].map((p, i) => {
-                const v = Math.round(maxY * (1 - p))
-                return <text key={i} x={padL - 6} y={padT + innerH * p + 4} fontSize={10} fill="#94a3b8" textAnchor="end">{fmtNum(v)}</text>
-              })}
-              {/* linhas das séries */}
-              {series.map(s => {
-                const path = s.points.map((v, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(v)}`).join(' ')
-                const mmPath = s.mm7.map((v, i) => v == null ? null : `${xFor(i)},${yFor(v)}`).filter(Boolean) as string[]
-                const mmStr = mmPath.length ? 'M' + mmPath.join(' L') : ''
-                return (
-                  <g key={s.produto}>
-                    <path d={path} stroke={s.color} fill="none" strokeWidth={2} />
-                    {mmStr && <path d={mmStr} stroke={s.color} fill="none" strokeWidth={1.5} strokeDasharray="3 3" opacity={0.7} />}
-                    {/* dots clicáveis */}
-                    {s.points.map((v, i) => (
-                      <circle key={i} cx={xFor(i)} cy={yFor(v)} r={2.5} fill={s.color}
-                        onClick={() => onClickDia(dias[i])} style={{ cursor: 'pointer' }}>
-                        <title>{`${s.produto} · ${fmtDataPt(dias[i])} · ${fmtNum(v)}`}</title>
-                      </circle>
-                    ))}
-                  </g>
-                )
-              })}
-              {/* eixo x ticks */}
-              {dias.map((d, i) => i % tickStep === 0 && (
-                <text key={d} x={xFor(i)} y={H - 8} fontSize={10} fill="#94a3b8" textAnchor="middle">
-                  {d.slice(5)}
-                </text>
-              ))}
-            </svg>
-            <div className="flex flex-wrap gap-3 text-xs mt-1 px-1">
-              {series.map(s => (
-                <span key={s.produto} className="flex items-center gap-1.5">
-                  <span className="w-3 h-1 rounded" style={{ background: s.color }} />
-                  <strong style={{ color: s.color }}>{s.produto}</strong>
-                  <span className="text-gray-400">· MM7d</span>
-                </span>
-              ))}
-              <span className="text-gray-400 ml-auto">Clique num ponto pra abrir o dia</span>
-            </div>
-          </div>
-        )}
+      <WinVsWdoChart data={data} onClickDia={onClickDia} />
     </Block>
   )
 }
@@ -456,42 +376,12 @@ function HeatmapBlock({ data }: { data: HeatmapCell[] }) {
 }
 
 // ===========================================================
-// Evolução mensal (barras SVG)
+// Evolução mensal — Recharts BarChart stacked
 // ===========================================================
 function EvolucaoMensalBlock({ data }: { data: EvolucaoMensalRow[] }) {
-  const W = 900, H = 240, padL = 40, padR = 16, padT = 16, padB = 32
-  const innerW = W - padL - padR
-  const innerH = H - padT - padB
-  const max = Math.max(1, ...data.map(r => r.lotes_operados + r.lotes_zerados))
-  const bw = data.length > 0 ? Math.max(8, innerW / data.length - 8) : 0
   return (
-    <Block title="Evolução mensal" subtitle="Lotes operados (sólido) + zerados (faixa) por mês.">
-      {data.length === 0
-        ? <p className="text-sm text-gray-400 py-4">Sem dados.</p>
-        : (
-          <div className="overflow-x-auto">
-            <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: 600 }}>
-              {[0, 0.5, 1].map((p, i) => (
-                <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * p} y2={padT + innerH * p}
-                  stroke="var(--border)" strokeDasharray="2 3" />
-              ))}
-              {data.map((r, i) => {
-                const x = padL + i * (innerW / Math.max(1, data.length))
-                const total = r.lotes_operados + r.lotes_zerados
-                const hOp = (r.lotes_operados / max) * innerH
-                const hZe = (r.lotes_zerados / max) * innerH
-                return (
-                  <g key={r.mes_data}>
-                    <rect x={x} y={padT + innerH - hOp} width={bw} height={hOp} fill="var(--blue)" rx={3} />
-                    <rect x={x} y={padT + innerH - hOp - hZe} width={bw} height={hZe} fill="#dc2626" rx={3} opacity={0.85} />
-                    <text x={x + bw / 2} y={H - 16} fontSize={10} fill="#94a3b8" textAnchor="middle">{fmtMesShort(r.mes_data)}</text>
-                    <text x={x + bw / 2} y={padT + innerH - hOp - hZe - 4} fontSize={9} fill="#475569" textAnchor="middle">{fmtNum(total)}</text>
-                  </g>
-                )
-              })}
-            </svg>
-          </div>
-        )}
+    <Block title="Evolução mensal" subtitle="Lotes operados + zerados por mês.">
+      <EvolucaoMensalChart data={data} />
     </Block>
   )
 }
@@ -744,15 +634,6 @@ function AcuracidadeBlock({ resumo, serie }: { resumo: AcuracidadeResumo | null;
     )
   }
 
-  const W = 700, H = 200, padL = 40, padR = 16, padT = 8, padB = 24
-  const innerW = W - padL - padR, innerH = H - padT - padB
-  const max = Math.max(1, ...serie.flatMap(p => [p.previsto, p.realizado]))
-  const xFor = (i: number) => padL + (serie.length <= 1 ? innerW / 2 : (i / (serie.length - 1)) * innerW)
-  const yFor = (v: number) => padT + innerH - (v / max) * innerH
-
-  const pathPrev = serie.map((p, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(p.previsto)}`).join(' ')
-  const pathReal = serie.map((p, i) => `${i === 0 ? 'M' : 'L'}${xFor(i)},${yFor(p.realizado)}`).join(' ')
-
   const viesColor = resumo.vies_label === 'subestima' ? '#10b981'
                   : resumo.vies_label === 'superestima' ? '#dc2626'
                   : resumo.vies_label === 'equilibrado' ? '#3b82f6' : '#94a3b8'
@@ -777,15 +658,8 @@ function AcuracidadeBlock({ resumo, serie }: { resumo: AcuracidadeResumo | null;
       </div>
 
       {serie.length > 0 && (
-        <div className="overflow-x-auto">
-          <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: 500 }}>
-            {[0, 0.5, 1].map((p, i) => (
-              <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * p} y2={padT + innerH * p}
-                stroke="var(--border)" strokeDasharray="2 3" />
-            ))}
-            <path d={pathPrev} stroke="#94a3b8" fill="none" strokeWidth={2} strokeDasharray="4 3" />
-            <path d={pathReal} stroke="var(--blue)" fill="none" strokeWidth={2} />
-          </svg>
+        <div>
+          <AcuracidadeChart serie={serie} />
           <div className="flex flex-wrap gap-3 text-xs mt-1 px-1">
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-1 rounded" style={{ background: '#94a3b8' }} />
@@ -981,6 +855,8 @@ function DrilldownModal({ data, rows, onClose }: { data: string; rows: Drilldown
 // ===========================================================
 export function ContratosDashboardView({ actions }: { actions: Actions }) {
   const [periodo, setPeriodo] = useState<Periodo>('mes')
+  const [barra, setBarra] = useState<string | null>(null)
+  const [barras, setBarras] = useState<{ barra_nome: string; numero: string | null }[]>([])
   const [isPending, startTransition] = useTransition()
 
   const [kpis, setKpis] = useState<DashboardKpis | null>(null)
@@ -1001,27 +877,27 @@ export function ContratosDashboardView({ actions }: { actions: Actions }) {
   const [drillData, setDrillData] = useState<string | null>(null)
   const [drillRows, setDrillRows] = useState<DrilldownRow[]>([])
 
-  function carregar(p: Periodo) {
+  function carregar(p: Periodo, b: string | null) {
     setErro(null)
     startTransition(async () => {
       try {
-        const [a, b, c, d, e, f, rt, ra, rp, m, al, ac, as] = await Promise.all([
-          actions.getKpis(p),
-          actions.getPorProduto(p),
-          actions.getTopClientes(p, 20),
-          actions.getDiarioProduto(p),
-          actions.getHeatmapDow(p),
+        const [kp, pp, tc, dp, hm, ev, rt, ra, rp, m, al, ac, as] = await Promise.all([
+          actions.getKpis(p, b),
+          actions.getPorProduto(p, b),
+          actions.getTopClientes(p, 20, b),
+          actions.getDiarioProduto(p, b),
+          actions.getHeatmapDow(p, b),
           actions.getEvolucaoMensal(),
           actions.getReceitaTotal(p),
           actions.getReceitaPorAssessor(p),
           actions.getReceitaProjecao(),
           actions.getMetaAnual(),
-          actions.getAlertas(30),
+          actions.getAlertas(30, b),
           actions.getAcuracidadeResumo(60),
           actions.getAcuracidadeSerie(60),
         ])
-        setKpis(a); setProdutos(b); setTopClientes(c)
-        setDiarioProd(d); setHeatmap(e); setEvolucao(f)
+        setKpis(kp); setProdutos(pp); setTopClientes(tc)
+        setDiarioProd(dp); setHeatmap(hm); setEvolucao(ev)
         setReceitaTotal(rt); setReceitaPorAss(ra); setReceitaProj(rp); setMeta(m)
         setAlertas(al); setAcuracidade(ac); setAcuracidadeSerie(as)
       } catch (err) {
@@ -1030,9 +906,14 @@ export function ContratosDashboardView({ actions }: { actions: Actions }) {
     })
   }
 
+  // Carrega lista de barras 1x na montagem
+  useEffect(() => {
+    actions.getBarrasAtivas().then(setBarras).catch(() => {})
+  }, [actions])
+
   // setState ocorre depois de `await` dentro de startTransition — não é síncrono dentro do effect.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { carregar(periodo) }, [periodo])
+  useEffect(() => { carregar(periodo, barra) }, [periodo, barra])
 
   function abrirDrilldown(d: string) {
     setDrillData(d)
@@ -1042,7 +923,15 @@ export function ContratosDashboardView({ actions }: { actions: Actions }) {
 
   return (
     <div className="px-6 lg:px-8 py-6 space-y-6">
-      <PeriodoFilter value={periodo} onChange={setPeriodo} isLoading={isPending} datasetMax={kpis?.dataset_max ?? null} />
+      <PeriodoFilter
+        value={periodo}
+        onChange={setPeriodo}
+        isLoading={isPending}
+        datasetMax={kpis?.dataset_max ?? null}
+        barras={barras}
+        barraSelecionada={barra}
+        onBarraChange={setBarra}
+      />
 
       {erro && (
         <div className="rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
@@ -1050,15 +939,19 @@ export function ContratosDashboardView({ actions }: { actions: Actions }) {
         </div>
       )}
 
-      {kpis && <KpiGrid kpis={kpis} />}
+      {kpis ? <KpiGrid kpis={kpis} /> : <KpiSkeleton />}
 
       <ReceitaBlock total={receitaTotal} porAssessor={receitaPorAss} projecao={receitaProj} />
 
       <MetaBlock meta={meta} />
 
-      <PorProdutoBlock data={produtos} />
+      {isPending && produtos.length === 0
+        ? <BlockSkeleton height={140} />
+        : <PorProdutoBlock data={produtos} />}
 
-      <WinVsWdoBlock data={diarioProd} onClickDia={abrirDrilldown} />
+      {isPending && diarioProd.length === 0
+        ? <BlockSkeleton height={320} />
+        : <WinVsWdoBlock data={diarioProd} onClickDia={abrirDrilldown} />}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <HeatmapBlock data={heatmap} />

@@ -21,6 +21,7 @@ import {
   getAlertas,
   getAcuracidadeResumo,
   getAcuracidadeSerie,
+  getBarrasAtivas,
 } from './actions'
 
 export default async function ContratosDashboardPage() {
@@ -62,6 +63,7 @@ export default async function ContratosDashboardPage() {
           getAlertas,
           getAcuracidadeResumo,
           getAcuracidadeSerie,
+          getBarrasAtivas,
         }}
       />
     </div>

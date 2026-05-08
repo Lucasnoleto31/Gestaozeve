@@ -62,6 +62,8 @@ const HEADER_MAP: Record<string, keyof ContratoRow> = {
   'aai': 'assessor_nome',
   'agente': 'assessor_nome',
   'barra': 'assessor_nome',
+  'parceiro': 'assessor_nome',           // ← planilhas antigas usavam este nome
+  'parceiro comercial': 'assessor_nome',
   'nome assessor': 'assessor_nome',
   'nome do assessor': 'assessor_nome',
   'cód. assessor': 'assessor_nome',

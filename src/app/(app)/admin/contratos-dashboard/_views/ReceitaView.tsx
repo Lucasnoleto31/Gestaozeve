@@ -6,21 +6,7 @@ import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
 import { ReceitaBlock, MetaBlock } from '../View'
 import { BlockSkeleton } from '../Charts'
-import {
-  getKpis, getPorProduto, getTopClientes, getDiarioProduto,
-  getHeatmapDow, getEvolucaoMensal, getDrilldownDia,
-  getReceitaTotal, getReceitaPorAssessor, getReceitaProjecao,
-  getMetaAnual, getAlertas, getAcuracidadeResumo, getAcuracidadeSerie,
-  getBarrasAtivas,
-} from '../actions'
-
-const ACTIONS = {
-  getKpis, getPorProduto, getTopClientes, getDiarioProduto,
-  getHeatmapDow, getEvolucaoMensal, getDrilldownDia,
-  getReceitaTotal, getReceitaPorAssessor, getReceitaProjecao,
-  getMetaAnual, getAlertas, getAcuracidadeResumo, getAcuracidadeSerie,
-  getBarrasAtivas,
-}
+import { ACTIONS } from '../_lib/dashboardActions'
 
 export function ReceitaView() {
   const { periodo, barra } = useDashboardFilters()

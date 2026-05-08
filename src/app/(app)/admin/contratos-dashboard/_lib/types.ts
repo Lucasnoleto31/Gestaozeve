@@ -3,6 +3,7 @@ import type {
   DiarioProdutoRow, HeatmapCell, EvolucaoMensalRow, DrilldownRow,
   ReceitaTotal, ReceitaPorAssessor, ReceitaProjecao, MetaAnual,
   AlertaRow, AcuracidadeResumo, AcuracidadePonto,
+  CohortPonto, LtvCliente, RankingAssessorRow, BudgetZeragemRow,
 } from '../actions'
 
 export type DashboardActions = {
@@ -21,6 +22,10 @@ export type DashboardActions = {
   getAcuracidadeResumo: (lookbackDays?: number) => Promise<AcuracidadeResumo>
   getAcuracidadeSerie: (lookbackDays?: number) => Promise<AcuracidadePonto[]>
   getBarrasAtivas: () => Promise<{ barra_nome: string; numero: string | null }[]>
+  getCohortRetencao: (meses?: number) => Promise<CohortPonto[]>
+  getLtvClientes: (limit?: number) => Promise<LtvCliente[]>
+  getRankingAssessores: (p: Periodo) => Promise<RankingAssessorRow[]>
+  getBudgetZeragem: (p: Periodo) => Promise<BudgetZeragemRow[]>
 }
 
 export type DashboardTab =
@@ -29,6 +34,7 @@ export type DashboardTab =
   | 'receita'
   | 'clientes'
   | 'assessores'
+  | 'analises'
   | 'forecast'
 
 export const TABS: { id: DashboardTab; label: string; href: string }[] = [
@@ -37,5 +43,6 @@ export const TABS: { id: DashboardTab; label: string; href: string }[] = [
   { id: 'receita',     label: 'Receita',      href: '/admin/contratos-dashboard/receita' },
   { id: 'clientes',    label: 'Clientes',     href: '/admin/contratos-dashboard/clientes' },
   { id: 'assessores',  label: 'Assessores',   href: '/admin/contratos-dashboard/assessores' },
+  { id: 'analises',    label: 'Análises',     href: '/admin/contratos-dashboard/analises' },
   { id: 'forecast',    label: 'Forecast',     href: '/admin/contratos-dashboard/forecast' },
 ]

@@ -19,6 +19,10 @@ export type DataFlags = {
   alertas?: boolean
   acuracidade?: boolean  // resumo + serie
   barras?: boolean
+  cohort?: boolean
+  ltv?: boolean
+  rankingAssessores?: boolean
+  budget?: boolean
 }
 
 export function useDashboardData(actions: DashboardActions, periodo: Periodo, barra: string | null, flags: DataFlags) {
@@ -37,10 +41,15 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     acuracidade: Awaited<ReturnType<DashboardActions['getAcuracidadeResumo']>> | null
     acuracidadeSerie: Awaited<ReturnType<DashboardActions['getAcuracidadeSerie']>>
     barras: Awaited<ReturnType<DashboardActions['getBarrasAtivas']>>
+    cohort: Awaited<ReturnType<DashboardActions['getCohortRetencao']>>
+    ltv: Awaited<ReturnType<DashboardActions['getLtvClientes']>>
+    ranking: Awaited<ReturnType<DashboardActions['getRankingAssessores']>>
+    budget: Awaited<ReturnType<DashboardActions['getBudgetZeragem']>>
   }>({
     kpis: null, produtos: [], topClientes: [], diario: [], heatmap: [], evolucao: [],
     receitaTotal: null, receitaPorAss: [], receitaProj: null, meta: null,
     alertas: [], acuracidade: null, acuracidadeSerie: [], barras: [],
+    cohort: [], ltv: [], ranking: [], budget: [],
   })
 
   const [isPending, startTransition] = useTransition()
@@ -64,7 +73,7 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     setErro(null)
     startTransition(async () => {
       try {
-        const [kp, pp, tc, dp, hm, ev, rt, ra, rp, m, al, ac, as] = await Promise.all([
+        const [kp, pp, tc, dp, hm, ev, rt, ra, rp, m, al, ac, as, co, lt, rk, bd] = await Promise.all([
           flags.kpis        ? actions.getKpis(periodo, barra)            : Promise.resolve(null),
           flags.produtos    ? actions.getPorProduto(periodo, barra)      : Promise.resolve([]),
           flags.topClientes ? actions.getTopClientes(periodo, 20, barra) : Promise.resolve([]),
@@ -78,12 +87,17 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
           flags.alertas     ? actions.getAlertas(30, barra)              : Promise.resolve([]),
           flags.acuracidade ? actions.getAcuracidadeResumo(60)           : Promise.resolve(null),
           flags.acuracidade ? actions.getAcuracidadeSerie(60)            : Promise.resolve([]),
+          flags.cohort      ? actions.getCohortRetencao(12)              : Promise.resolve([]),
+          flags.ltv         ? actions.getLtvClientes(50)                 : Promise.resolve([]),
+          flags.rankingAssessores ? actions.getRankingAssessores(periodo) : Promise.resolve([]),
+          flags.budget      ? actions.getBudgetZeragem(periodo)            : Promise.resolve([]),
         ])
         setData(d => ({
           ...d,
           kpis: kp, produtos: pp, topClientes: tc, diario: dp, heatmap: hm, evolucao: ev,
           receitaTotal: rt, receitaPorAss: ra, receitaProj: rp, meta: m,
           alertas: al, acuracidade: ac, acuracidadeSerie: as,
+          cohort: co, ltv: lt, ranking: rk, budget: bd,
         }))
       } catch (err) {
         setErro((err as Error).message ?? 'Falha ao carregar dados')

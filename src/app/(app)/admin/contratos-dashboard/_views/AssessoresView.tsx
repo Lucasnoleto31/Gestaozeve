@@ -1,32 +1,19 @@
 'use client'
 
 import { useEffect } from 'react'
+import { TrendingUp, TrendingDown, UserPlus, UserX } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
 import { ReceitaBlock, Block } from '../View'
 import { BlockSkeleton } from '../Charts'
 import { fmtNum, fmtBRL } from '../_lib/utils'
-import {
-  getKpis, getPorProduto, getTopClientes, getDiarioProduto,
-  getHeatmapDow, getEvolucaoMensal, getDrilldownDia,
-  getReceitaTotal, getReceitaPorAssessor, getReceitaProjecao,
-  getMetaAnual, getAlertas, getAcuracidadeResumo, getAcuracidadeSerie,
-  getBarrasAtivas,
-} from '../actions'
-
-const ACTIONS = {
-  getKpis, getPorProduto, getTopClientes, getDiarioProduto,
-  getHeatmapDow, getEvolucaoMensal, getDrilldownDia,
-  getReceitaTotal, getReceitaPorAssessor, getReceitaProjecao,
-  getMetaAnual, getAlertas, getAcuracidadeResumo, getAcuracidadeSerie,
-  getBarrasAtivas,
-}
+import { ACTIONS } from '../_lib/dashboardActions'
 
 export function AssessoresView() {
   const { periodo, barra } = useDashboardFilters()
   const d = useDashboardData(ACTIONS, periodo, barra, {
-    receita: true, kpis: true,
+    receita: true, kpis: true, rankingAssessores: true,
   })
 
   const shell = useShell()
@@ -34,10 +21,6 @@ export function AssessoresView() {
   useEffect(() => {
     if (d.kpis?.dataset_max) shell.setDatasetMax(d.kpis.dataset_max)
   }, [d.kpis?.dataset_max, shell])
-
-  // Ranking simples: barras ordenadas por receita_total
-  const ranking = [...d.receitaPorAss].sort((a, b) => b.receita_total - a.receita_total)
-  const totalReceita = ranking.reduce((s, r) => s + r.receita_total, 0)
 
   return (
     <div className="space-y-6">
@@ -48,38 +31,67 @@ export function AssessoresView() {
         </div>
       )}
 
-      <Block title="Ranking de barras (período)"
-        subtitle="Ordenado por receita total. Use o filtro acima pra ver período/barra específica.">
-        {d.isPending && ranking.length === 0
+      <Block title="Ranking expandido de barras"
+        subtitle="Período atual vs anterior (mesma duração). Inclui clientes ativos, novos, churn, retenção e variação de receita.">
+        {d.isPending && d.ranking.length === 0
           ? <p className="text-sm text-gray-400 py-4">Carregando…</p>
-          : ranking.length === 0
+          : d.ranking.length === 0
           ? <p className="text-sm text-gray-400 py-4">Sem dados.</p>
           : (
             <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
               <table className="text-xs border-collapse min-w-max w-full">
                 <thead style={{ background: 'var(--surface-2)' }}>
                   <tr>
-                    {['#', 'Barra', 'Nº', 'Lotes op.', 'Lotes ze.', '% zeragem', 'Receita', '% receita'].map((h, i) => (
-                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 border-r last:border-r-0 ${i <= 2 ? 'text-left' : 'text-right'}`}
-                        style={{ borderColor: 'var(--border)' }}>{h}</th>
+                    {[
+                      { l: '#', a: 'left' },
+                      { l: 'Barra', a: 'left' },
+                      { l: 'Nº', a: 'left' },
+                      { l: 'Clientes', a: 'right' },
+                      { l: 'Novos', a: 'right' },
+                      { l: 'Churn', a: 'right' },
+                      { l: 'Retenção', a: 'right' },
+                      { l: 'Lotes op.', a: 'right' },
+                      { l: '% zer.', a: 'right' },
+                      { l: 'Receita', a: 'right' },
+                      { l: 'Δ vs ant.', a: 'right' },
+                    ].map((h, i) => (
+                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${h.a === 'left' ? 'text-left' : 'text-right'}`}>
+                        {h.l}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {ranking.map((r, i) => {
-                    const pctZe = r.lotes_operados > 0 ? (r.lotes_zerados / r.lotes_operados) * 100 : 0
-                    const pctRec = totalReceita > 0 ? (r.receita_total / totalReceita) * 100 : 0
+                  {d.ranking.map((r) => {
+                    const positivoDelta = r.delta_receita_pct >= 0
                     return (
-                      <tr key={r.barra_nome + i}
-                        style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
-                        <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{i + 1}</td>
+                      <tr key={r.barra_nome + r.rank}
+                        style={{ borderTop: '1px solid var(--border)',
+                                 background: r.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                        <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{r.rank}</td>
                         <td className="px-3 py-1.5 font-medium text-gray-700">{r.barra_nome}</td>
-                        <td className="px-3 py-1.5 text-gray-500 tabular-nums">{/* numero from receita action */}</td>
+                        <td className="px-3 py-1.5 text-gray-500 tabular-nums">{r.numero ?? '—'}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.clientes_ativos)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-emerald-600">
+                          <span className="inline-flex items-center gap-1">
+                            <UserPlus className="w-3 h-3" />{fmtNum(r.clientes_novos)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-rose-600">
+                          <span className="inline-flex items-center gap-1">
+                            <UserX className="w-3 h-3" />{fmtNum(r.clientes_churn)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{r.taxa_retencao.toFixed(1)}%</td>
                         <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.lotes_operados)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(r.lotes_zerados)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{r.pct_zeragem.toFixed(1)}%</td>
                         <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-emerald-700">{fmtBRL(r.receita_total)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{pctRec.toFixed(1)}%</td>
+                        <td className={`px-3 py-1.5 text-right tabular-nums font-semibold ${positivoDelta ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <span className="inline-flex items-center gap-1">
+                            {positivoDelta ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                            {r.delta_receita_pct.toFixed(1)}%
+                          </span>
+                        </td>
                       </tr>
                     )
                   })}

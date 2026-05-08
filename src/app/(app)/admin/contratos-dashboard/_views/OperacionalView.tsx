@@ -10,21 +10,8 @@ import {
 } from '../View'
 import { BlockSkeleton } from '../Charts'
 import type { DrilldownRow } from '../actions'
-import {
-  getKpis, getPorProduto, getTopClientes, getDiarioProduto,
-  getHeatmapDow, getEvolucaoMensal, getDrilldownDia,
-  getReceitaTotal, getReceitaPorAssessor, getReceitaProjecao,
-  getMetaAnual, getAlertas, getAcuracidadeResumo, getAcuracidadeSerie,
-  getBarrasAtivas,
-} from '../actions'
-
-const ACTIONS = {
-  getKpis, getPorProduto, getTopClientes, getDiarioProduto,
-  getHeatmapDow, getEvolucaoMensal, getDrilldownDia,
-  getReceitaTotal, getReceitaPorAssessor, getReceitaProjecao,
-  getMetaAnual, getAlertas, getAcuracidadeResumo, getAcuracidadeSerie,
-  getBarrasAtivas,
-}
+import { getDrilldownDia } from '../actions'
+import { ACTIONS } from '../_lib/dashboardActions'
 
 export function OperacionalView() {
   const { periodo, barra } = useDashboardFilters()

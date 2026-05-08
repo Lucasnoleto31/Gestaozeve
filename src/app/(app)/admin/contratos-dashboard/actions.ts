@@ -253,6 +253,113 @@ export async function getToday(): Promise<string> {
 }
 
 // -----------------------------------------------------------
+// Sprint 4 — Insights via OpenAI
+// -----------------------------------------------------------
+export type InsightItem = {
+  titulo: string
+  descricao: string
+  severidade: 'info' | 'positivo' | 'atencao' | 'critico'
+}
+
+export type InsightsResposta = {
+  insights: InsightItem[]
+  gerado_em: string
+  modelo: string | null
+  erro: string | null
+}
+
+// Cache em memória de processo (1 entrada por (período, hash dos KPIs))
+const insightsCache = new Map<string, { data: InsightsResposta; expiresAt: number }>()
+const INSIGHTS_TTL_MS = 10 * 60 * 1000
+
+type ContextoInsights = {
+  periodo: Periodo
+  kpis: DashboardKpis
+  receita: ReceitaTotal | null
+  meta: MetaAnual | null
+  topClientes: TopClienteRow[]
+  alertas: AlertaRow[]
+  porProduto: ProdutoRow[]
+}
+
+export async function getInsightsIA(ctx: ContextoInsights): Promise<InsightsResposta> {
+  await adminOnly()
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    return {
+      insights: [],
+      gerado_em: new Date().toISOString(),
+      modelo: null,
+      erro: 'OPENAI_API_KEY não configurada no servidor.',
+    }
+  }
+
+  const chave = `${ctx.periodo}:${ctx.kpis.dataset_max}:${ctx.kpis.volume_operados}:${ctx.alertas.length}`
+  const cached = insightsCache.get(chave)
+  if (cached && cached.expiresAt > Date.now()) return cached.data
+
+  const promptUsuario = `Você é um analista financeiro de um escritório de assessoria de investimentos brasileiro. Gere 3 a 5 insights curtos e acionáveis em PORTUGUÊS sobre os dados a seguir. Cada insight deve ter um título (até 8 palavras) e uma descrição (1 a 2 frases). Retorne APENAS um JSON válido no formato:
+{"insights":[{"titulo":"...","descricao":"...","severidade":"info|positivo|atencao|critico"}]}
+
+Dados (período: ${ctx.periodo}):
+- Volume operado: ${ctx.kpis.volume_operados.toLocaleString('pt-BR')} lotes
+- Volume zerado: ${ctx.kpis.volume_zerados.toLocaleString('pt-BR')} lotes
+- Clientes ativos: ${ctx.kpis.num_clientes_ativos}
+- Maior dia: ${ctx.kpis.maior_dia_data ?? '—'} (${ctx.kpis.maior_dia_lotes} lotes)
+- Média 30d: ${ctx.kpis.media_30d.toFixed(0)} lotes/dia
+${ctx.receita ? `- Receita total: R$ ${ctx.receita.receita_total.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} (operados ${ctx.receita.receita_operados.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} + zeragem ${ctx.receita.receita_zeragem.toLocaleString('pt-BR', { maximumFractionDigits: 2 })})` : ''}
+${ctx.meta ? `- Meta anual: ${ctx.meta.pct_receita.toFixed(1)}% de R$ ${ctx.meta.meta_receita.toLocaleString('pt-BR')} batido. Faltam ${ctx.meta.dias_corridos_restantes} dias.` : ''}
+- Top 5 clientes: ${ctx.topClientes.slice(0, 5).map(c => `${c.cliente_nome} (${c.lotes_operados} lotes)`).join(', ')}
+- Alertas: ${ctx.alertas.length} (${ctx.alertas.filter(a => a.severidade === 'alta').length} altas)
+- Produtos: ${ctx.porProduto.slice(0, 5).map(p => `${p.produto} ${p.lotes_operados.toLocaleString('pt-BR')}`).join(', ')}
+
+Foque em: variações relevantes, oportunidades de cross-sell, riscos de concentração, ritmo vs meta, comportamento de zeragem.`
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'Você é um analista financeiro. Responde sempre em JSON válido em português brasileiro.' },
+          { role: 'user', content: promptUsuario },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.4,
+        max_tokens: 800,
+      }),
+    })
+    if (!res.ok) {
+      const txt = await res.text()
+      return {
+        insights: [], gerado_em: new Date().toISOString(), modelo: 'gpt-4o-mini',
+        erro: `OpenAI ${res.status}: ${txt.slice(0, 200)}`,
+      }
+    }
+    const json = await res.json() as { choices?: { message?: { content?: string } }[] }
+    const content = json.choices?.[0]?.message?.content ?? '{}'
+    const parsed = JSON.parse(content) as { insights?: InsightItem[] }
+    const resposta: InsightsResposta = {
+      insights: Array.isArray(parsed.insights) ? parsed.insights.slice(0, 5) : [],
+      gerado_em: new Date().toISOString(),
+      modelo: 'gpt-4o-mini',
+      erro: null,
+    }
+    insightsCache.set(chave, { data: resposta, expiresAt: Date.now() + INSIGHTS_TTL_MS })
+    return resposta
+  } catch (err) {
+    return {
+      insights: [], gerado_em: new Date().toISOString(), modelo: 'gpt-4o-mini',
+      erro: (err as Error).message ?? 'Falha ao chamar OpenAI',
+    }
+  }
+}
+
+// -----------------------------------------------------------
 // Fase 2 — Receita & Meta
 // -----------------------------------------------------------
 export type ReceitaTotal = {
@@ -436,6 +543,142 @@ export async function getBarrasAtivas(): Promise<{ barra_nome: string; numero: s
   return ((data ?? []) as Record<string, unknown>[]).map(r => ({
     barra_nome: String(r.barra_nome ?? ''),
     numero: r.numero ? String(r.numero) : null,
+  }))
+}
+
+// -----------------------------------------------------------
+// Sprint 3 — Análises avançadas: cohort, LTV, ranking expandido
+// -----------------------------------------------------------
+export type CohortPonto = {
+  cohort_mes: string
+  mes_offset: number
+  clientes_ativos: number
+  cohort_size: number
+  retencao_pct: number
+}
+
+export type LtvCliente = {
+  rank: number
+  cliente_id: string | null
+  cliente_nome: string
+  assessor_nome: string | null
+  primeira_op: string
+  ultima_op: string
+  meses_ativo: number
+  lotes_operados: number
+  lotes_zerados: number
+  receita_estimada: number
+  receita_media_mensal: number
+}
+
+export type RankingAssessorRow = {
+  rank: number
+  barra_nome: string
+  numero: string | null
+  clientes_ativos: number
+  clientes_anterior: number
+  clientes_novos: number
+  clientes_churn: number
+  taxa_retencao: number
+  lotes_operados: number
+  lotes_zerados: number
+  pct_zeragem: number
+  receita_total: number
+  receita_anterior: number
+  delta_receita_pct: number
+}
+
+export async function getCohortRetencao(meses = 12): Promise<CohortPonto[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_cohort_retencao', { p_meses: meses })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    cohort_mes: String(r.cohort_mes),
+    mes_offset: num(r.mes_offset),
+    clientes_ativos: num(r.clientes_ativos),
+    cohort_size: num(r.cohort_size),
+    retencao_pct: num(r.retencao_pct),
+  }))
+}
+
+export async function getLtvClientes(limit = 50): Promise<LtvCliente[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_ltv_clientes', { p_limit: limit })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    rank: num(r.rank),
+    cliente_id: str(r.cliente_id),
+    cliente_nome: String(r.cliente_nome ?? 'Sem cliente'),
+    assessor_nome: str(r.assessor_nome),
+    primeira_op: String(r.primeira_op),
+    ultima_op: String(r.ultima_op),
+    meses_ativo: num(r.meses_ativo),
+    lotes_operados: num(r.lotes_operados),
+    lotes_zerados: num(r.lotes_zerados),
+    receita_estimada: num(r.receita_estimada),
+    receita_media_mensal: num(r.receita_media_mensal),
+  }))
+}
+
+export type BudgetZeragemRow = {
+  barra_nome: string
+  numero: string | null
+  lotes_operados: number
+  lotes_zerados: number
+  pct_zeragem: number
+  budget_pct: number
+  consumo_pct: number
+  status: 'ok' | 'atencao' | 'excedido'
+}
+
+export async function getBudgetZeragem(p: Periodo): Promise<BudgetZeragemRow[]> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_budget_zeragem', { p_inicio: inicio, p_fim: fim })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    barra_nome: String(r.barra_nome ?? ''),
+    numero: r.numero ? String(r.numero) : null,
+    lotes_operados: num(r.lotes_operados),
+    lotes_zerados: num(r.lotes_zerados),
+    pct_zeragem: num(r.pct_zeragem),
+    budget_pct: num(r.budget_pct),
+    consumo_pct: num(r.consumo_pct),
+    status: (r.status ?? 'ok') as BudgetZeragemRow['status'],
+  }))
+}
+
+export async function getRankingAssessores(p: Periodo): Promise<RankingAssessorRow[]> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  // Período anterior: mesma duração imediatamente antes
+  const inicioD = new Date(inicio)
+  const fimD = new Date(fim)
+  const dur = Math.round((fimD.getTime() - inicioD.getTime()) / 86400000)
+  const fimAnt = new Date(inicioD); fimAnt.setDate(fimAnt.getDate() - 1)
+  const inicioAnt = new Date(fimAnt); inicioAnt.setDate(inicioAnt.getDate() - dur)
+  const f = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const { data, error } = await supabase.rpc('dashboard_ranking_assessores', {
+    p_inicio: inicio, p_fim: fim,
+    p_inicio_anterior: f(inicioAnt), p_fim_anterior: f(fimAnt),
+  })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    rank: num(r.rank),
+    barra_nome: String(r.barra_nome ?? ''),
+    numero: r.numero ? String(r.numero) : null,
+    clientes_ativos: num(r.clientes_ativos),
+    clientes_anterior: num(r.clientes_anterior),
+    clientes_novos: num(r.clientes_novos),
+    clientes_churn: num(r.clientes_churn),
+    taxa_retencao: num(r.taxa_retencao),
+    lotes_operados: num(r.lotes_operados),
+    lotes_zerados: num(r.lotes_zerados),
+    pct_zeragem: num(r.pct_zeragem),
+    receita_total: num(r.receita_total),
+    receita_anterior: num(r.receita_anterior),
+    delta_receita_pct: num(r.delta_receita_pct),
   }))
 }
 

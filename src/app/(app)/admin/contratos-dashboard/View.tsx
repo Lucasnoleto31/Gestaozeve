@@ -70,7 +70,7 @@ const colorFor = (p: string) => PRODUTO_COLOR[p] ?? '#64748b'
 // ===========================================================
 // Card / containers reutilizáveis
 // ===========================================================
-function Block({ title, subtitle, action, children }:
+export function Block({ title, subtitle, action, children }:
   { title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode }
 ) {
   return (
@@ -167,7 +167,7 @@ function PeriodoFilter({ value, onChange, isLoading, datasetMax, barras, barraSe
 // ===========================================================
 // KPI Grid
 // ===========================================================
-function KpiGrid({ kpis }: { kpis: DashboardKpis }) {
+export function KpiGrid({ kpis }: { kpis: DashboardKpis }) {
   const ratio = kpis.media_30d > 0
     ? ((kpis.volume_hoje - kpis.media_30d) / kpis.media_30d) * 100
     : null
@@ -207,7 +207,7 @@ function KpiGrid({ kpis }: { kpis: DashboardKpis }) {
 // ===========================================================
 // Cards por produto (WIN/WDO/BIT/...)
 // ===========================================================
-function PorProdutoBlock({ data }: { data: ProdutoRow[] }) {
+export function PorProdutoBlock({ data }: { data: ProdutoRow[] }) {
   const total = data.reduce((s, r) => s + r.lotes_operados, 0) || 1
   return (
     <Block title="Volume por produto" subtitle="Operados e zerados por código (WIN, WDO, etc.)">
@@ -244,7 +244,7 @@ function PorProdutoBlock({ data }: { data: ProdutoRow[] }) {
 // ===========================================================
 // Pareto top 20 clientes
 // ===========================================================
-function TopClientesParetoBlock({ data, onPickCliente }:
+export function TopClientesParetoBlock({ data, onPickCliente }:
   { data: TopClienteRow[]; onPickCliente?: (id: string | null) => void }
 ) {
   const max = Math.max(1, ...data.map(r => r.lotes_operados))
@@ -301,7 +301,7 @@ function TopClientesParetoBlock({ data, onPickCliente }:
 // ===========================================================
 // WIN vs WDO diário (gráfico SVG simples + média móvel 7d)
 // ===========================================================
-function WinVsWdoBlock({ data, onClickDia }: { data: DiarioProdutoRow[]; onClickDia: (data: string) => void }) {
+export function WinVsWdoBlock({ data, onClickDia }: { data: DiarioProdutoRow[]; onClickDia: (data: string) => void }) {
   return (
     <Block title="WIN vs WDO — diário"
       subtitle="Lotes operados por dia. Linha pontilhada = média móvel 7 dias. Clique num ponto pra abrir o dia."
@@ -314,7 +314,7 @@ function WinVsWdoBlock({ data, onClickDia }: { data: DiarioProdutoRow[]; onClick
 // ===========================================================
 // Heatmap dia da semana × semana do mês
 // ===========================================================
-function HeatmapBlock({ data }: { data: HeatmapCell[] }) {
+export function HeatmapBlock({ data }: { data: HeatmapCell[] }) {
   const max = Math.max(1, ...data.map(r => r.media_diaria))
   const dows = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const semanas = Array.from(new Set(data.map(r => r.semana_mes))).sort()
@@ -378,7 +378,7 @@ function HeatmapBlock({ data }: { data: HeatmapCell[] }) {
 // ===========================================================
 // Evolução mensal — Recharts BarChart stacked
 // ===========================================================
-function EvolucaoMensalBlock({ data }: { data: EvolucaoMensalRow[] }) {
+export function EvolucaoMensalBlock({ data }: { data: EvolucaoMensalRow[] }) {
   return (
     <Block title="Evolução mensal" subtitle="Lotes operados + zerados por mês.">
       <EvolucaoMensalChart data={data} />
@@ -394,7 +394,7 @@ const fmtBRL = (n: number) =>
 const fmtBRL2 = (n: number) =>
   n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-function ReceitaBlock({ total, porAssessor, projecao }:
+export function ReceitaBlock({ total, porAssessor, projecao }:
   { total: ReceitaTotal | null; porAssessor: ReceitaPorAssessor[]; projecao: ReceitaProjecao | null }
 ) {
   return (
@@ -466,7 +466,7 @@ function ReceitaBlock({ total, porAssessor, projecao }:
   )
 }
 
-function MetaBlock({ meta }: { meta: MetaAnual | null }) {
+export function MetaBlock({ meta }: { meta: MetaAnual | null }) {
   if (!meta) return null
   const noMeta = meta.meta_lotes <= 0 && meta.meta_receita <= 0
   if (noMeta) {
@@ -547,7 +547,7 @@ const ALERTA_COLOR: Record<AlertaRow['tipo'], { bg: string; text: string }> = {
   zeragem_concentrada:  { bg: 'rgba(220,38,38,0.15)',  text: '#991b1b' },
 }
 
-function AlertasBlock({ data, onPickCliente }:
+export function AlertasBlock({ data, onPickCliente }:
   { data: AlertaRow[]; onPickCliente?: (id: string | null) => void }
 ) {
   const counts = data.reduce<Record<string, number>>((acc, r) => {
@@ -624,7 +624,7 @@ function AlertasBlock({ data, onPickCliente }:
 // ===========================================================
 // Acuracidade do modelo
 // ===========================================================
-function AcuracidadeBlock({ resumo, serie }: { resumo: AcuracidadeResumo | null; serie: AcuracidadePonto[] }) {
+export function AcuracidadeBlock({ resumo, serie }: { resumo: AcuracidadeResumo | null; serie: AcuracidadePonto[] }) {
   if (!resumo) return null
   if (resumo.num_dias === 0) {
     return (
@@ -679,7 +679,7 @@ function AcuracidadeBlock({ resumo, serie }: { resumo: AcuracidadeResumo | null;
 // ===========================================================
 // Drill-down modal (com export PNG via canvas)
 // ===========================================================
-function DrilldownModal({ data, rows, onClose }: { data: string; rows: DrilldownRow[]; onClose: () => void }) {
+export function DrilldownModal({ data, rows, onClose }: { data: string; rows: DrilldownRow[]; onClose: () => void }) {
   const totals = rows.find(r => r.tipo === 'totals')
   const top_op = rows.filter(r => r.tipo === 'top_girou').sort((a, b) => a.rank - b.rank)
   const top_ze = rows.filter(r => r.tipo === 'top_zerou').sort((a, b) => a.rank - b.rank)

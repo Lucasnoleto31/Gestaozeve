@@ -246,6 +246,9 @@ LANGUAGE sql SECURITY DEFINER AS $$
 $$;
 
 -- 12. Plataformas únicas e valor total por mês
+-- Drop antes do CREATE OR REPLACE: caso uma versão antiga tenha
+-- assinatura diferente, o Postgres recusa o REPLACE.
+DROP FUNCTION IF EXISTS relatorio_plataformas_por_mes() CASCADE;
 CREATE OR REPLACE FUNCTION relatorio_plataformas_por_mes()
 RETURNS TABLE(mes text, plataformas_unicas bigint, valor_total numeric)
 LANGUAGE sql SECURITY DEFINER AS $$
@@ -290,6 +293,9 @@ $$;
 -- Retorna 12 meses pra trás. Frontend filtra/agrega:
 --   modo padrão = is_ano_corrente (jan..mês atual de YYYY)
 --   fallback    = mes_offset 0..3 quando o ano corrente só tem o mês atual (janeiro)
+-- Drop antes do CREATE: a assinatura mudou (versão antiga retornava
+-- lotes_m1/m2/m3 fixos); REPLACE puro recusa mudar tipo de retorno.
+DROP FUNCTION IF EXISTS relatorio_lotes_comparativo() CASCADE;
 CREATE OR REPLACE FUNCTION relatorio_lotes_comparativo()
 RETURNS TABLE(
   dia_num integer,

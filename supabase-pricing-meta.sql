@@ -68,6 +68,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.metas_anuais TO authenticated;
 -- 3.1 Receita por assessor/barra no período
 -- Considera apenas WIN/WDO (futuros) hoje. Bovespa fica como TODO até termos
 -- volume financeiro por cliente em outra tabela.
+DROP FUNCTION IF EXISTS dashboard_contratos_receita_por_assessor(date, date) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_receita_por_assessor(p_inicio date, p_fim date)
 RETURNS TABLE(
   barra_nome text,
@@ -138,6 +139,7 @@ AS $$
 $$;
 
 -- 3.2 Receita total no período (rollup das linhas acima)
+DROP FUNCTION IF EXISTS dashboard_contratos_receita_total(date, date) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_receita_total(p_inicio date, p_fim date)
 RETURNS TABLE(
   receita_operados numeric,
@@ -165,6 +167,7 @@ $$;
 --   ritmo_diario      = receita ÷ dias com dado no mês
 --   dias_corridos_rest = dias que faltam (corridos, não úteis)
 --   projecao_total    = consolidada + ritmo × dias restantes
+DROP FUNCTION IF EXISTS dashboard_contratos_receita_mes_projecao() CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_receita_mes_projecao()
 RETURNS TABLE(
   mes_data date,
@@ -210,6 +213,7 @@ AS $$
 $$;
 
 -- 3.4 Tracking da meta anual (ano corrente)
+DROP FUNCTION IF EXISTS dashboard_meta_anual() CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_meta_anual()
 RETURNS TABLE(
   ano integer,

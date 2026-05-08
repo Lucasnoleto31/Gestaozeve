@@ -8,6 +8,7 @@
 
 -- Helper: extrai o símbolo do produto do campo ativo (ex: 'WINK26' → 'WIN').
 -- Pega o prefixo alfabético; cai em 'OUTRO' quando vazio.
+DROP FUNCTION IF EXISTS public.contratos_produto(text) CASCADE;
 CREATE OR REPLACE FUNCTION public.contratos_produto(p_ativo text)
 RETURNS text
 LANGUAGE sql IMMUTABLE
@@ -19,6 +20,7 @@ $$;
 -- volume_operados, volume_zerados, num_clientes_ativos, num_dias_uteis,
 -- maior_dia (data + lotes), volume_hoje, media_30d (encerrada antes do filtro),
 -- dataset_max (data mais recente em contratos)
+DROP FUNCTION IF EXISTS dashboard_contratos_kpis(date, date) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_kpis(p_inicio date, p_fim date)
 RETURNS TABLE(
   volume_operados numeric,
@@ -88,6 +90,7 @@ AS $$
 $$;
 
 -- 2. Volume por produto (WIN, WDO, BIT, IND, DOL, ...)
+DROP FUNCTION IF EXISTS dashboard_contratos_por_produto(date, date) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_por_produto(p_inicio date, p_fim date)
 RETURNS TABLE(
   produto text,
@@ -111,6 +114,7 @@ AS $$
 $$;
 
 -- 3. Pareto top N clientes por volume (operados) no período
+DROP FUNCTION IF EXISTS dashboard_contratos_top_clientes(date, date, integer) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_top_clientes(
   p_inicio date,
   p_fim date,
@@ -161,6 +165,7 @@ AS $$
 $$;
 
 -- 4. Lotes por dia × produto (pra gráfico WIN vs WDO etc + média móvel no front)
+DROP FUNCTION IF EXISTS dashboard_contratos_diario_produto(date, date) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_diario_produto(p_inicio date, p_fim date)
 RETURNS TABLE(
   data date,
@@ -184,6 +189,7 @@ $$;
 -- 5. Heatmap: volume médio por dia-da-semana × semana-do-mês
 -- dow: 0 = dom, 1 = seg, ..., 6 = sáb (segue ISO do PG: 0..6 com 0=dom)
 -- weekofmonth: 1..6 (semana corrida dentro do mês)
+DROP FUNCTION IF EXISTS dashboard_contratos_heatmap_dow(date, date) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_heatmap_dow(p_inicio date, p_fim date)
 RETURNS TABLE(
   dow integer,           -- 0..6 (0=dom)
@@ -219,6 +225,7 @@ AS $$
 $$;
 
 -- 6. Evolução mensal (tudo o que existe no dataset)
+DROP FUNCTION IF EXISTS dashboard_contratos_evolucao_mensal() CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_evolucao_mensal()
 RETURNS TABLE(
   mes_data date,
@@ -246,6 +253,7 @@ $$;
 --   'totals'      → 1 linha com agregados
 --   'top_girou'   → até 3 linhas com top clientes em lotes_operados
 --   'top_zerou'   → até 3 linhas com top clientes em lotes_zerados
+DROP FUNCTION IF EXISTS dashboard_contratos_drilldown_dia(date) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_drilldown_dia(p_data date)
 RETURNS TABLE(
   tipo text,

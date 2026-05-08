@@ -11,6 +11,7 @@
 --   'zeragem_alta'   % zeragem > 50% no período recente
 --   'zeragem_concentrada' tomou >= X lotes zerados em <= 7 dias
 -- =============================================
+DROP FUNCTION IF EXISTS dashboard_contratos_alertas(integer) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_alertas(p_inativo_dias integer DEFAULT 30)
 RETURNS TABLE(
   tipo text,
@@ -157,6 +158,7 @@ $$;
 -- "Modelo" usado: previsão do dia D = média móvel dos últimos 7 dias com dado
 -- antes de D. Acuracidade calculada retrospectivamente sem precisar snapshot.
 -- =============================================
+DROP FUNCTION IF EXISTS dashboard_contratos_acuracidade(integer) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_acuracidade(p_lookback_days integer DEFAULT 60)
 RETURNS TABLE(
   data date,
@@ -198,6 +200,7 @@ AS $$
 $$;
 
 -- 2.1 Resumo: MAPE + viés
+DROP FUNCTION IF EXISTS dashboard_contratos_acuracidade_resumo(integer) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_acuracidade_resumo(p_lookback_days integer DEFAULT 60)
 RETURNS TABLE(
   num_dias integer,

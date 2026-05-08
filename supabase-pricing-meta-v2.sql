@@ -116,7 +116,9 @@ SELECT p.id, 5000, NULL, 19.00, 5 FROM public.assessor_pricing p WHERE p.modelo_
 -- 6. Função de receita atualizada — calcula zeragem por faixa
 --    Regra: a faixa é determinada pelo VOLUME ZERADO DIÁRIO POR CLIENTE
 --           (cada dia, cada cliente cai numa faixa baseada no que zerou no dia).
+-- A v1 retornava sem `numero` — drop antes pra liberar troca de tipo.
 -- =============================================
+DROP FUNCTION IF EXISTS dashboard_contratos_receita_por_assessor(date, date) CASCADE;
 CREATE OR REPLACE FUNCTION dashboard_contratos_receita_por_assessor(p_inicio date, p_fim date)
 RETURNS TABLE(
   barra_nome text,
@@ -214,5 +216,90 @@ AS $$
   ORDER BY receita_total DESC NULLS LAST;
 $$;
 
--- A função `dashboard_contratos_receita_total` segue válida — agrega receita_por_assessor.
+-- O DROP CASCADE acima derruba dependentes (receita_total e meta_anual
+-- que fazem SELECT da por_assessor). Reaplicamos as duas — corpo idêntico
+-- ao v1, mas precisa estar aqui pra ficar válido depois do CASCADE.
+
+CREATE OR REPLACE FUNCTION dashboard_contratos_receita_total(p_inicio date, p_fim date)
+RETURNS TABLE(
+  receita_operados numeric,
+  receita_zeragem numeric,
+  receita_total numeric,
+  num_barras integer,
+  num_barras_sem_pricing integer
+)
+LANGUAGE sql SECURITY DEFINER
+AS $$
+  WITH r AS (
+    SELECT * FROM dashboard_contratos_receita_por_assessor(p_inicio, p_fim)
+  )
+  SELECT
+    COALESCE(SUM(receita_operados), 0),
+    COALESCE(SUM(receita_zeragem),  0),
+    COALESCE(SUM(receita_total),    0),
+    COUNT(*)::integer,
+    COUNT(*) FILTER (WHERE preco_lote_futuros = 0 AND modelo_zeragem = 'b2b')::integer
+  FROM r;
+$$;
+
+CREATE OR REPLACE FUNCTION dashboard_meta_anual()
+RETURNS TABLE(
+  ano integer,
+  meta_lotes numeric,
+  meta_receita numeric,
+  realizado_lotes numeric,
+  realizado_receita numeric,
+  pct_lotes numeric,
+  pct_receita numeric,
+  dias_corridos_restantes integer,
+  ritmo_lotes_necessario numeric,
+  ritmo_receita_necessario numeric
+)
+LANGUAGE sql SECURITY DEFINER
+AS $$
+  WITH bounds AS (
+    SELECT
+      DATE_TRUNC('year', CURRENT_DATE)::date AS ano_inicio,
+      (DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '1 year' - INTERVAL '1 day')::date AS ano_fim,
+      EXTRACT(YEAR FROM CURRENT_DATE)::integer AS ano_n
+  ),
+  realizado_lotes_q AS (
+    SELECT COALESCE(SUM(lotes_operados), 0) AS l
+    FROM public.contratos, bounds
+    WHERE data BETWEEN bounds.ano_inicio AND CURRENT_DATE
+  ),
+  realizado_receita_q AS (
+    SELECT COALESCE(SUM(receita_total), 0) AS r
+    FROM dashboard_contratos_receita_por_assessor(
+      (SELECT ano_inicio FROM bounds), CURRENT_DATE
+    )
+  ),
+  meta AS (
+    SELECT
+      bounds.ano_n,
+      COALESCE(m.meta_lotes, 0)   AS meta_lotes,
+      COALESCE(m.meta_receita, 0) AS meta_receita
+    FROM bounds
+    LEFT JOIN public.metas_anuais m ON m.ano = bounds.ano_n
+  )
+  SELECT
+    meta.ano_n,
+    meta.meta_lotes,
+    meta.meta_receita,
+    rl.l,
+    rr.r,
+    CASE WHEN meta.meta_lotes   > 0 THEN ROUND(rl.l / meta.meta_lotes   * 100, 2) ELSE 0 END,
+    CASE WHEN meta.meta_receita > 0 THEN ROUND(rr.r / meta.meta_receita * 100, 2) ELSE 0 END,
+    GREATEST(0, (b.ano_fim - CURRENT_DATE)::integer),
+    CASE WHEN meta.meta_lotes > 0 AND (b.ano_fim - CURRENT_DATE) > 0
+      THEN ROUND(GREATEST(0, meta.meta_lotes - rl.l) / (b.ano_fim - CURRENT_DATE)::numeric, 2)
+      ELSE 0 END,
+    CASE WHEN meta.meta_receita > 0 AND (b.ano_fim - CURRENT_DATE) > 0
+      THEN ROUND(GREATEST(0, meta.meta_receita - rr.r) / (b.ano_fim - CURRENT_DATE)::numeric, 2)
+      ELSE 0 END
+  FROM bounds b, meta, realizado_lotes_q rl, realizado_receita_q rr;
+$$;
+
 GRANT EXECUTE ON FUNCTION dashboard_contratos_receita_por_assessor(date, date) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION dashboard_contratos_receita_total(date, date) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION dashboard_meta_anual() TO authenticated, service_role;

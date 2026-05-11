@@ -7,6 +7,7 @@ import type {
   ProdutoDetalhado, ZeragemIntensidade, ReceitaBrutaLiquida,
   ReceitaPorPlataforma, ReceitaPorClearing, ScoreQualidadeRow,
   MetaAssessorRow, AlertaExecutivo,
+  FluxoOperacional, IndiceSobrevivencia, RiscoOperacionalRow,
 } from '../actions'
 
 export type DashboardActions = {
@@ -37,6 +38,9 @@ export type DashboardActions = {
   getScoreQualidade: (p: Periodo) => Promise<ScoreQualidadeRow[]>
   getMetasAssessor: () => Promise<MetaAssessorRow[]>
   getAlertasExecutivos: () => Promise<AlertaExecutivo[]>
+  getFluxoOperacional: (p: Periodo, barra?: string | null) => Promise<FluxoOperacional>
+  getIndiceSobrevivencia: (p: Periodo, barra?: string | null) => Promise<IndiceSobrevivencia>
+  getRiscoOperacional: (limit?: number, barra?: string | null) => Promise<RiscoOperacionalRow[]>
 }
 
 export type DashboardTab =

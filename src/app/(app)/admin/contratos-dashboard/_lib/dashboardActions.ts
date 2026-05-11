@@ -10,6 +10,7 @@ import {
   getProdutosDetalhados, getZeragemDistribuicao, getReceitaBrutaLiquida,
   getReceitaPorPlataforma, getReceitaPorClearing, getScoreQualidade,
   getMetasAssessor, getAlertasExecutivos,
+  getFluxoOperacional, getIndiceSobrevivencia, getRiscoOperacional,
 } from '../actions'
 import type { DashboardActions } from './types'
 
@@ -23,4 +24,5 @@ export const ACTIONS: DashboardActions = {
   getProdutosDetalhados, getZeragemDistribuicao, getReceitaBrutaLiquida,
   getReceitaPorPlataforma, getReceitaPorClearing, getScoreQualidade,
   getMetasAssessor, getAlertasExecutivos,
+  getFluxoOperacional, getIndiceSobrevivencia, getRiscoOperacional,
 }

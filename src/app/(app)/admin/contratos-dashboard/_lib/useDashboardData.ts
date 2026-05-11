@@ -31,6 +31,9 @@ export type DataFlags = {
   scoreQualidade?: boolean
   metasAssessor?: boolean
   alertasExecutivos?: boolean
+  fluxoOperacional?: boolean
+  indiceSobrevivencia?: boolean
+  riscoOperacional?: boolean
 }
 
 export function useDashboardData(actions: DashboardActions, periodo: Periodo, barra: string | null, flags: DataFlags) {
@@ -61,6 +64,9 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     score: Awaited<ReturnType<DashboardActions['getScoreQualidade']>>
     metasAss: Awaited<ReturnType<DashboardActions['getMetasAssessor']>>
     alertasExec: Awaited<ReturnType<DashboardActions['getAlertasExecutivos']>>
+    fluxoOp: Awaited<ReturnType<DashboardActions['getFluxoOperacional']>> | null
+    indiceSobr: Awaited<ReturnType<DashboardActions['getIndiceSobrevivencia']>> | null
+    riscoOp: Awaited<ReturnType<DashboardActions['getRiscoOperacional']>>
   }>({
     kpis: null, produtos: [], topClientes: [], diario: [], heatmap: [], evolucao: [],
     receitaTotal: null, receitaPorAss: [], receitaProj: null, meta: null,
@@ -68,6 +74,7 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     cohort: [], ltv: [], ranking: [], budget: [],
     produtosDetalhados: [], zeragemDist: [], receitaBL: null,
     receitaPlat: [], receitaClear: [], score: [], metasAss: [], alertasExec: [],
+    fluxoOp: null, indiceSobr: null, riscoOp: [],
   })
 
   const [isPending, startTransition] = useTransition()
@@ -92,7 +99,8 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     startTransition(async () => {
       try {
         const [kp, pp, tc, dp, hm, ev, rt, ra, rp, m, al, ac, as, co, lt, rk, bd,
-               pd, zd, rbl, rpl, rcl, sc, mt, ae] = await Promise.all([
+               pd, zd, rbl, rpl, rcl, sc, mt, ae,
+               fo, is, ro] = await Promise.all([
           flags.kpis        ? actions.getKpis(periodo, barra)            : Promise.resolve(null),
           flags.produtos    ? actions.getPorProduto(periodo, barra)      : Promise.resolve([]),
           flags.topClientes ? actions.getTopClientes(periodo, 20, barra) : Promise.resolve([]),
@@ -118,6 +126,9 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
           flags.scoreQualidade       ? actions.getScoreQualidade(periodo)             : Promise.resolve([]),
           flags.metasAssessor        ? actions.getMetasAssessor()                     : Promise.resolve([]),
           flags.alertasExecutivos    ? actions.getAlertasExecutivos()                 : Promise.resolve([]),
+          flags.fluxoOperacional     ? actions.getFluxoOperacional(periodo, barra)    : Promise.resolve(null),
+          flags.indiceSobrevivencia  ? actions.getIndiceSobrevivencia(periodo, barra) : Promise.resolve(null),
+          flags.riscoOperacional     ? actions.getRiscoOperacional(50, barra)         : Promise.resolve([]),
         ])
         setData(d => ({
           ...d,
@@ -127,6 +138,7 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
           cohort: co, ltv: lt, ranking: rk, budget: bd,
           produtosDetalhados: pd, zeragemDist: zd, receitaBL: rbl,
           receitaPlat: rpl, receitaClear: rcl, score: sc, metasAss: mt, alertasExec: ae,
+          fluxoOp: fo, indiceSobr: is, riscoOp: ro,
         }))
       } catch (err) {
         setErro((err as Error).message ?? 'Falha ao carregar dados')

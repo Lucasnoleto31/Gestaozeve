@@ -793,6 +793,106 @@ export async function getMetasAssessor(): Promise<MetaAssessorRow[]> {
   }))
 }
 
+// -----------------------------------------------------------
+// Sprint 7 — Operacional expandido
+// -----------------------------------------------------------
+export type FluxoOperacional = {
+  num_sessoes: number
+  num_dias_corridos: number
+  taxa_atividade: number
+  num_clientes_ativos: number
+  sessoes_por_cliente: number
+  lotes_por_sessao: number
+  ticket_medio_diario: number
+}
+
+export type IndiceSobrevivencia = {
+  num_clientes_total: number
+  num_sobreviventes: number
+  num_zerados: number
+  indice: number
+  pct_sobreviventes: number
+  classificacao: 'saudavel' | 'atencao' | 'alto_risco'
+}
+
+export type RiscoOperacionalRow = {
+  rank: number
+  cliente_id: string | null
+  cliente_nome: string
+  assessor_nome: string | null
+  score_risco: number
+  dias_atual: number
+  dias_anterior: number
+  lotes_atual: number
+  lotes_anterior: number
+  pct_ze_atual: number
+  pct_ze_anterior: number
+  eventos_zer_atual: number
+  eventos_zer_anterior: number
+  motivo: string
+}
+
+export async function getFluxoOperacional(p: Periodo, barra: string | null = null): Promise<FluxoOperacional> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_fluxo_operacional', {
+    p_inicio: inicio, p_fim: fim, p_barra: barra,
+  })
+  if (error) throw new Error(error.message)
+  const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  return {
+    num_sessoes: num(r?.num_sessoes),
+    num_dias_corridos: num(r?.num_dias_corridos),
+    taxa_atividade: num(r?.taxa_atividade),
+    num_clientes_ativos: num(r?.num_clientes_ativos),
+    sessoes_por_cliente: num(r?.sessoes_por_cliente),
+    lotes_por_sessao: num(r?.lotes_por_sessao),
+    ticket_medio_diario: num(r?.ticket_medio_diario),
+  }
+}
+
+export async function getIndiceSobrevivencia(p: Periodo, barra: string | null = null): Promise<IndiceSobrevivencia> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_indice_sobrevivencia', {
+    p_inicio: inicio, p_fim: fim, p_barra: barra,
+  })
+  if (error) throw new Error(error.message)
+  const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  return {
+    num_clientes_total: num(r?.num_clientes_total),
+    num_sobreviventes: num(r?.num_sobreviventes),
+    num_zerados: num(r?.num_zerados),
+    indice: num(r?.indice),
+    pct_sobreviventes: num(r?.pct_sobreviventes),
+    classificacao: (r?.classificacao ?? 'atencao') as IndiceSobrevivencia['classificacao'],
+  }
+}
+
+export async function getRiscoOperacional(limit = 50, barra: string | null = null): Promise<RiscoOperacionalRow[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_risco_operacional', {
+    p_limit: limit, p_barra: barra,
+  })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    rank: num(r.rank),
+    cliente_id: str(r.cliente_id),
+    cliente_nome: String(r.cliente_nome ?? 'Sem cliente'),
+    assessor_nome: str(r.assessor_nome),
+    score_risco: num(r.score_risco),
+    dias_atual: num(r.dias_atual),
+    dias_anterior: num(r.dias_anterior),
+    lotes_atual: num(r.lotes_atual),
+    lotes_anterior: num(r.lotes_anterior),
+    pct_ze_atual: num(r.pct_ze_atual),
+    pct_ze_anterior: num(r.pct_ze_anterior),
+    eventos_zer_atual: num(r.eventos_zer_atual),
+    eventos_zer_anterior: num(r.eventos_zer_anterior),
+    motivo: String(r.motivo ?? ''),
+  }))
+}
+
 export async function getAlertasExecutivos(): Promise<AlertaExecutivo[]> {
   const supabase = await adminOnly()
   const { data, error } = await supabase.rpc('dashboard_alertas_executivos')

@@ -893,6 +893,152 @@ export async function getRiscoOperacional(limit = 50, barra: string | null = nul
   }))
 }
 
+// -----------------------------------------------------------
+// Sprint 8 — Analises avançadas (ABC, scores, clusters, correlações, risco escritório)
+// -----------------------------------------------------------
+export type CurvaAbcRow = {
+  rank: number
+  cliente_id: string | null
+  cliente_nome: string
+  assessor_nome: string | null
+  receita_estimada: number
+  pct_individual: number
+  pct_acumulado: number
+  classe: 'A' | 'B' | 'C' | 'D'
+}
+
+export type ScoreClienteRow = {
+  rank: number
+  cliente_id: string | null
+  cliente_nome: string
+  assessor_nome: string | null
+  score_financeiro: number
+  score_operacional: number
+  score_emocional: number
+  score_retencao: number
+  score_total: number
+  classificacao: 'premium' | 'solido' | 'medio' | 'fragil'
+}
+
+export type ClusterCliente = {
+  cluster: 'scalper' | 'emocional' | 'consistente' | 'agressivo' | 'swing' | 'casual'
+  num_clientes: number
+  pct_base: number
+  lotes_total: number
+  pct_lotes: number
+  lotes_medio_dia: number
+  pct_zeragem_medio: number
+  dias_medio_mes: number
+}
+
+export type CorrelacaoRow = {
+  par: string
+  descricao: string
+  r: number
+  forca: 'forte' | 'moderada' | 'fraca' | 'sem_relacao'
+  direcao: 'positiva' | 'negativa' | 'nula'
+  num_amostras: number
+}
+
+export type RiscoEscritorio = {
+  indice: number
+  classificacao: 'saudavel' | 'atencao' | 'critico'
+  fator_concentracao: number
+  fator_zeragem: number
+  fator_inativos: number
+  fator_metas: number
+  detalhe_concentracao: string
+  detalhe_zeragem: string
+  detalhe_inativos: string
+  detalhe_metas: string
+}
+
+export async function getCurvaAbc(p: Periodo, barra: string | null = null): Promise<CurvaAbcRow[]> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_curva_abc', {
+    p_inicio: inicio, p_fim: fim, p_barra: barra,
+  })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    rank: num(r.rank),
+    cliente_id: str(r.cliente_id),
+    cliente_nome: String(r.cliente_nome ?? ''),
+    assessor_nome: str(r.assessor_nome),
+    receita_estimada: num(r.receita_estimada),
+    pct_individual: num(r.pct_individual),
+    pct_acumulado: num(r.pct_acumulado),
+    classe: (r.classe ?? 'D') as CurvaAbcRow['classe'],
+  }))
+}
+
+export async function getScoreCliente(limit = 100): Promise<ScoreClienteRow[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_score_cliente', { p_limit: limit })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    rank: num(r.rank),
+    cliente_id: str(r.cliente_id),
+    cliente_nome: String(r.cliente_nome ?? ''),
+    assessor_nome: str(r.assessor_nome),
+    score_financeiro: num(r.score_financeiro),
+    score_operacional: num(r.score_operacional),
+    score_emocional: num(r.score_emocional),
+    score_retencao: num(r.score_retencao),
+    score_total: num(r.score_total),
+    classificacao: (r.classificacao ?? 'medio') as ScoreClienteRow['classificacao'],
+  }))
+}
+
+export async function getClustersClientes(): Promise<ClusterCliente[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_clusters_clientes')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    cluster: (r.cluster ?? 'casual') as ClusterCliente['cluster'],
+    num_clientes: num(r.num_clientes),
+    pct_base: num(r.pct_base),
+    lotes_total: num(r.lotes_total),
+    pct_lotes: num(r.pct_lotes),
+    lotes_medio_dia: num(r.lotes_medio_dia),
+    pct_zeragem_medio: num(r.pct_zeragem_medio),
+    dias_medio_mes: num(r.dias_medio_mes),
+  }))
+}
+
+export async function getCorrelacoes(): Promise<CorrelacaoRow[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_correlacoes')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    par: String(r.par ?? ''),
+    descricao: String(r.descricao ?? ''),
+    r: num(r.r),
+    forca: (r.forca ?? 'sem_relacao') as CorrelacaoRow['forca'],
+    direcao: (r.direcao ?? 'nula') as CorrelacaoRow['direcao'],
+    num_amostras: num(r.num_amostras),
+  }))
+}
+
+export async function getRiscoEscritorio(): Promise<RiscoEscritorio> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_risco_escritorio')
+  if (error) throw new Error(error.message)
+  const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  return {
+    indice: num(r?.indice),
+    classificacao: (r?.classificacao ?? 'atencao') as RiscoEscritorio['classificacao'],
+    fator_concentracao: num(r?.fator_concentracao),
+    fator_zeragem: num(r?.fator_zeragem),
+    fator_inativos: num(r?.fator_inativos),
+    fator_metas: num(r?.fator_metas),
+    detalhe_concentracao: String(r?.detalhe_concentracao ?? ''),
+    detalhe_zeragem: String(r?.detalhe_zeragem ?? ''),
+    detalhe_inativos: String(r?.detalhe_inativos ?? ''),
+    detalhe_metas: String(r?.detalhe_metas ?? ''),
+  }
+}
+
 export async function getAlertasExecutivos(): Promise<AlertaExecutivo[]> {
   const supabase = await adminOnly()
   const { data, error } = await supabase.rpc('dashboard_alertas_executivos')

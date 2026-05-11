@@ -8,6 +8,7 @@ import type {
   ReceitaPorPlataforma, ReceitaPorClearing, ScoreQualidadeRow,
   MetaAssessorRow, AlertaExecutivo,
   FluxoOperacional, IndiceSobrevivencia, RiscoOperacionalRow,
+  CurvaAbcRow, ScoreClienteRow, ClusterCliente, CorrelacaoRow, RiscoEscritorio,
 } from '../actions'
 
 export type DashboardActions = {
@@ -41,6 +42,11 @@ export type DashboardActions = {
   getFluxoOperacional: (p: Periodo, barra?: string | null) => Promise<FluxoOperacional>
   getIndiceSobrevivencia: (p: Periodo, barra?: string | null) => Promise<IndiceSobrevivencia>
   getRiscoOperacional: (limit?: number, barra?: string | null) => Promise<RiscoOperacionalRow[]>
+  getCurvaAbc: (p: Periodo, barra?: string | null) => Promise<CurvaAbcRow[]>
+  getScoreCliente: (limit?: number) => Promise<ScoreClienteRow[]>
+  getClustersClientes: () => Promise<ClusterCliente[]>
+  getCorrelacoes: () => Promise<CorrelacaoRow[]>
+  getRiscoEscritorio: () => Promise<RiscoEscritorio>
 }
 
 export type DashboardTab =

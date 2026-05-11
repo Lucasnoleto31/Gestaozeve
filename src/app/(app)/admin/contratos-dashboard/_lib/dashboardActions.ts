@@ -11,6 +11,7 @@ import {
   getReceitaPorPlataforma, getReceitaPorClearing, getScoreQualidade,
   getMetasAssessor, getAlertasExecutivos,
   getFluxoOperacional, getIndiceSobrevivencia, getRiscoOperacional,
+  getCurvaAbc, getScoreCliente, getClustersClientes, getCorrelacoes, getRiscoEscritorio,
 } from '../actions'
 import type { DashboardActions } from './types'
 
@@ -25,4 +26,5 @@ export const ACTIONS: DashboardActions = {
   getReceitaPorPlataforma, getReceitaPorClearing, getScoreQualidade,
   getMetasAssessor, getAlertasExecutivos,
   getFluxoOperacional, getIndiceSobrevivencia, getRiscoOperacional,
+  getCurvaAbc, getScoreCliente, getClustersClientes, getCorrelacoes, getRiscoEscritorio,
 }

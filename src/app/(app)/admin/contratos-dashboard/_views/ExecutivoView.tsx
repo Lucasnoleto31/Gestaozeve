@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import {
   Download, ShieldAlert, TrendingUp, TrendingDown, Activity,
-  Trophy, AlertCircle, Layers, Server,
+  Trophy, AlertCircle, Layers, Server, Gauge,
 } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
@@ -48,6 +48,7 @@ export function ExecutivoView() {
     produtosDetalhados: true, zeragemDistribuicao: true, receitaBrutaLiquida: true,
     receitaPlataforma: true, receitaClearing: true, scoreQualidade: true,
     metasAssessor: true, alertasExecutivos: true,
+    riscoEscritorio: true,
   })
 
   const shell = useShell()
@@ -76,6 +77,50 @@ export function ExecutivoView() {
           Exportar (WhatsApp / Story / Feed)
         </Link>
       </div>
+
+      {/* Risco do Escritório — índice consolidado 0-100 */}
+      {d.riscoEsc && (
+        <Block title="Risco do Escritório"
+          subtitle="Índice consolidado 0-100 (maior = pior). Média de 4 fatores: concentração top 3, % zeragem, % inativos 30d, % barras fora de ritmo.">
+          {(() => {
+            const c = d.riscoEsc.classificacao
+            const color = c === 'critico' ? '#dc2626' : c === 'atencao' ? '#f59e0b' : '#10b981'
+            const label = c === 'critico' ? 'Crítico' : c === 'atencao' ? 'Atenção' : 'Saudável'
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+                <div className="rounded-xl p-5 lg:col-span-1 flex flex-col justify-center"
+                  style={{ background: `${color}15`, border: `2px solid ${color}40`, borderLeft: `8px solid ${color}` }}>
+                  <p className="text-xs uppercase tracking-widest font-semibold inline-flex items-center gap-2" style={{ color }}>
+                    <Gauge className="w-4 h-4" /> Índice geral
+                  </p>
+                  <p className="text-5xl font-bold mt-2 tabular-nums" style={{ color }}>
+                    {d.riscoEsc.indice}<span className="text-2xl text-gray-400 ml-1">/100</span>
+                  </p>
+                  <p className="text-sm font-semibold mt-1" style={{ color }}>{label}</p>
+                </div>
+
+                <div className="lg:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Concentração', valor: d.riscoEsc.fator_concentracao, detalhe: d.riscoEsc.detalhe_concentracao },
+                    { label: 'Zeragem',       valor: d.riscoEsc.fator_zeragem,       detalhe: d.riscoEsc.detalhe_zeragem },
+                    { label: 'Inativos',      valor: d.riscoEsc.fator_inativos,      detalhe: d.riscoEsc.detalhe_inativos },
+                    { label: 'Metas',         valor: d.riscoEsc.fator_metas,         detalhe: d.riscoEsc.detalhe_metas },
+                  ].map((f, i) => {
+                    const fc = f.valor >= 70 ? '#dc2626' : f.valor >= 40 ? '#f59e0b' : '#10b981'
+                    return (
+                      <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: `4px solid ${fc}` }}>
+                        <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">{f.label}</p>
+                        <p className="text-3xl font-bold tabular-nums mt-1" style={{ color: fc }}>{f.valor}</p>
+                        <p className="text-[10px] text-gray-500 mt-1 leading-tight">{f.detalhe}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+        </Block>
+      )}
 
       {/* Mapa de alertas executivos — destaque no topo */}
       {d.alertasExec.length > 0 && (

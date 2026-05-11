@@ -34,6 +34,11 @@ export type DataFlags = {
   fluxoOperacional?: boolean
   indiceSobrevivencia?: boolean
   riscoOperacional?: boolean
+  curvaAbc?: boolean
+  scoreCliente?: boolean
+  clustersClientes?: boolean
+  correlacoes?: boolean
+  riscoEscritorio?: boolean
 }
 
 export function useDashboardData(actions: DashboardActions, periodo: Periodo, barra: string | null, flags: DataFlags) {
@@ -67,6 +72,11 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     fluxoOp: Awaited<ReturnType<DashboardActions['getFluxoOperacional']>> | null
     indiceSobr: Awaited<ReturnType<DashboardActions['getIndiceSobrevivencia']>> | null
     riscoOp: Awaited<ReturnType<DashboardActions['getRiscoOperacional']>>
+    abc: Awaited<ReturnType<DashboardActions['getCurvaAbc']>>
+    scoreCli: Awaited<ReturnType<DashboardActions['getScoreCliente']>>
+    clusters: Awaited<ReturnType<DashboardActions['getClustersClientes']>>
+    correl: Awaited<ReturnType<DashboardActions['getCorrelacoes']>>
+    riscoEsc: Awaited<ReturnType<DashboardActions['getRiscoEscritorio']>> | null
   }>({
     kpis: null, produtos: [], topClientes: [], diario: [], heatmap: [], evolucao: [],
     receitaTotal: null, receitaPorAss: [], receitaProj: null, meta: null,
@@ -75,6 +85,7 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     produtosDetalhados: [], zeragemDist: [], receitaBL: null,
     receitaPlat: [], receitaClear: [], score: [], metasAss: [], alertasExec: [],
     fluxoOp: null, indiceSobr: null, riscoOp: [],
+    abc: [], scoreCli: [], clusters: [], correl: [], riscoEsc: null,
   })
 
   const [isPending, startTransition] = useTransition()
@@ -100,7 +111,8 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
       try {
         const [kp, pp, tc, dp, hm, ev, rt, ra, rp, m, al, ac, as, co, lt, rk, bd,
                pd, zd, rbl, rpl, rcl, sc, mt, ae,
-               fo, is, ro] = await Promise.all([
+               fo, is, ro,
+               abc, scli, cls, corr, resc] = await Promise.all([
           flags.kpis        ? actions.getKpis(periodo, barra)            : Promise.resolve(null),
           flags.produtos    ? actions.getPorProduto(periodo, barra)      : Promise.resolve([]),
           flags.topClientes ? actions.getTopClientes(periodo, 20, barra) : Promise.resolve([]),
@@ -129,6 +141,11 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
           flags.fluxoOperacional     ? actions.getFluxoOperacional(periodo, barra)    : Promise.resolve(null),
           flags.indiceSobrevivencia  ? actions.getIndiceSobrevivencia(periodo, barra) : Promise.resolve(null),
           flags.riscoOperacional     ? actions.getRiscoOperacional(50, barra)         : Promise.resolve([]),
+          flags.curvaAbc             ? actions.getCurvaAbc(periodo, barra)            : Promise.resolve([]),
+          flags.scoreCliente         ? actions.getScoreCliente(100)                   : Promise.resolve([]),
+          flags.clustersClientes     ? actions.getClustersClientes()                  : Promise.resolve([]),
+          flags.correlacoes          ? actions.getCorrelacoes()                       : Promise.resolve([]),
+          flags.riscoEscritorio      ? actions.getRiscoEscritorio()                   : Promise.resolve(null),
         ])
         setData(d => ({
           ...d,
@@ -139,6 +156,7 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
           produtosDetalhados: pd, zeragemDist: zd, receitaBL: rbl,
           receitaPlat: rpl, receitaClear: rcl, score: sc, metasAss: mt, alertasExec: ae,
           fluxoOp: fo, indiceSobr: is, riscoOp: ro,
+          abc: abc, scoreCli: scli, clusters: cls, correl: corr, riscoEsc: resc,
         }))
       } catch (err) {
         setErro((err as Error).message ?? 'Falha ao carregar dados')

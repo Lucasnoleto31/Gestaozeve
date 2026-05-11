@@ -84,12 +84,12 @@ export function ExportView() {
         </div>
       </div>
 
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body { background: white !important; }
           @page { size: ${fmt.w}px ${fmt.h}px; margin: 0; }
         }
-      `}</style>
+      ` }} />
     </div>
   )
 }

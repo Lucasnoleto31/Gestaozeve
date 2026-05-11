@@ -620,6 +620,192 @@ export async function getLtvClientes(limit = 50): Promise<LtvCliente[]> {
   }))
 }
 
+// -----------------------------------------------------------
+// Sprint 6 — Executivo expandido
+// -----------------------------------------------------------
+export type ProdutoDetalhado = {
+  produto: string
+  lotes_dia: number
+  lotes_mtd: number
+  lotes_mes_anterior: number
+  lotes_periodo: number
+  media_diaria: number
+  delta_pct_vs_mes_ant: number
+}
+
+export type ZeragemIntensidade = {
+  intensidade: 'leve' | 'media' | 'alta' | 'total'
+  num_eventos: number
+  lotes_zerados: number
+  pct_dos_zerados: number
+}
+
+export type ReceitaBrutaLiquida = {
+  receita_bruta: number
+  receita_liquida: number
+  pct_repasse_medio: number
+}
+
+export type ReceitaPorPlataforma = {
+  plataforma: string
+  lotes_operados: number
+  lotes_zerados: number
+  num_clientes: number
+}
+
+export type ReceitaPorClearing = {
+  clearing: string
+  receita_total: number
+  num_barras: number
+  lotes_operados: number
+}
+
+export type ScoreQualidadeRow = {
+  rank: number
+  barra_nome: string
+  numero: string | null
+  lotes_operados: number
+  lotes_zerados: number
+  pct_zeragem: number
+  receita_total: number
+  score_qualidade: number
+}
+
+export type MetaAssessorRow = {
+  barra_nome: string
+  numero: string | null
+  ano: number
+  meta_receita: number
+  realizado_receita: number
+  pct_atingido: number
+  status: 'ok' | 'atencao' | 'critico' | 'sem_meta'
+}
+
+export type AlertaExecutivo = {
+  tipo: string
+  severidade: 'alta' | 'media' | 'baixa'
+  titulo: string
+  descricao: string
+  valor: number
+}
+
+export async function getProdutosDetalhados(p: Periodo, barra: string | null = null): Promise<ProdutoDetalhado[]> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_contratos_por_produto_detalhado', {
+    p_inicio: inicio, p_fim: fim, p_barra: barra,
+  })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    produto: String(r.produto ?? 'OUTRO'),
+    lotes_dia: num(r.lotes_dia),
+    lotes_mtd: num(r.lotes_mtd),
+    lotes_mes_anterior: num(r.lotes_mes_anterior),
+    lotes_periodo: num(r.lotes_periodo),
+    media_diaria: num(r.media_diaria),
+    delta_pct_vs_mes_ant: num(r.delta_pct_vs_mes_ant),
+  }))
+}
+
+export async function getZeragemDistribuicao(p: Periodo, barra: string | null = null): Promise<ZeragemIntensidade[]> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_zeragem_distribuicao', {
+    p_inicio: inicio, p_fim: fim, p_barra: barra,
+  })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    intensidade: r.intensidade as ZeragemIntensidade['intensidade'],
+    num_eventos: num(r.num_eventos),
+    lotes_zerados: num(r.lotes_zerados),
+    pct_dos_zerados: num(r.pct_dos_zerados),
+  }))
+}
+
+export async function getReceitaBrutaLiquida(p: Periodo): Promise<ReceitaBrutaLiquida> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_receita_bruta_liquida', { p_inicio: inicio, p_fim: fim })
+  if (error) throw new Error(error.message)
+  const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  return {
+    receita_bruta: num(r?.receita_bruta),
+    receita_liquida: num(r?.receita_liquida),
+    pct_repasse_medio: num(r?.pct_repasse_medio),
+  }
+}
+
+export async function getReceitaPorPlataforma(p: Periodo): Promise<ReceitaPorPlataforma[]> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_receita_por_plataforma', { p_inicio: inicio, p_fim: fim })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    plataforma: String(r.plataforma ?? 'Sem plataforma'),
+    lotes_operados: num(r.lotes_operados),
+    lotes_zerados: num(r.lotes_zerados),
+    num_clientes: num(r.num_clientes),
+  }))
+}
+
+export async function getReceitaPorClearing(p: Periodo): Promise<ReceitaPorClearing[]> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_receita_por_clearing', { p_inicio: inicio, p_fim: fim })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    clearing: String(r.clearing ?? 'Genial'),
+    receita_total: num(r.receita_total),
+    num_barras: num(r.num_barras),
+    lotes_operados: num(r.lotes_operados),
+  }))
+}
+
+export async function getScoreQualidade(p: Periodo): Promise<ScoreQualidadeRow[]> {
+  const supabase = await adminOnly()
+  const { inicio, fim } = await resolvePeriodo(p)
+  const { data, error } = await supabase.rpc('dashboard_score_qualidade_barras', { p_inicio: inicio, p_fim: fim })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    rank: num(r.rank),
+    barra_nome: String(r.barra_nome ?? ''),
+    numero: r.numero ? String(r.numero) : null,
+    lotes_operados: num(r.lotes_operados),
+    lotes_zerados: num(r.lotes_zerados),
+    pct_zeragem: num(r.pct_zeragem),
+    receita_total: num(r.receita_total),
+    score_qualidade: num(r.score_qualidade),
+  }))
+}
+
+export async function getMetasAssessor(): Promise<MetaAssessorRow[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_metas_assessor')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    barra_nome: String(r.barra_nome ?? ''),
+    numero: r.numero ? String(r.numero) : null,
+    ano: num(r.ano),
+    meta_receita: num(r.meta_receita),
+    realizado_receita: num(r.realizado_receita),
+    pct_atingido: num(r.pct_atingido),
+    status: (r.status ?? 'sem_meta') as MetaAssessorRow['status'],
+  }))
+}
+
+export async function getAlertasExecutivos(): Promise<AlertaExecutivo[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_alertas_executivos')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    tipo: String(r.tipo ?? ''),
+    severidade: (r.severidade ?? 'baixa') as AlertaExecutivo['severidade'],
+    titulo: String(r.titulo ?? ''),
+    descricao: String(r.descricao ?? ''),
+    valor: num(r.valor),
+  }))
+}
+
 export type BudgetZeragemRow = {
   barra_nome: string
   numero: string | null

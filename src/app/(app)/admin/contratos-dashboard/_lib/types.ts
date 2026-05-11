@@ -4,6 +4,9 @@ import type {
   ReceitaTotal, ReceitaPorAssessor, ReceitaProjecao, MetaAnual,
   AlertaRow, AcuracidadeResumo, AcuracidadePonto,
   CohortPonto, LtvCliente, RankingAssessorRow, BudgetZeragemRow,
+  ProdutoDetalhado, ZeragemIntensidade, ReceitaBrutaLiquida,
+  ReceitaPorPlataforma, ReceitaPorClearing, ScoreQualidadeRow,
+  MetaAssessorRow, AlertaExecutivo,
 } from '../actions'
 
 export type DashboardActions = {
@@ -26,6 +29,14 @@ export type DashboardActions = {
   getLtvClientes: (limit?: number) => Promise<LtvCliente[]>
   getRankingAssessores: (p: Periodo) => Promise<RankingAssessorRow[]>
   getBudgetZeragem: (p: Periodo) => Promise<BudgetZeragemRow[]>
+  getProdutosDetalhados: (p: Periodo, barra?: string | null) => Promise<ProdutoDetalhado[]>
+  getZeragemDistribuicao: (p: Periodo, barra?: string | null) => Promise<ZeragemIntensidade[]>
+  getReceitaBrutaLiquida: (p: Periodo) => Promise<ReceitaBrutaLiquida>
+  getReceitaPorPlataforma: (p: Periodo) => Promise<ReceitaPorPlataforma[]>
+  getReceitaPorClearing: (p: Periodo) => Promise<ReceitaPorClearing[]>
+  getScoreQualidade: (p: Periodo) => Promise<ScoreQualidadeRow[]>
+  getMetasAssessor: () => Promise<MetaAssessorRow[]>
+  getAlertasExecutivos: () => Promise<AlertaExecutivo[]>
 }
 
 export type DashboardTab =

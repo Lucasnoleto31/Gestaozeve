@@ -7,6 +7,9 @@ import {
   getMetaAnual, getAlertas, getAcuracidadeResumo, getAcuracidadeSerie,
   getBarrasAtivas,
   getCohortRetencao, getLtvClientes, getRankingAssessores, getBudgetZeragem,
+  getProdutosDetalhados, getZeragemDistribuicao, getReceitaBrutaLiquida,
+  getReceitaPorPlataforma, getReceitaPorClearing, getScoreQualidade,
+  getMetasAssessor, getAlertasExecutivos,
 } from '../actions'
 import type { DashboardActions } from './types'
 
@@ -17,4 +20,7 @@ export const ACTIONS: DashboardActions = {
   getMetaAnual, getAlertas, getAcuracidadeResumo, getAcuracidadeSerie,
   getBarrasAtivas,
   getCohortRetencao, getLtvClientes, getRankingAssessores, getBudgetZeragem,
+  getProdutosDetalhados, getZeragemDistribuicao, getReceitaBrutaLiquida,
+  getReceitaPorPlataforma, getReceitaPorClearing, getScoreQualidade,
+  getMetasAssessor, getAlertasExecutivos,
 }

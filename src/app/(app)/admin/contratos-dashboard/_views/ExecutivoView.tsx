@@ -10,7 +10,7 @@ import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
 import {
-  KpiGrid, ReceitaBlock, MetaBlock, AlertasBlock, Block,
+  KpiGrid, ReceitaBlock, MetaBlock, Block,
 } from '../View'
 import { KpiSkeleton, BlockSkeleton } from '../Charts'
 import { fmtNum, fmtBRL, fmtBRL2 } from '../_lib/utils'
@@ -44,7 +44,7 @@ const INTENSIDADE_INFO: Record<string, { label: string; color: string; descricao
 export function ExecutivoView() {
   const { periodo, barra } = useDashboardFilters()
   const d = useDashboardData(ACTIONS, periodo, barra, {
-    kpis: true, receita: true, meta: true, alertas: true, budget: true,
+    kpis: true, receita: true, meta: true, budget: true,
     produtosDetalhados: true, zeragemDistribuicao: true, receitaBrutaLiquida: true,
     receitaPlataforma: true, receitaClearing: true, scoreQualidade: true,
     metasAssessor: true, alertasExecutivos: true,
@@ -375,10 +375,6 @@ export function ExecutivoView() {
             </div>
           )}
       </Block>
-
-      <AlertasBlock data={d.alertas} onPickCliente={(id) => {
-        if (id) window.location.href = `/clientes/${id}`
-      }} />
 
       {/* Indicador de loading inline */}
       {d.isPending && (

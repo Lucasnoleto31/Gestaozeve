@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, ReferenceLine,
+  CartesianGrid, Tooltip, ReferenceLine,
 } from 'recharts'
-import { Sparkles, Loader2, AlertTriangle } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, TrendingUp, Target, Activity, Layers } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { AcuracidadeBlock, Block } from '../View'
+import { Block } from '../View'
 import { fmtNum } from '../_lib/utils'
+import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { ACTIONS } from '../_lib/dashboardActions'
 import { holtWintersAdd } from '../_lib/holtWinters'
 import { getInsightsIA, type InsightsResposta } from '../actions'
@@ -28,9 +29,9 @@ export function ForecastView() {
     if (d.kpis?.dataset_max) shell.setDatasetMax(d.kpis.dataset_max)
   }, [d.kpis?.dataset_max, shell])
 
-  // Aplica Holt-Winters mensal (sazonal trimestral, horizonte 4 meses)
-  const forecastData = useMemo(() => {
-    if (d.evolucao.length < 3) return []
+  // Holt-Winters mensal
+  const { forecastData, forecastProxMes } = useMemo(() => {
+    if (d.evolucao.length < 3) return { forecastData: [], forecastProxMes: 0 }
     const ordenado = [...d.evolucao].sort((a, b) => a.mes_data.localeCompare(b.mes_data))
     const valores = ordenado.map(e => e.lotes_operados)
     const hw = holtWintersAdd(valores, { seasonLen: 3, horizon: 4 })
@@ -45,7 +46,6 @@ export function ForecastView() {
       Ajustado: Math.round(hw.fitted[i] ?? 0),
       Forecast: null as number | null,
     }))
-    // Próximos 4 meses estimados
     const ultimoMes = new Date(ordenado[ordenado.length - 1].mes_data + 'T00:00:00')
     const future = hw.forecast.map((v, i) => {
       const dd = new Date(ultimoMes); dd.setMonth(dd.getMonth() + i + 1)
@@ -57,10 +57,9 @@ export function ForecastView() {
         Forecast: Math.round(v),
       }
     })
-    return [...histor, ...future]
+    return { forecastData: [...histor, ...future], forecastProxMes: hw.forecast[0] ?? 0 }
   }, [d.evolucao])
 
-  // Insights via OpenAI (manual — botão)
   const [insights, setInsights] = useState<InsightsResposta | null>(null)
   const [isPendingIA, startTransitionIA] = useTransition()
 
@@ -68,20 +67,15 @@ export function ForecastView() {
     if (!d.kpis) return
     startTransitionIA(async () => {
       const r = await getInsightsIA({
-        periodo,
-        kpis: d.kpis!,
-        receita: d.receitaTotal,
-        meta: d.meta,
-        topClientes: d.topClientes,
-        alertas: d.alertas,
-        porProduto: d.produtos,
+        periodo, kpis: d.kpis!, receita: d.receitaTotal, meta: d.meta,
+        topClientes: d.topClientes, alertas: d.alertas, porProduto: d.produtos,
       })
       setInsights(r)
     })
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {d.erro && (
         <div className="rounded-xl px-4 py-3 text-sm"
           style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
@@ -89,10 +83,30 @@ export function ForecastView() {
         </div>
       )}
 
-      <Block title="Forecast — próximos 4 meses (Holt-Winters)"
-        subtitle="Sazonalidade trimestral aplicada sobre histórico mensal. Linha tracejada = previsão.">
+      {/* 4 KPIs preditivos */}
+      <KpiRow>
+        <KpiCard icon={TrendingUp} label="Forecast próx. mês"
+          value={forecastProxMes ? fmtNum(Math.round(forecastProxMes)) : '—'}
+          sub="lotes operados (Holt-Winters)" accent="#a855f7" />
+        <KpiCard icon={Target} label="MAPE"
+          value={d.acuracidade ? `${d.acuracidade.mape.toFixed(1)}%` : '—'}
+          sub={d.acuracidade ? `${d.acuracidade.num_dias}d de histórico` : undefined}
+          accent="#1764f4" />
+        <KpiCard icon={Activity} label="Viés"
+          value={d.acuracidade ? `${d.acuracidade.vies > 0 ? '+' : ''}${d.acuracidade.vies.toFixed(1)}` : '—'}
+          sub={d.acuracidade?.vies_label ?? '—'}
+          accent="#10b981" />
+        <KpiCard icon={Sparkles} label="Insights IA"
+          value={insights ? `${insights.insights.length}` : '—'}
+          sub={isPendingIA ? 'gerando…' : insights ? 'gerados' : 'clique "Gerar"'}
+          accent="#f59e0b" />
+      </KpiRow>
+
+      {/* 1 gráfico — Forecast Holt-Winters */}
+      <Block title="Previsão de volume — próximos 4 meses"
+        subtitle="Holt-Winters com sazonalidade trimestral. Linha azul = realizado, roxa tracejada = previsão.">
         {forecastData.length === 0
-          ? <p className="text-sm text-gray-400 py-4">Sem dados históricos suficientes.</p>
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados históricos suficientes.'}</p>
           : (
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={forecastData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
@@ -100,10 +114,8 @@ export function ForecastView() {
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                 <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={fmtNum} />
                 <Tooltip
-                  contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(148,163,184,0.2)',
-                                  borderRadius: 12, color: '#e2e8f0', fontSize: 12 }}
+                  contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 12, color: '#e2e8f0', fontSize: 12 }}
                   formatter={(v) => typeof v === 'number' ? fmtNum(v) : String(v)} />
-                <Legend wrapperStyle={{ fontSize: 12 }} iconType="rect" />
                 <ReferenceLine y={0} stroke="#475569" />
                 <Area type="monotone" dataKey="Ajustado" stroke="#94a3b8" fill="rgba(148,163,184,0.15)"
                   strokeWidth={1.5} strokeDasharray="3 3" />
@@ -116,10 +128,48 @@ export function ForecastView() {
           )}
       </Block>
 
-      <AcuracidadeBlock resumo={d.acuracidade} serie={d.acuracidadeSerie} />
+      {/* Tabela: acuracidade dia a dia */}
+      <Block title="Acuracidade — previsto vs realizado"
+        subtitle={`Últimos ${d.acuracidade?.num_dias ?? 60} dias. Erro % = |realizado - previsto| / realizado.`}>
+        {d.acuracidadeSerie.length === 0
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
+          : (
+            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+              <table className="text-xs border-collapse min-w-max w-full">
+                <thead style={{ background: 'var(--surface-2)' }}>
+                  <tr>
+                    {['Data', 'Previsto', 'Realizado', 'Erro', '% Erro'].map((h, i) => (
+                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.acuracidadeSerie.slice(-30).reverse().map((p, i) => {
+                    const erroColor = p.pct_erro != null && p.pct_erro > 20 ? 'text-rose-600'
+                      : p.pct_erro != null && p.pct_erro > 10 ? 'text-amber-600' : 'text-emerald-700'
+                    return (
+                      <tr key={p.data}
+                        style={{ borderTop: '1px solid var(--border)',
+                                 background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                        <td className="px-3 py-1.5 text-gray-700 tabular-nums">{p.data}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.previsto)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.realizado)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.erro)}</td>
+                        <td className={`px-3 py-1.5 text-right tabular-nums font-semibold ${erroColor}`}>
+                          {p.pct_erro != null ? `${p.pct_erro.toFixed(1)}%` : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </Block>
 
+      {/* Insights IA — botão lateral */}
       <Block title="Insights automáticos (IA)"
-        subtitle="Análise gerada por OpenAI a partir dos KPIs, receita, meta, top clientes e alertas do período."
+        subtitle="Análise generativa via OpenAI sobre KPIs, receita, meta e alertas."
         action={
           <button onClick={gerarInsights} disabled={isPendingIA || !d.kpis}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 cursor-pointer"
@@ -141,14 +191,14 @@ export function ForecastView() {
           </div>
         )}
         {insights && insights.insights.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {insights.insights.map((ins, i) => {
               const palette = {
-                positivo: { bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.4)', tx: '#059669' },
-                atencao:  { bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.4)', tx: '#d97706' },
-                critico:  { bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.4)', tx: '#dc2626' },
-                info:     { bg: 'rgba(23,100,244,0.1)', border: 'rgba(23,100,244,0.4)', tx: '#1764f4' },
-              }[ins.severidade] ?? { bg: 'rgba(23,100,244,0.1)', border: 'rgba(23,100,244,0.4)', tx: '#1764f4' }
+                positivo: { bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.3)', tx: '#059669' },
+                atencao:  { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)', tx: '#d97706' },
+                critico:  { bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.3)', tx: '#dc2626' },
+                info:     { bg: 'rgba(23,100,244,0.08)', border: 'rgba(23,100,244,0.3)', tx: '#1764f4' },
+              }[ins.severidade] ?? { bg: 'rgba(23,100,244,0.08)', border: 'rgba(23,100,244,0.3)', tx: '#1764f4' }
               return (
                 <div key={i} className="rounded-xl px-4 py-3"
                   style={{ background: palette.bg, border: `1px solid ${palette.border}` }}>
@@ -157,14 +207,18 @@ export function ForecastView() {
                 </div>
               )
             })}
-            {insights.gerado_em && (
-              <p className="text-[10px] text-gray-400">
-                Gerado em {new Date(insights.gerado_em).toLocaleString('pt-BR')} · {insights.modelo}
-              </p>
-            )}
+            <p className="text-[10px] text-gray-400">
+              Gerado em {new Date(insights.gerado_em).toLocaleString('pt-BR')} · {insights.modelo}
+            </p>
           </div>
         )}
       </Block>
+
+      {d.isPending && (
+        <div className="text-xs text-gray-400 flex items-center gap-2 justify-end">
+          <Layers className="w-3 h-3 animate-pulse" /> atualizando…
+        </div>
+      )}
     </div>
   )
 }

@@ -3,52 +3,23 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import {
-  Download, ShieldAlert, TrendingUp, TrendingDown, Activity,
-  Trophy, AlertCircle, Layers, Server, Gauge,
+  Download, TrendingDown, Users, Activity, DollarSign,
+  Layers, AlertCircle, Gauge,
 } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import {
-  KpiGrid, ReceitaBlock, MetaBlock, Block,
-} from '../View'
-import { KpiSkeleton, BlockSkeleton } from '../Charts'
+import { Block } from '../View'
+import { EvolucaoMensalChart, BlockSkeleton } from '../Charts'
 import { fmtNum, fmtBRL, fmtBRL2 } from '../_lib/utils'
+import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { ACTIONS } from '../_lib/dashboardActions'
-
-const PRODUTO_LABEL: Record<string, string> = {
-  WIN: 'Mini índice (WIN)',
-  WDO: 'Mini dólar (WDO)',
-  IND: 'Índice cheio (IND)',
-  DOL: 'Dólar cheio (DOL)',
-  BIT: 'Bitcoin (BIT)',
-  WSP: 'S&P mini (WSP)',
-  CCM: 'Milho (CCM)',
-  SOL: 'Soja (SOL)',
-  OUTRO: 'Outros',
-}
-
-const PRODUTO_COLOR: Record<string, string> = {
-  WIN: '#1764f4', WDO: '#16a34a', IND: '#a855f7', DOL: '#dc2626',
-  BIT: '#f59e0b', WSP: '#06b6d4', CCM: '#84cc16', SOL: '#ec4899',
-  OUTRO: '#64748b',
-}
-
-const INTENSIDADE_INFO: Record<string, { label: string; color: string; descricao: string }> = {
-  leve:  { label: 'Leve (<30%)',     color: '#10b981', descricao: 'Operação saudável' },
-  media: { label: 'Média (30-70%)',  color: '#f59e0b', descricao: 'Atenção' },
-  alta:  { label: 'Alta (70-95%)',   color: '#f97316', descricao: 'Problemática' },
-  total: { label: 'Total (>95%)',    color: '#dc2626', descricao: 'Compulsória / cassino' },
-}
 
 export function ExecutivoView() {
   const { periodo, barra } = useDashboardFilters()
   const d = useDashboardData(ACTIONS, periodo, barra, {
-    kpis: true, receita: true, meta: true, budget: true,
-    produtosDetalhados: true, zeragemDistribuicao: true, receitaBrutaLiquida: true,
-    receitaPlataforma: true, receitaClearing: true, scoreQualidade: true,
-    metasAssessor: true, alertasExecutivos: true,
-    riscoEscritorio: true,
+    kpis: true, receita: true, meta: true, evolucao: true,
+    receitaBrutaLiquida: true, riscoEscritorio: true, alertasExecutivos: true,
   })
 
   const shell = useShell()
@@ -57,11 +28,15 @@ export function ExecutivoView() {
     if (d.kpis?.dataset_max) shell.setDatasetMax(d.kpis.dataset_max)
   }, [d.kpis?.dataset_max, shell])
 
-  const budgetCriticas = d.budget.filter(b => b.status !== 'ok')
-  const assessoresFora = d.metasAss.filter(m => m.status === 'critico' || m.status === 'atencao')
+  const pctZeragem = d.kpis && d.kpis.volume_operados > 0
+    ? (d.kpis.volume_zerados / d.kpis.volume_operados) * 100
+    : 0
+
+  const riscoColor = d.riscoEsc?.classificacao === 'critico' ? '#dc2626'
+    : d.riscoEsc?.classificacao === 'atencao' ? '#f59e0b' : '#10b981'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {d.erro && (
         <div className="rounded-xl px-4 py-3 text-sm"
           style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
@@ -71,67 +46,89 @@ export function ExecutivoView() {
 
       <div className="flex justify-end">
         <Link href={`/admin/contratos-dashboard/export?periodo=${periodo}${barra ? `&barra=${encodeURIComponent(barra)}` : ''}`}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold"
           style={{ background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--border)' }}>
           <Download className="w-3.5 h-3.5" />
-          Exportar (WhatsApp / Story / Feed)
+          Exportar
         </Link>
       </div>
 
-      {/* Risco do Escritório — índice consolidado 0-100 */}
-      {d.riscoEsc && (
-        <Block title="Risco do Escritório"
-          subtitle="Índice consolidado 0-100 (maior = pior). Média de 4 fatores: concentração top 3, % zeragem, % inativos 30d, % barras fora de ritmo.">
-          {(() => {
-            const c = d.riscoEsc.classificacao
-            const color = c === 'critico' ? '#dc2626' : c === 'atencao' ? '#f59e0b' : '#10b981'
-            const label = c === 'critico' ? 'Crítico' : c === 'atencao' ? 'Atenção' : 'Saudável'
-            return (
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-                <div className="rounded-xl p-5 lg:col-span-1 flex flex-col justify-center"
-                  style={{ background: `${color}15`, border: `2px solid ${color}40`, borderLeft: `8px solid ${color}` }}>
-                  <p className="text-xs uppercase tracking-widest font-semibold inline-flex items-center gap-2" style={{ color }}>
-                    <Gauge className="w-4 h-4" /> Índice geral
-                  </p>
-                  <p className="text-5xl font-bold mt-2 tabular-nums" style={{ color }}>
-                    {d.riscoEsc.indice}<span className="text-2xl text-gray-400 ml-1">/100</span>
-                  </p>
-                  <p className="text-sm font-semibold mt-1" style={{ color }}>{label}</p>
-                </div>
+      {/* 5 KPIs no topo */}
+      <KpiRow cols={5}>
+        <KpiCard icon={Activity} label="Volume operado"
+          value={d.kpis ? fmtNum(d.kpis.volume_operados) : '—'}
+          sub="lotes no período" accent="#1764f4" />
+        <KpiCard icon={TrendingDown} label="Volume zerado"
+          value={d.kpis ? fmtNum(d.kpis.volume_zerados) : '—'}
+          sub={`${pctZeragem.toFixed(1)}% do operado`} accent="#dc2626" />
+        <KpiCard icon={DollarSign} label="Receita líquida"
+          value={d.receitaBL ? fmtBRL2(d.receitaBL.receita_liquida) : '—'}
+          sub={d.receitaBL ? `bruta ${fmtBRL(d.receitaBL.receita_bruta)}` : undefined}
+          accent="#10b981" />
+        <KpiCard icon={Users} label="Clientes ativos"
+          value={d.kpis ? fmtNum(d.kpis.num_clientes_ativos) : '—'}
+          sub="operaram no período" accent="#a855f7" />
+        <KpiCard icon={Gauge} label="Risco do escritório"
+          value={d.riscoEsc ? `${d.riscoEsc.indice}/100` : '—'}
+          sub={d.riscoEsc?.classificacao ?? '—'}
+          accent={riscoColor} valueColor={riscoColor} />
+      </KpiRow>
 
-                <div className="lg:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: 'Concentração', valor: d.riscoEsc.fator_concentracao, detalhe: d.riscoEsc.detalhe_concentracao },
-                    { label: 'Zeragem',       valor: d.riscoEsc.fator_zeragem,       detalhe: d.riscoEsc.detalhe_zeragem },
-                    { label: 'Inativos',      valor: d.riscoEsc.fator_inativos,      detalhe: d.riscoEsc.detalhe_inativos },
-                    { label: 'Metas',         valor: d.riscoEsc.fator_metas,         detalhe: d.riscoEsc.detalhe_metas },
-                  ].map((f, i) => {
-                    const fc = f.valor >= 70 ? '#dc2626' : f.valor >= 40 ? '#f59e0b' : '#10b981'
+      {/* 1 gráfico principal */}
+      <Block title="Evolução mensal" subtitle="Operados (azul) + zerados (vermelho) por mês.">
+        {d.isPending && d.evolucao.length === 0
+          ? <BlockSkeleton height={280} />
+          : <EvolucaoMensalChart data={d.evolucao} />}
+      </Block>
+
+      {/* Tabela 1: Receita por barra */}
+      <Block title="Receita por barra (período)"
+        subtitle="Ordenado por receita total. Coluna líquida aplica % repasse cadastrado em Tarifas.">
+        {d.receitaPorAss.length === 0
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
+          : (
+            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+              <table className="text-xs border-collapse min-w-max w-full">
+                <thead style={{ background: 'var(--surface-2)' }}>
+                  <tr>
+                    {['#', 'Barra', 'Nº', 'Lotes op.', 'Lotes ze.', '% zer.', 'Receita'].map((h, i) => (
+                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 2 ? 'text-left' : 'text-right'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...d.receitaPorAss].sort((a, b) => b.receita_total - a.receita_total).map((r, i) => {
+                    const pctZe = r.lotes_operados > 0 ? (r.lotes_zerados / r.lotes_operados) * 100 : 0
                     return (
-                      <div key={i} className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: `4px solid ${fc}` }}>
-                        <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">{f.label}</p>
-                        <p className="text-3xl font-bold tabular-nums mt-1" style={{ color: fc }}>{f.valor}</p>
-                        <p className="text-[10px] text-gray-500 mt-1 leading-tight">{f.detalhe}</p>
-                      </div>
+                      <tr key={r.barra_nome + i}
+                        style={{ borderTop: '1px solid var(--border)',
+                                 background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                        <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{i + 1}</td>
+                        <td className="px-3 py-1.5 font-medium text-gray-700">{r.barra_nome}</td>
+                        <td className="px-3 py-1.5 text-gray-500 tabular-nums">{r.numero ?? '—'}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.lotes_operados)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(r.lotes_zerados)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
+                        <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-emerald-700">{fmtBRL2(r.receita_total)}</td>
+                      </tr>
                     )
                   })}
-                </div>
-              </div>
-            )
-          })()}
-        </Block>
-      )}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </Block>
 
-      {/* Mapa de alertas executivos — destaque no topo */}
+      {/* Tabela 2: Alertas executivos agregados */}
       {d.alertasExec.length > 0 && (
         <Block title="Alertas executivos"
-          subtitle="Sinais críticos derivados dos dados — revisão rápida do que precisa de atenção agora.">
+          subtitle="Sinais agregados — clique nos cards pra acessar a aba correspondente.">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {d.alertasExec.map((a, i) => {
               const palette = {
-                alta:  { bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.4)', tx: '#dc2626' },
-                media: { bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.4)', tx: '#d97706' },
-                baixa: { bg: 'rgba(23,100,244,0.1)', border: 'rgba(23,100,244,0.4)', tx: '#1764f4' },
+                alta:  { bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.3)', tx: '#dc2626' },
+                media: { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)', tx: '#d97706' },
+                baixa: { bg: 'rgba(23,100,244,0.08)', border: 'rgba(23,100,244,0.3)', tx: '#1764f4' },
               }[a.severidade]
               return (
                 <div key={i} className="rounded-xl px-4 py-3 flex items-start gap-3"
@@ -148,285 +145,44 @@ export function ExecutivoView() {
         </Block>
       )}
 
-      {d.kpis ? <KpiGrid kpis={d.kpis} /> : <KpiSkeleton />}
-
-      {/* Receita Bruta × Líquida — destaque */}
-      <Block title="Receita do período (bruta × líquida)"
-        subtitle="Bruta = total faturado. Líquida = bruta × % repasse do escritório (cadastrado em Tarifas, default 50%).">
-        {d.isPending && !d.receitaBL
-          ? <p className="text-sm text-gray-400 py-4">Carregando…</p>
-          : !d.receitaBL
-          ? <p className="text-sm text-gray-400 py-4">Sem dados.</p>
-          : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Receita bruta</p>
-                <p className="text-2xl font-bold text-gray-700 tabular-nums mt-1">{fmtBRL2(d.receitaBL.receita_bruta)}</p>
-                <p className="text-xs text-gray-500 mt-1">Soma de futuros + zeragem</p>
-              </div>
-              <div className="rounded-xl p-4" style={{ background: 'linear-gradient(135deg, rgba(23,100,244,0.08), rgba(168,85,247,0.08))', border: '1px solid rgba(23,100,244,0.2)' }}>
-                <p className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#1764f4' }}>Receita líquida</p>
-                <p className="text-2xl font-bold tabular-nums mt-1" style={{ color: '#1764f4' }}>{fmtBRL2(d.receitaBL.receita_liquida)}</p>
-                <p className="text-xs text-gray-500 mt-1">O que o escritório embolsa</p>
-              </div>
-              <div className="rounded-xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">% repasse médio</p>
-                <p className="text-2xl font-bold text-gray-700 tabular-nums mt-1">{d.receitaBL.pct_repasse_medio.toFixed(1)}%</p>
-                <p className="text-xs text-gray-500 mt-1">Ponderado pela receita</p>
-              </div>
-            </div>
-          )}
-      </Block>
-
-      {/* Receita por plataforma + clearing */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Block title="Volume por plataforma" subtitle="Identifica concentração em uma plataforma específica.">
-          {d.receitaPlat.length === 0
-            ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados — campo plataforma vazio nas importações.'}</p>
-            : (
-              <div className="space-y-2">
-                {d.receitaPlat.map(p => (
-                  <div key={p.plataforma} className="flex items-center justify-between rounded-lg px-3 py-2"
-                    style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                    <span className="text-sm font-medium text-gray-700 inline-flex items-center gap-2">
-                      <Server className="w-3.5 h-3.5 text-gray-400" />
-                      {p.plataforma}
-                    </span>
-                    <span className="text-xs tabular-nums text-gray-600">
-                      {fmtNum(p.lotes_operados)} lotes · {p.num_clientes} clientes
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-        </Block>
-
-        <Block title="Receita por clearing" subtitle="Consolidação por corretora (Genial, XP, BTG, etc).">
-          {d.receitaClear.length === 0
-            ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
-            : (
-              <div className="space-y-2">
-                {d.receitaClear.map(c => (
-                  <div key={c.clearing} className="flex items-center justify-between rounded-lg px-3 py-2"
-                    style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                    <span className="text-sm font-medium text-gray-700">{c.clearing}</span>
-                    <span className="text-xs tabular-nums">
-                      <strong className="text-emerald-700">{fmtBRL(c.receita_total)}</strong>
-                      <span className="text-gray-500 ml-2">· {c.num_barras} barras</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-        </Block>
-      </div>
-
-      {/* Contratos girados detalhados por produto */}
-      <Block title="Contratos girados por produto"
-        subtitle="Detalhamento por contrato (dia, MTD, mês anterior, média diária e Δ vs mês anterior).">
-        {d.produtosDetalhados.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
-          : (
-            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-              <table className="text-xs border-collapse min-w-max w-full">
-                <thead style={{ background: 'var(--surface-2)' }}>
-                  <tr>
-                    {['Produto', 'Hoje', 'MTD', 'Mês anterior', 'Período', 'Média/dia', 'Δ vs mês ant.'].map((h, i) => (
-                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.produtosDetalhados.map((p, i) => {
-                    const positivo = p.delta_pct_vs_mes_ant >= 0
-                    return (
-                      <tr key={p.produto + i} style={{ borderTop: '1px solid var(--border)',
-                              background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
-                        <td className="px-3 py-1.5 font-medium text-gray-700">
-                          <span className="inline-flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: PRODUTO_COLOR[p.produto] ?? '#64748b' }} />
-                            {PRODUTO_LABEL[p.produto] ?? p.produto}
-                          </span>
-                        </td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.lotes_dia)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{fmtNum(p.lotes_mtd)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.lotes_mes_anterior)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.lotes_periodo)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.media_diaria)}</td>
-                        <td className={`px-3 py-1.5 text-right tabular-nums font-semibold ${positivo ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          <span className="inline-flex items-center gap-1 justify-end">
-                            {positivo ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                            {p.delta_pct_vs_mes_ant.toFixed(1)}%
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-      </Block>
-
-      {/* Distribuição de zeragem por intensidade */}
-      <Block title="Distribuição de zeragem por intensidade"
-        subtitle="Classifica cada evento de zeragem (cliente × dia) pela proporção zerada — identifica padrão cassino.">
-        {d.zeragemDist.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem zeragens no período.'}</p>
-          : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {d.zeragemDist.map(z => {
-                const info = INTENSIDADE_INFO[z.intensidade]
-                return (
-                  <div key={z.intensidade} className="rounded-xl p-4"
-                    style={{ background: 'var(--surface)', border: `2px solid ${info.color}33`, borderLeft: `6px solid ${info.color}` }}>
-                    <p className="text-xs uppercase tracking-widest font-semibold" style={{ color: info.color }}>
-                      {info.label}
-                    </p>
-                    <p className="text-2xl font-bold text-gray-700 tabular-nums mt-1">{fmtNum(z.lotes_zerados)}</p>
-                    <p className="text-xs text-gray-500 mt-1 tabular-nums">{z.num_eventos} eventos · {z.pct_dos_zerados.toFixed(1)}% do total</p>
-                    <p className="text-[10px] text-gray-400 mt-1">{info.descricao}</p>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-      </Block>
-
-      {/* Score Qualidade Operacional */}
-      <Block title="Score de Qualidade Operacional"
-        subtitle="Receita ÷ (1 + zerados/100). Quanto MAIOR, melhor — mais receita por unidade de zeragem.">
-        {d.score.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
-          : (
-            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-              <table className="text-xs border-collapse min-w-max w-full">
-                <thead style={{ background: 'var(--surface-2)' }}>
-                  <tr>
-                    {['#', 'Barra', 'Nº', 'Lotes op.', '% ze.', 'Receita', 'Score'].map((h, i) => (
-                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 2 ? 'text-left' : 'text-right'}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.score.slice(0, 10).map(s => (
-                    <tr key={s.barra_nome + s.rank}
-                      style={{ borderTop: '1px solid var(--border)',
-                               background: s.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
-                      <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">
-                        <span className="inline-flex items-center gap-1">
-                          {s.rank <= 3 && <Trophy className="w-3 h-3 text-amber-500" />}
-                          {s.rank}
-                        </span>
-                      </td>
-                      <td className="px-3 py-1.5 font-medium text-gray-700">{s.barra_nome}</td>
-                      <td className="px-3 py-1.5 text-gray-500 tabular-nums">{s.numero ?? '—'}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(s.lotes_operados)}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">{s.pct_zeragem.toFixed(1)}%</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-emerald-700 font-semibold">{fmtBRL(s.receita_total)}</td>
-                      <td className="px-3 py-1.5 text-right font-bold tabular-nums" style={{ color: '#1764f4' }}>
-                        {fmtNum(s.score_qualidade)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-      </Block>
-
-      {d.receitaTotal
-        ? <ReceitaBlock total={d.receitaTotal} porAssessor={d.receitaPorAss} projecao={d.receitaProj} />
-        : <BlockSkeleton height={220} />}
-
-      <MetaBlock meta={d.meta} />
-
-      {/* Metas por assessor */}
-      {d.metasAss.length > 0 && (
-        <Block title="Metas por assessor"
-          subtitle={`${assessoresFora.length} barra(s) fora do ritmo. Status: ok (≥95% ritmo), atenção (80-95%), crítico (<80%).`}>
-          <div className="space-y-2">
-            {d.metasAss.map(m => {
-              const palette = {
-                ok:       { bar: '#10b981', bg: 'rgba(16,185,129,0.08)',  border: 'rgba(16,185,129,0.3)',  tx: '#059669' },
-                atencao:  { bar: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.3)',  tx: '#d97706' },
-                critico:  { bar: '#dc2626', bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.3)',   tx: '#dc2626' },
-                sem_meta: { bar: '#94a3b8', bg: 'var(--surface)',         border: 'var(--border)',         tx: '#64748b' },
-              }[m.status]
-              const widthPct = Math.min(100, m.pct_atingido)
-              return (
-                <div key={m.barra_nome} className="rounded-xl px-4 py-2.5"
-                  style={{ background: palette.bg, border: `1px solid ${palette.border}` }}>
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-sm font-medium text-gray-700 truncate inline-flex items-center gap-2">
-                      <Layers className="w-3.5 h-3.5 text-gray-400" />
-                      {m.barra_nome}{m.numero ? ` · ${m.numero}` : ''}
-                    </span>
-                    <span className="text-xs tabular-nums shrink-0 font-semibold" style={{ color: palette.tx }}>
-                      {m.pct_atingido.toFixed(1)}% · {fmtBRL(m.realizado_receita)} de {fmtBRL(m.meta_receita)}
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.2)' }}>
-                    <div className="h-full transition-all" style={{ width: `${widthPct}%`, background: palette.bar }} />
-                  </div>
-                </div>
-              )
-            })}
+      {/* Meta — apenas progresso compacto */}
+      {d.meta && d.meta.meta_receita > 0 && (
+        <Block title={`Meta ${d.meta.ano}`}
+          subtitle={`${d.meta.dias_corridos_restantes} dias corridos restantes · ritmo necessário: ${fmtBRL(d.meta.ritmo_receita_necessario)}/dia`}>
+          <div className="space-y-3">
+            <MetaProgresso label="Lotes operados" pct={d.meta.pct_lotes}
+              realizado={d.meta.realizado_lotes} meta={d.meta.meta_lotes} sufixo=" lotes" />
+            <MetaProgresso label="Receita" pct={d.meta.pct_receita}
+              realizado={d.meta.realizado_receita} meta={d.meta.meta_receita} isCurrency />
           </div>
         </Block>
       )}
 
-      {/* Budget de zeragem (existente) */}
-      <Block title="Budget de zeragem"
-        subtitle={`Limite máximo de % zeragem por barra. ${budgetCriticas.length > 0 ? `${budgetCriticas.length} barra(s) acima de 80% do budget.` : 'Todas dentro do limite.'}`}>
-        {d.isPending && d.budget.length === 0
-          ? <p className="text-sm text-gray-400 py-4">Carregando…</p>
-          : d.budget.length === 0
-          ? <p className="text-sm text-gray-400 py-4">Sem dados.</p>
-          : (
-            <div className="space-y-2">
-              {d.budget.map((b) => {
-                const isExcedido = b.status === 'excedido'
-                const isAtencao = b.status === 'atencao'
-                const palette = isExcedido
-                  ? { bar: '#dc2626', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.4)', tx: '#dc2626' }
-                  : isAtencao
-                  ? { bar: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.4)', tx: '#d97706' }
-                  : { bar: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.4)', tx: '#059669' }
-                const widthPct = Math.min(100, b.consumo_pct)
-                return (
-                  <div key={b.barra_nome} className="rounded-xl px-4 py-2.5 flex items-center gap-3"
-                    style={{ background: palette.bg, border: `1px solid ${palette.border}` }}>
-                    {(isExcedido || isAtencao) && <ShieldAlert className="w-4 h-4 shrink-0" style={{ color: palette.tx }} />}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-sm font-medium text-gray-700 truncate">
-                          {b.barra_nome}{b.numero ? ` · ${b.numero}` : ''}
-                        </span>
-                        <span className="text-xs tabular-nums shrink-0" style={{ color: palette.tx }}>
-                          {b.pct_zeragem.toFixed(1)}% / {b.budget_pct.toFixed(0)}% (consumo {b.consumo_pct.toFixed(0)}%)
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.2)' }}>
-                        <div className="h-full transition-all" style={{ width: `${widthPct}%`, background: palette.bar }} />
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-1 tabular-nums">
-                        {fmtNum(b.lotes_zerados)} ze. / {fmtNum(b.lotes_operados)} op.
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-      </Block>
-
       {/* Indicador de loading inline */}
       {d.isPending && (
         <div className="text-xs text-gray-400 flex items-center gap-2 justify-end">
-          <Activity className="w-3 h-3 animate-pulse" /> atualizando dados…
+          <Layers className="w-3 h-3 animate-pulse" /> atualizando…
         </div>
       )}
+    </div>
+  )
+}
+
+function MetaProgresso({ label, pct, realizado, meta, sufixo, isCurrency }: {
+  label: string; pct: number; realizado: number; meta: number; sufixo?: string; isCurrency?: boolean
+}) {
+  const color = pct >= 100 ? '#10b981' : pct >= 75 ? '#1764f4' : pct >= 50 ? '#f59e0b' : '#dc2626'
+  const fmt = isCurrency ? fmtBRL : (n: number) => fmtNum(n) + (sufixo ?? '')
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1 text-sm">
+        <span className="font-medium text-gray-700">{label}</span>
+        <span className="tabular-nums font-semibold" style={{ color }}>{pct.toFixed(1)}%</span>
+      </div>
+      <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.2)' }}>
+        <div className="h-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
+      </div>
+      <p className="text-xs text-gray-500 mt-1 tabular-nums">{fmt(realizado)} de {fmt(meta)}</p>
     </div>
   )
 }

@@ -1,17 +1,20 @@
 'use client'
 
 import { useEffect } from 'react'
+import { Users, UserPlus, UserX, DollarSign, Layers } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { TopClientesParetoBlock, AlertasBlock } from '../View'
-import { BlockSkeleton } from '../Charts'
+import { Block } from '../View'
+import { CohortHeatmap, BlockSkeleton } from '../Charts'
+import { fmtNum, fmtBRL2, fmtDataPt } from '../_lib/utils'
+import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { ACTIONS } from '../_lib/dashboardActions'
 
 export function ClientesView() {
   const { periodo, barra } = useDashboardFilters()
   const d = useDashboardData(ACTIONS, periodo, barra, {
-    topClientes: true, alertas: true, kpis: true,
+    topClientes: true, kpis: true, ltv: true, cohort: true, rankingAssessores: true,
   })
 
   const shell = useShell()
@@ -20,8 +23,15 @@ export function ClientesView() {
     if (d.kpis?.dataset_max) shell.setDatasetMax(d.kpis.dataset_max)
   }, [d.kpis?.dataset_max, shell])
 
+  // Agregado: clientes novos + churn total (soma do ranking expandido)
+  const novosTotal = d.ranking.reduce((s, r) => s + r.clientes_novos, 0)
+  const churnTotal = d.ranking.reduce((s, r) => s + r.clientes_churn, 0)
+  const ticketMedio = d.ltv.length > 0
+    ? d.ltv.reduce((s, c) => s + c.receita_media_mensal, 0) / d.ltv.length
+    : 0
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {d.erro && (
         <div className="rounded-xl px-4 py-3 text-sm"
           style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
@@ -29,15 +39,114 @@ export function ClientesView() {
         </div>
       )}
 
-      {d.isPending && d.topClientes.length === 0
-        ? <BlockSkeleton height={400} />
-        : <TopClientesParetoBlock data={d.topClientes} onPickCliente={(id) => {
-            if (id) window.location.href = `/clientes/${id}`
-          }} />}
+      {/* 4 KPIs de base de clientes */}
+      <KpiRow>
+        <KpiCard icon={Users} label="Clientes ativos"
+          value={d.kpis ? fmtNum(d.kpis.num_clientes_ativos) : '—'}
+          sub="no período" accent="#1764f4" />
+        <KpiCard icon={UserPlus} label="Novos"
+          value={fmtNum(novosTotal)}
+          sub="vs período anterior" accent="#10b981" />
+        <KpiCard icon={UserX} label="Churn"
+          value={fmtNum(churnTotal)}
+          sub="pararam de operar" accent="#dc2626" />
+        <KpiCard icon={DollarSign} label="Ticket médio/mês"
+          value={fmtBRL2(ticketMedio)}
+          sub="top 50 LTV" accent="#a855f7" />
+      </KpiRow>
 
-      <AlertasBlock data={d.alertas} onPickCliente={(id) => {
-        if (id) window.location.href = `/clientes/${id}`
-      }} />
+      {/* 1 gráfico principal — Cohort heatmap */}
+      <Block title="Cohort de retenção"
+        subtitle="Cada linha = mês de entrada do cliente. Colunas = % que continuam operando nos meses seguintes.">
+        {d.isPending && d.cohort.length === 0
+          ? <BlockSkeleton height={300} />
+          : <CohortHeatmap data={d.cohort} />}
+      </Block>
+
+      {/* Tabela: Top 50 LTV */}
+      <Block title="Top 50 clientes — LTV"
+        subtitle="Receita acumulada life-to-date (futuros + zeragem). Clique pra abrir o perfil.">
+        {d.ltv.length === 0
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
+          : (
+            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+              <table className="text-xs border-collapse min-w-max w-full">
+                <thead style={{ background: 'var(--surface-2)' }}>
+                  <tr>
+                    {['#', 'Cliente', 'Barra', 'Primeira op.', 'Última op.', 'Meses', 'Lotes op.', 'Receita LTV', 'Méd./mês'].map((h, i) => (
+                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 4 ? 'text-left' : 'text-right'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.ltv.map(c => (
+                    <tr key={`${c.cliente_id ?? c.cliente_nome}-${c.rank}`}
+                      onClick={() => { if (c.cliente_id) window.location.href = `/clientes/${c.cliente_id}` }}
+                      className={c.cliente_id ? 'cursor-pointer hover:bg-blue-50' : ''}
+                      style={{ borderTop: '1px solid var(--border)',
+                               background: c.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                      <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{c.rank}</td>
+                      <td className="px-3 py-1.5 font-medium text-gray-700">{c.cliente_nome}</td>
+                      <td className="px-3 py-1.5 text-gray-500">{c.assessor_nome ?? '—'}</td>
+                      <td className="px-3 py-1.5 text-gray-500 tabular-nums">{fmtDataPt(c.primeira_op)}</td>
+                      <td className="px-3 py-1.5 text-gray-500 tabular-nums">{fmtDataPt(c.ultima_op)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{c.meses_ativo}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(c.lotes_operados)}</td>
+                      <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-emerald-700">{fmtBRL2(c.receita_estimada)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-gray-600">{fmtBRL2(c.receita_media_mensal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </Block>
+
+      {/* Top clientes do período — tabela simples */}
+      <Block title="Top 20 clientes do período"
+        subtitle="Ordenado por volume operado. Pareto rápido para identificar dependências.">
+        {d.topClientes.length === 0
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
+          : (
+            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+              <table className="text-xs border-collapse min-w-max w-full">
+                <thead style={{ background: 'var(--surface-2)' }}>
+                  <tr>
+                    {['#', 'Cliente', 'Assessor', 'Lotes op.', 'Lotes ze.', '% ze', '% acum.'].map((h, i) => (
+                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 2 ? 'text-left' : 'text-right'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.topClientes.map(c => {
+                    const pctZe = c.lotes_operados > 0 ? (c.lotes_zerados / c.lotes_operados) * 100 : 0
+                    return (
+                      <tr key={`${c.cliente_id ?? c.cliente_nome}-${c.rank}`}
+                        onClick={() => { if (c.cliente_id) window.location.href = `/clientes/${c.cliente_id}` }}
+                        className={c.cliente_id ? 'cursor-pointer hover:bg-blue-50' : ''}
+                        style={{ borderTop: '1px solid var(--border)',
+                                 background: c.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                        <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{c.rank}</td>
+                        <td className="px-3 py-1.5 font-medium text-gray-700">{c.cliente_nome}</td>
+                        <td className="px-3 py-1.5 text-gray-500">{c.assessor_nome ?? '—'}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(c.lotes_operados)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(c.lotes_zerados)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{c.pct_acumulado.toFixed(1)}%</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </Block>
+
+      {d.isPending && (
+        <div className="text-xs text-gray-400 flex items-center gap-2 justify-end">
+          <Layers className="w-3 h-3 animate-pulse" /> atualizando…
+        </div>
+      )}
     </div>
   )
 }

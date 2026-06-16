@@ -72,9 +72,11 @@ function rollingMean(values: number[], window: number): (number | null)[] {
 // ===========================================================
 // 1. WIN vs WDO diário com média móvel 7d
 // ===========================================================
-export function WinVsWdoChart({ data, onClickDia }:
-  { data: DiarioProdutoRow[]; onClickDia: (data: string) => void }
+export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
+  { data: DiarioProdutoRow[]; onClickDia: (data: string) => void; mm?: number }
 ) {
+  const winKey = `WIN MM${mm}d`
+  const wdoKey = `WDO MM${mm}d`
   // Pivot por dia: { data, WIN, WDO, ... }
   const byDay = new Map<string, Record<string, number>>()
   data.forEach(r => {
@@ -88,19 +90,19 @@ export function WinVsWdoChart({ data, onClickDia }:
   data.forEach(r => { if (r.lotes_operados > 0) produtos.add(r.produto) })
   const principais = ['WIN', 'WDO'].filter(p => produtos.has(p))
 
-  // Monta linha do tempo + médias móveis 7d das duas séries principais
+  // Monta linha do tempo + médias móveis (período configurável) das duas séries principais
   const winSeries = dias.map(d => byDay.get(d)?.WIN ?? 0)
   const wdoSeries = dias.map(d => byDay.get(d)?.WDO ?? 0)
-  const winMM7 = rollingMean(winSeries, 7)
-  const wdoMM7 = rollingMean(wdoSeries, 7)
+  const winMM = rollingMean(winSeries, mm)
+  const wdoMM = rollingMean(wdoSeries, mm)
 
   const chartData = dias.map((d, i) => ({
     dia: d.slice(5),       // MM-DD
     fullDate: d,
     WIN: byDay.get(d)?.WIN ?? null,
     WDO: byDay.get(d)?.WDO ?? null,
-    'WIN MM7d': winMM7[i],
-    'WDO MM7d': wdoMM7[i],
+    [winKey]: winMM[i],
+    [wdoKey]: wdoMM[i],
   }))
 
   if (chartData.length === 0) {
@@ -124,7 +126,7 @@ export function WinVsWdoChart({ data, onClickDia }:
           <>
             <Line type="monotone" dataKey="WIN" stroke={colorFor('WIN')} strokeWidth={2.5}
               dot={{ r: 2, fill: colorFor('WIN') }} activeDot={{ r: 5 }} animationDuration={400} />
-            <Line type="monotone" dataKey="WIN MM7d" stroke={colorFor('WIN')} strokeWidth={1.5}
+            <Line type="monotone" dataKey={winKey} stroke={colorFor('WIN')} strokeWidth={1.5}
               strokeDasharray="4 3" dot={false} opacity={0.6} animationDuration={400} />
           </>
         )}
@@ -132,7 +134,7 @@ export function WinVsWdoChart({ data, onClickDia }:
           <>
             <Line type="monotone" dataKey="WDO" stroke={colorFor('WDO')} strokeWidth={2.5}
               dot={{ r: 2, fill: colorFor('WDO') }} activeDot={{ r: 5 }} animationDuration={400} />
-            <Line type="monotone" dataKey="WDO MM7d" stroke={colorFor('WDO')} strokeWidth={1.5}
+            <Line type="monotone" dataKey={wdoKey} stroke={colorFor('WDO')} strokeWidth={1.5}
               strokeDasharray="4 3" dot={false} opacity={0.6} animationDuration={400} />
           </>
         )}

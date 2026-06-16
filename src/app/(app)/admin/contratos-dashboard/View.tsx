@@ -301,12 +301,44 @@ export function TopClientesParetoBlock({ data, onPickCliente }:
 // ===========================================================
 // WIN vs WDO diário (gráfico SVG simples + média móvel 7d)
 // ===========================================================
+const MM_MIN = 2
+const MM_MAX = 90
+
+// Input do período da média móvel — texto livre, com clamp ao confirmar
+function MediaMovelInput({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [txt, setTxt] = useState(String(value))
+  useEffect(() => { setTxt(String(value)) }, [value])
+
+  function commit(raw: string) {
+    const n = parseInt(raw, 10)
+    if (!Number.isFinite(n)) return
+    onChange(Math.min(MM_MAX, Math.max(MM_MIN, n)))
+  }
+
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-gray-500 whitespace-nowrap">
+      <span>Média móvel</span>
+      <input
+        type="number" inputMode="numeric" min={MM_MIN} max={MM_MAX}
+        value={txt}
+        onChange={e => { setTxt(e.target.value); commit(e.target.value) }}
+        onBlur={e => { commit(e.target.value); setTxt(String(value)) }}
+        className="w-14 rounded-lg px-2 py-1 text-center font-semibold tabular-nums text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/30"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+      />
+      <span>dias</span>
+    </label>
+  )
+}
+
 export function WinVsWdoBlock({ data, onClickDia }: { data: DiarioProdutoRow[]; onClickDia: (data: string) => void }) {
+  const [mm, setMm] = useState(7)
   return (
     <Block title="WIN vs WDO — diário"
-      subtitle="Lotes operados por dia. Linha pontilhada = média móvel 7 dias. Clique num ponto pra abrir o dia."
+      subtitle={`Lotes operados por dia. Linha pontilhada = média móvel ${mm} dias. Clique num ponto pra abrir o dia.`}
+      action={<MediaMovelInput value={mm} onChange={setMm} />}
     >
-      <WinVsWdoChart data={data} onClickDia={onClickDia} />
+      <WinVsWdoChart data={data} onClickDia={onClickDia} mm={mm} />
     </Block>
   )
 }

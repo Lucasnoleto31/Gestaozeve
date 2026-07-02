@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import type { Periodo } from '../actions'
 import type { DashboardActions } from './types'
 
 // Hook que carrega tudo (ou subset, controlado por flags) quando periodo/barra mudam.
 // Cada sub-rota só pede o subset que precisa via flags.
+// - Falha em UMA action não descarta as demais (o primeiro erro vira o banner).
+// - Um contador de sequência descarta respostas de filtros antigos que
+//   cheguem depois da mais recente (corrida ao trocar filtro rápido).
 
 export type DataFlags = {
   kpis?: boolean
@@ -39,6 +42,9 @@ export type DataFlags = {
   clustersClientes?: boolean
   correlacoes?: boolean
   riscoEscritorio?: boolean
+  retencao?: boolean
+  incentivo?: boolean
+  incentivoClientes?: boolean
 }
 
 export function useDashboardData(actions: DashboardActions, periodo: Periodo, barra: string | null, flags: DataFlags) {
@@ -77,6 +83,9 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     clusters: Awaited<ReturnType<DashboardActions['getClustersClientes']>>
     correl: Awaited<ReturnType<DashboardActions['getCorrelacoes']>>
     riscoEsc: Awaited<ReturnType<DashboardActions['getRiscoEscritorio']>> | null
+    retencao: Awaited<ReturnType<DashboardActions['getRetencaoMensal']>>
+    incentivo: Awaited<ReturnType<DashboardActions['getIncentivoMensal']>>
+    incentivoCli: Awaited<ReturnType<DashboardActions['getIncentivoClientes']>>
   }>({
     kpis: null, produtos: [], topClientes: [], diario: [], heatmap: [], evolucao: [],
     receitaTotal: null, receitaPorAss: [], receitaProj: null, meta: null,
@@ -86,10 +95,12 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
     receitaPlat: [], receitaClear: [], score: [], metasAss: [], alertasExec: [],
     fluxoOp: null, indiceSobr: null, riscoOp: [],
     abc: [], scoreCli: [], clusters: [], correl: [], riscoEsc: null,
+    retencao: [], incentivo: [], incentivoCli: [],
   })
 
   const [isPending, startTransition] = useTransition()
   const [erro, setErro] = useState<string | null>(null)
+  const seqRef = useRef(0)
 
   // Carrega lista de barras 1x na montagem (flag separada — mudar periodo não recarrega)
   useEffect(() => {
@@ -104,63 +115,75 @@ export function useDashboardData(actions: DashboardActions, periodo: Periodo, ba
   // imutáveis por sub-rota). Aceitamos a violação consciente — o disable
   // fica na linha do array de deps porque o useEffect ocupa várias linhas.
   useEffect(() => {
+    const seq = ++seqRef.current
     // setState ocorre depois de await dentro de startTransition (assíncrono).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setErro(null)
     startTransition(async () => {
-      try {
-        const [kp, pp, tc, dp, hm, ev, rt, ra, rp, m, al, ac, as, co, lt, rk, bd,
-               pd, zd, rbl, rpl, rcl, sc, mt, ae,
-               fo, is, ro,
-               abc, scli, cls, corr, resc] = await Promise.all([
-          flags.kpis        ? actions.getKpis(periodo, barra)            : Promise.resolve(null),
-          flags.produtos    ? actions.getPorProduto(periodo, barra)      : Promise.resolve([]),
-          flags.topClientes ? actions.getTopClientes(periodo, 20, barra) : Promise.resolve([]),
-          flags.diario      ? actions.getDiarioProduto(periodo, barra)   : Promise.resolve([]),
-          flags.heatmap     ? actions.getHeatmapDow(periodo, barra)      : Promise.resolve([]),
-          flags.evolucao    ? actions.getEvolucaoMensal()                : Promise.resolve([]),
-          flags.receita     ? actions.getReceitaTotal(periodo)           : Promise.resolve(null),
-          flags.receita     ? actions.getReceitaPorAssessor(periodo)     : Promise.resolve([]),
-          flags.receita     ? actions.getReceitaProjecao()               : Promise.resolve(null),
-          flags.meta        ? actions.getMetaAnual()                     : Promise.resolve(null),
-          flags.alertas     ? actions.getAlertas(30, barra)              : Promise.resolve([]),
-          flags.acuracidade ? actions.getAcuracidadeResumo(60)           : Promise.resolve(null),
-          flags.acuracidade ? actions.getAcuracidadeSerie(60)            : Promise.resolve([]),
-          flags.cohort      ? actions.getCohortRetencao(12)              : Promise.resolve([]),
-          flags.ltv         ? actions.getLtvClientes(50)                 : Promise.resolve([]),
-          flags.rankingAssessores ? actions.getRankingAssessores(periodo) : Promise.resolve([]),
-          flags.budget      ? actions.getBudgetZeragem(periodo)            : Promise.resolve([]),
-          flags.produtosDetalhados   ? actions.getProdutosDetalhados(periodo, barra)  : Promise.resolve([]),
-          flags.zeragemDistribuicao  ? actions.getZeragemDistribuicao(periodo, barra) : Promise.resolve([]),
-          flags.receitaBrutaLiquida  ? actions.getReceitaBrutaLiquida(periodo)        : Promise.resolve(null),
-          flags.receitaPlataforma    ? actions.getReceitaPorPlataforma(periodo)       : Promise.resolve([]),
-          flags.receitaClearing      ? actions.getReceitaPorClearing(periodo)         : Promise.resolve([]),
-          flags.scoreQualidade       ? actions.getScoreQualidade(periodo)             : Promise.resolve([]),
-          flags.metasAssessor        ? actions.getMetasAssessor()                     : Promise.resolve([]),
-          flags.alertasExecutivos    ? actions.getAlertasExecutivos()                 : Promise.resolve([]),
-          flags.fluxoOperacional     ? actions.getFluxoOperacional(periodo, barra)    : Promise.resolve(null),
-          flags.indiceSobrevivencia  ? actions.getIndiceSobrevivencia(periodo, barra) : Promise.resolve(null),
-          flags.riscoOperacional     ? actions.getRiscoOperacional(50, barra)         : Promise.resolve([]),
-          flags.curvaAbc             ? actions.getCurvaAbc(periodo, barra)            : Promise.resolve([]),
-          flags.scoreCliente         ? actions.getScoreCliente(100)                   : Promise.resolve([]),
-          flags.clustersClientes     ? actions.getClustersClientes()                  : Promise.resolve([]),
-          flags.correlacoes          ? actions.getCorrelacoes()                       : Promise.resolve([]),
-          flags.riscoEscritorio      ? actions.getRiscoEscritorio()                   : Promise.resolve(null),
-        ])
-        setData(d => ({
-          ...d,
-          kpis: kp, produtos: pp, topClientes: tc, diario: dp, heatmap: hm, evolucao: ev,
-          receitaTotal: rt, receitaPorAss: ra, receitaProj: rp, meta: m,
-          alertas: al, acuracidade: ac, acuracidadeSerie: as,
-          cohort: co, ltv: lt, ranking: rk, budget: bd,
-          produtosDetalhados: pd, zeragemDist: zd, receitaBL: rbl,
-          receitaPlat: rpl, receitaClear: rcl, score: sc, metasAss: mt, alertasExec: ae,
-          fluxoOp: fo, indiceSobr: is, riscoOp: ro,
-          abc: abc, scoreCli: scli, clusters: cls, correl: corr, riscoEsc: resc,
-        }))
-      } catch (err) {
-        setErro((err as Error).message ?? 'Falha ao carregar dados')
-      }
+      const erros: string[] = []
+      // Cada chamada captura o próprio erro: uma RPC quebrada não descarta as demais.
+      const safe = <T,>(cond: boolean | undefined, call: () => Promise<T>, fallback: T): Promise<T> =>
+        cond ? call().catch((e: Error) => { erros.push(e?.message ?? 'Falha ao carregar dados'); return fallback }) : Promise.resolve(fallback)
+
+      const [kp, pp, tc, dp, hm, ev, rt, ra, rp, m, al, ac, as, co, lt, rk, bd,
+             pd, zd, rbl, rpl, rcl, sc, mt, ae,
+             fo, is, ro,
+             abc, scli, cls, corr, resc,
+             ret, inc, incCli] = await Promise.all([
+        safe(flags.kpis,        () => actions.getKpis(periodo, barra),            null),
+        safe(flags.produtos,    () => actions.getPorProduto(periodo, barra),      []),
+        safe(flags.topClientes, () => actions.getTopClientes(periodo, 20, barra), []),
+        safe(flags.diario,      () => actions.getDiarioProduto(periodo, barra),   []),
+        safe(flags.heatmap,     () => actions.getHeatmapDow(periodo, barra),      []),
+        safe(flags.evolucao,    () => actions.getEvolucaoMensal(barra),           []),
+        safe(flags.receita,     () => actions.getReceitaTotal(periodo),           null),
+        safe(flags.receita,     () => actions.getReceitaPorAssessor(periodo),     []),
+        safe(flags.receita,     () => actions.getReceitaProjecao(),               null),
+        safe(flags.meta,        () => actions.getMetaAnual(),                     null),
+        safe(flags.alertas,     () => actions.getAlertas(30, barra),              []),
+        safe(flags.acuracidade, () => actions.getAcuracidadeResumo(60),           null),
+        safe(flags.acuracidade, () => actions.getAcuracidadeSerie(60),            []),
+        safe(flags.cohort,      () => actions.getCohortRetencao(12),              []),
+        safe(flags.ltv,         () => actions.getLtvClientes(50),                 []),
+        safe(flags.rankingAssessores, () => actions.getRankingAssessores(periodo), []),
+        safe(flags.budget,      () => actions.getBudgetZeragem(periodo),          []),
+        safe(flags.produtosDetalhados,  () => actions.getProdutosDetalhados(periodo, barra),  []),
+        safe(flags.zeragemDistribuicao, () => actions.getZeragemDistribuicao(periodo, barra), []),
+        safe(flags.receitaBrutaLiquida, () => actions.getReceitaBrutaLiquida(periodo),        null),
+        safe(flags.receitaPlataforma,   () => actions.getReceitaPorPlataforma(periodo),       []),
+        safe(flags.receitaClearing,     () => actions.getReceitaPorClearing(periodo),         []),
+        safe(flags.scoreQualidade,      () => actions.getScoreQualidade(periodo),             []),
+        safe(flags.metasAssessor,       () => actions.getMetasAssessor(),                     []),
+        safe(flags.alertasExecutivos,   () => actions.getAlertasExecutivos(),                 []),
+        safe(flags.fluxoOperacional,    () => actions.getFluxoOperacional(periodo, barra),    null),
+        safe(flags.indiceSobrevivencia, () => actions.getIndiceSobrevivencia(periodo, barra), null),
+        safe(flags.riscoOperacional,    () => actions.getRiscoOperacional(50, barra),         []),
+        safe(flags.curvaAbc,            () => actions.getCurvaAbc(periodo, barra),            []),
+        safe(flags.scoreCliente,        () => actions.getScoreCliente(100),                   []),
+        safe(flags.clustersClientes,    () => actions.getClustersClientes(),                  []),
+        safe(flags.correlacoes,         () => actions.getCorrelacoes(),                       []),
+        safe(flags.riscoEscritorio,     () => actions.getRiscoEscritorio(),                   null),
+        safe(flags.retencao,            () => actions.getRetencaoMensal(barra),               []),
+        safe(flags.incentivo,           () => actions.getIncentivoMensal(),                   []),
+        safe(flags.incentivoClientes,   () => actions.getIncentivoClientes(null),             []),
+      ])
+
+      // Resposta antiga chegando depois da mais nova → descarta
+      if (seq !== seqRef.current) return
+
+      setData(d => ({
+        ...d,
+        kpis: kp, produtos: pp, topClientes: tc, diario: dp, heatmap: hm, evolucao: ev,
+        receitaTotal: rt, receitaPorAss: ra, receitaProj: rp, meta: m,
+        alertas: al, acuracidade: ac, acuracidadeSerie: as,
+        cohort: co, ltv: lt, ranking: rk, budget: bd,
+        produtosDetalhados: pd, zeragemDist: zd, receitaBL: rbl,
+        receitaPlat: rpl, receitaClear: rcl, score: sc, metasAss: mt, alertasExec: ae,
+        fluxoOp: fo, indiceSobr: is, riscoOp: ro,
+        abc: abc, scoreCli: scli, clusters: cls, correl: corr, riscoEsc: resc,
+        retencao: ret, incentivo: inc, incentivoCli: incCli,
+      }))
+      if (erros.length > 0) setErro(erros[0])
     })
   }, [periodo, barra]) // eslint-disable-line react-hooks/exhaustive-deps
 

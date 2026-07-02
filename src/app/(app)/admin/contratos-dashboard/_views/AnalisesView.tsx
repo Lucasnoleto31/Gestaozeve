@@ -8,7 +8,7 @@ import { Gauge, Target, AlertOctagon, Layers } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { Block } from '../View'
+import { Block } from '../_lib/Blocks'
 import { fmtNum } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { ACTIONS } from '../_lib/dashboardActions'
@@ -70,6 +70,11 @@ export function AnalisesView() {
         </div>
       )}
 
+      <p className="text-xs text-gray-500">
+        Esta aba usa janelas fixas (últimos 90 dias / histórico) — os filtros de período e barra acima
+        <strong> não se aplicam aqui</strong>. Os índices abaixo são heurísticos (0–100, maior = pior).
+      </p>
+
       {/* 4 KPIs analíticos */}
       <KpiRow>
         <KpiCard icon={Gauge} label="Risco escritório"
@@ -77,15 +82,15 @@ export function AnalisesView() {
           sub={d.riscoEsc?.classificacao ?? '—'}
           accent={riscoColor} valueColor={riscoColor} />
         <KpiCard icon={Target} label="Concentração top 3"
-          value={d.riscoEsc ? `${d.riscoEsc.fator_concentracao}` : '—'}
+          value={d.riscoEsc ? `${d.riscoEsc.fator_concentracao}/100` : '—'}
           sub={d.riscoEsc?.detalhe_concentracao ?? '—'}
           accent="#1764f4" />
         <KpiCard icon={AlertOctagon} label="Fator zeragem"
-          value={d.riscoEsc ? `${d.riscoEsc.fator_zeragem}` : '—'}
+          value={d.riscoEsc ? `${d.riscoEsc.fator_zeragem}/100` : '—'}
           sub={d.riscoEsc?.detalhe_zeragem ?? '—'}
           accent="#dc2626" />
         <KpiCard icon={Layers} label="Fator inativos"
-          value={d.riscoEsc ? `${d.riscoEsc.fator_inativos}` : '—'}
+          value={d.riscoEsc ? `${d.riscoEsc.fator_inativos}/100` : '—'}
           sub={d.riscoEsc?.detalhe_inativos ?? '—'}
           accent="#a855f7" />
       </KpiRow>
@@ -134,8 +139,8 @@ export function AnalisesView() {
                                background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
                       <td className="px-3 py-1.5 font-medium">
                         <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold"
-                          style={{ background: `${CLUSTER_COLOR[c.cluster]}20`, color: CLUSTER_COLOR[c.cluster] }}>
-                          {CLUSTER_LABEL[c.cluster]}
+                          style={{ background: `${CLUSTER_COLOR[c.cluster] ?? '#94a3b8'}20`, color: CLUSTER_COLOR[c.cluster] ?? '#94a3b8' }}>
+                          {CLUSTER_LABEL[c.cluster] ?? c.cluster}
                         </span>
                       </td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(c.num_clientes)}</td>
@@ -169,7 +174,7 @@ export function AnalisesView() {
                 </thead>
                 <tbody>
                   {d.scoreCli.slice(0, 30).map(s => {
-                    const klass = SCORE_CLASS[s.classificacao]
+                    const klass = SCORE_CLASS[s.classificacao] ?? { label: s.classificacao, color: '#94a3b8' }
                     return (
                       <tr key={`${s.cliente_id ?? s.cliente_nome}-${s.rank}`}
                         onClick={() => { if (s.cliente_id) window.location.href = `/clientes/${s.cliente_id}` }}

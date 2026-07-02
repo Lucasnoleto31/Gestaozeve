@@ -1,11 +1,10 @@
 'use client'
 
 import {
-  LineChart, Line, BarChart, Bar, ComposedChart, Area,
+  LineChart, Line, Bar, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ReferenceLine,
 } from 'recharts'
-import type { DiarioProdutoRow, EvolucaoMensalRow, AcuracidadePonto, CohortPonto, LtvCliente } from './actions'
+import type { DiarioProdutoRow, EvolucaoMensalRow, CohortPonto } from './actions'
 
 const fmtNum = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 
@@ -70,17 +69,19 @@ function rollingMean(values: number[], window: number): (number | null)[] {
 }
 
 // ===========================================================
-// 1. WIN vs WDO diário com média móvel 7d
+// 1. WIN vs WDO diário com média móvel configurável
+// Dia de pregão sem volume do produto conta como 0 tanto na linha
+// quanto na média móvel (antes a linha mostrava buraco e a MM despencava).
 // ===========================================================
 export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
   { data: DiarioProdutoRow[]; onClickDia: (data: string) => void; mm?: number }
 ) {
-  const winKey = `WIN MM${mm}d`
-  const wdoKey = `WDO MM${mm}d`
+  const winKey = `WIN MM${mm}`
+  const wdoKey = `WDO MM${mm}`
   // Pivot por dia: { data, WIN, WDO, ... }
   const byDay = new Map<string, Record<string, number>>()
   data.forEach(r => {
-    if (!byDay.has(r.data)) byDay.set(r.data, { data: 0 } as Record<string, number>)
+    if (!byDay.has(r.data)) byDay.set(r.data, {})
     byDay.get(r.data)![r.produto] = r.lotes_operados
   })
   const dias = Array.from(byDay.keys()).sort()
@@ -97,16 +98,16 @@ export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
   const wdoMM = rollingMean(wdoSeries, mm)
 
   const chartData = dias.map((d, i) => ({
-    dia: d.slice(5),       // MM-DD
+    dia: `${d.slice(8, 10)}/${d.slice(5, 7)}`, // DD/MM
     fullDate: d,
-    WIN: byDay.get(d)?.WIN ?? null,
-    WDO: byDay.get(d)?.WDO ?? null,
+    WIN: winSeries[i],
+    WDO: wdoSeries[i],
     [winKey]: winMM[i],
     [wdoKey]: wdoMM[i],
   }))
 
-  if (chartData.length === 0) {
-    return <p className="text-sm text-gray-400 py-4">Sem dados no período.</p>
+  if (chartData.length === 0 || principais.length === 0) {
+    return <p className="text-sm text-gray-400 py-4">Sem volume de WIN/WDO no período.</p>
   }
 
   return (
@@ -144,69 +145,48 @@ export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
 }
 
 // ===========================================================
-// 2. Evolução mensal — barras stacked (operados + zerados)
+// 2. Evolução mensal — barras lado a lado (antes eram empilhadas e a
+// altura total virava um número sem sentido) + linha de clientes ativos.
 // ===========================================================
+const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+
+function labelMes(iso: string): string {
+  // 'YYYY-MM-DD' → 'mmm/AA' sem passar por Date (evita drift de fuso)
+  const m = parseInt(iso.slice(5, 7), 10)
+  return `${MESES_ABREV[m - 1] ?? iso.slice(5, 7)}/${iso.slice(2, 4)}`
+}
+
 export function EvolucaoMensalChart({ data }: { data: EvolucaoMensalRow[] }) {
   if (data.length === 0) return <p className="text-sm text-gray-400 py-4">Sem dados.</p>
 
-  const chartData = data.map(r => {
-    const d = new Date(r.mes_data + 'T00:00:00')
-    const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' })
-      .replace('.', '').toLowerCase()
-    return {
-      mes: label,
-      Operados: r.lotes_operados,
-      Zerados: r.lotes_zerados,
-    }
-  })
-
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={chartData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
-        <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
-        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={fmtNum} />
-        <Tooltip content={<PremiumTooltip />} />
-        <Legend wrapperStyle={{ fontSize: 12 }} iconType="rect" />
-        <Bar dataKey="Operados" stackId="a" fill="#1764f4" radius={[0, 0, 0, 0]} animationDuration={400} />
-        <Bar dataKey="Zerados"  stackId="a" fill="#dc2626" radius={[6, 6, 0, 0]} animationDuration={400} />
-      </BarChart>
-    </ResponsiveContainer>
-  )
-}
-
-// ===========================================================
-// 3. Acuracidade — previsto vs realizado (composto: linha + linha)
-// ===========================================================
-export function AcuracidadeChart({ serie }: { serie: AcuracidadePonto[] }) {
-  if (serie.length === 0) return null
-  const chartData = serie.map(p => ({
-    dia: p.data.slice(5),
-    Previsto: p.previsto,
-    Realizado: p.realizado,
-    erro: p.erro,
+  const chartData = data.map((r, i) => ({
+    // último mês está em andamento — marca com *
+    mes: labelMes(r.mes_data) + (i === data.length - 1 ? '*' : ''),
+    Operados: r.lotes_operados,
+    Zerados: r.lotes_zerados,
+    Clientes: r.num_clientes,
   }))
 
   return (
-    <ResponsiveContainer width="100%" height={240}>
-      <ComposedChart data={chartData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
+    <ResponsiveContainer width="100%" height={280}>
+      <ComposedChart data={chartData} margin={{ top: 10, right: 8, bottom: 0, left: 0 }}>
         <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
-        <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={fmtNum} />
+        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+        <YAxis yAxisId="lotes" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={fmtNum} />
+        <YAxis yAxisId="clientes" orientation="right" tick={{ fontSize: 11, fill: '#a855f7' }} tickFormatter={fmtNum} />
         <Tooltip content={<PremiumTooltip />} />
         <Legend wrapperStyle={{ fontSize: 12 }} iconType="rect" />
-        <Area type="monotone" dataKey="Previsto" stroke="#94a3b8" fill="rgba(148,163,184,0.15)"
-          strokeWidth={1.5} strokeDasharray="4 3" animationDuration={400} />
-        <Line type="monotone" dataKey="Realizado" stroke="#1764f4" strokeWidth={2.5}
-          dot={{ r: 2, fill: '#1764f4' }} activeDot={{ r: 5 }} animationDuration={400} />
-        <ReferenceLine y={0} stroke="#475569" />
+        <Bar yAxisId="lotes" dataKey="Operados" fill="#1764f4" radius={[4, 4, 0, 0]} animationDuration={400} />
+        <Bar yAxisId="lotes" dataKey="Zerados"  fill="#dc2626" radius={[4, 4, 0, 0]} animationDuration={400} />
+        <Line yAxisId="clientes" type="monotone" dataKey="Clientes" stroke="#a855f7" strokeWidth={2}
+          dot={{ r: 2, fill: '#a855f7' }} activeDot={{ r: 4 }} animationDuration={400} />
       </ComposedChart>
     </ResponsiveContainer>
   )
 }
 
 // ===========================================================
-// 4. Cohort Heatmap — retenção por mês × offset
+// 3. Cohort Heatmap — retenção por mês × offset
 // ===========================================================
 export function CohortHeatmap({ data }: { data: CohortPonto[] }) {
   if (data.length === 0) return <p className="text-sm text-gray-400 py-4">Sem dados de cohort.</p>
@@ -289,35 +269,6 @@ export function CohortHeatmap({ data }: { data: CohortPonto[] }) {
 }
 
 // ===========================================================
-// 5. LTV — barras horizontais (top N clientes por receita estimada)
-// ===========================================================
-export function LtvBarChart({ data }: { data: LtvCliente[] }) {
-  if (data.length === 0) return <p className="text-sm text-gray-400 py-4">Sem clientes com receita.</p>
-
-  // Limita a top 15 pra não ficar gigante
-  const chartData = data.slice(0, 15).map(c => ({
-    nome: (c.cliente_nome || 'Sem nome').slice(0, 28),
-    LTV: c.receita_estimada,
-    Mensal: c.receita_media_mensal,
-  }))
-
-  return (
-    <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 28)}>
-      <BarChart data={chartData} layout="vertical"
-        margin={{ top: 10, right: 16, bottom: 0, left: 8 }}>
-        <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
-        <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={fmtNum} />
-        <YAxis type="category" dataKey="nome" tick={{ fontSize: 11, fill: '#94a3b8' }} width={180} />
-        <Tooltip content={<PremiumTooltip formatter={(v) => 'R$ ' + v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} />} />
-        <Legend wrapperStyle={{ fontSize: 12 }} iconType="rect" />
-        <Bar dataKey="LTV" fill="#1764f4" radius={[0, 4, 4, 0]} animationDuration={400} />
-        <Bar dataKey="Mensal" fill="#94a3b8" radius={[0, 4, 4, 0]} animationDuration={400} />
-      </BarChart>
-    </ResponsiveContainer>
-  )
-}
-
-// ===========================================================
 // Skeleton — bloco placeholder enquanto carrega
 // ===========================================================
 export function BlockSkeleton({ height = 280 }: { height?: number }) {
@@ -328,21 +279,6 @@ export function BlockSkeleton({ height = 280 }: { height?: number }) {
       <div className="h-3 w-72 rounded bg-slate-100 mb-5" />
       <div className="rounded-xl bg-gradient-to-br from-slate-100 to-slate-50"
         style={{ height }} />
-    </div>
-  )
-}
-
-export function KpiSkeleton() {
-  return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="rounded-xl p-4 animate-pulse"
-          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div className="h-3 w-24 rounded bg-slate-200 mb-3" />
-          <div className="h-7 w-32 rounded bg-slate-300 mb-2" />
-          <div className="h-3 w-28 rounded bg-slate-100" />
-        </div>
-      ))}
     </div>
   )
 }

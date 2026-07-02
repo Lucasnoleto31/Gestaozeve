@@ -1,29 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, Heart, AlertTriangle, Skull, Calendar, Users, TrendingDown } from 'lucide-react'
+import { Activity, Calendar, Users, Trophy, TrendingDown } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { WinVsWdoBlock, DrilldownModal, Block } from '../View'
+import { WinVsWdoBlock, DrilldownModal, Block } from '../_lib/Blocks'
 import { BlockSkeleton } from '../Charts'
 import type { DrilldownRow } from '../actions'
 import { getDrilldownDia } from '../actions'
 import { ACTIONS } from '../_lib/dashboardActions'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
-import { fmtNum, fmtNum2 } from '../_lib/utils'
-
-const SOBREV_INFO = {
-  saudavel:   { color: '#10b981', icon: Heart },
-  atencao:    { color: '#f59e0b', icon: AlertTriangle },
-  alto_risco: { color: '#dc2626', icon: Skull },
-}
+import { fmtNum, fmtDataPt } from '../_lib/utils'
 
 export function OperacionalView() {
   const { periodo, barra } = useDashboardFilters()
   const d = useDashboardData(ACTIONS, periodo, barra, {
-    diario: true, kpis: true,
-    fluxoOperacional: true, indiceSobrevivencia: true, riscoOperacional: true,
+    kpis: true, diario: true, produtos: true,
   })
 
   const shell = useShell()
@@ -34,13 +27,13 @@ export function OperacionalView() {
 
   const [drillData, setDrillData] = useState<string | null>(null)
   const [drillRows, setDrillRows] = useState<DrilldownRow[]>([])
+  const [drillErro, setDrillErro] = useState(false)
   function abrirDrilldown(dia: string) {
-    setDrillData(dia); setDrillRows([])
-    getDrilldownDia(dia).then(setDrillRows).catch(() => {})
+    setDrillData(dia); setDrillRows([]); setDrillErro(false)
+    getDrilldownDia(dia, barra).then(setDrillRows).catch(() => setDrillErro(true))
   }
 
-  const sobrev = d.indiceSobr
-  const sobrevConf = sobrev ? SOBREV_INFO[sobrev.classificacao] : null
+  const totalOperado = d.produtos.reduce((acc, p) => acc + p.lotes_operados, 0)
 
   return (
     <div className="space-y-5">
@@ -51,68 +44,61 @@ export function OperacionalView() {
         </div>
       )}
 
-      {/* 4 KPIs operacionais */}
+      {/* 4 KPIs operacionais — todos do período/barra filtrados */}
       <KpiRow>
-        <KpiCard icon={Calendar} label="Sessões"
-          value={d.fluxoOp ? fmtNum(d.fluxoOp.num_sessoes) : '—'}
-          sub={d.fluxoOp ? `${d.fluxoOp.taxa_atividade.toFixed(0)}% dos ${d.fluxoOp.num_dias_corridos} dias` : undefined}
-          accent="#1764f4" />
+        <KpiCard icon={Calendar} label="Pregões"
+          value={d.kpis ? fmtNum(d.kpis.num_dias_com_dado) : '—'}
+          sub="dias com operação no período" accent="#1764f4" />
         <KpiCard icon={Users} label="Clientes ativos"
-          value={d.fluxoOp ? fmtNum(d.fluxoOp.num_clientes_ativos) : '—'}
-          sub={d.fluxoOp ? `${fmtNum2(d.fluxoOp.sessoes_por_cliente)} sessões/cliente` : undefined}
-          accent="#10b981" />
-        <KpiCard icon={Activity} label="Lotes/dia"
-          value={d.fluxoOp ? fmtNum(d.fluxoOp.ticket_medio_diario) : '—'}
-          sub={d.fluxoOp ? `${fmtNum2(d.fluxoOp.lotes_por_sessao)} por sessão` : undefined}
+          value={d.kpis ? fmtNum(d.kpis.num_clientes_ativos) : '—'}
+          sub="contas que operaram no período" accent="#10b981" />
+        <KpiCard icon={Activity} label="Lotes por pregão"
+          value={d.kpis ? fmtNum(d.kpis.media_diaria) : '—'}
+          sub={d.kpis?.ultimo_dia_data
+            ? `último dia (${fmtDataPt(d.kpis.ultimo_dia_data)}): ${fmtNum(d.kpis.ultimo_dia_lotes)}`
+            : undefined}
           accent="#a855f7" />
-        <KpiCard icon={sobrevConf?.icon ?? Heart} label="Índice sobrevivência"
-          value={sobrev ? (sobrev.indice >= 999 ? '∞' : fmtNum2(sobrev.indice)) : '—'}
-          sub={sobrev ? `${sobrev.num_sobreviventes} sobr / ${sobrev.num_zerados} zer` : undefined}
-          accent={sobrevConf?.color ?? '#94a3b8'}
-          valueColor={sobrevConf?.color} />
+        <KpiCard icon={Trophy} label="Melhor dia"
+          value={d.kpis?.maior_dia_data ? fmtNum(d.kpis.maior_dia_lotes) : '—'}
+          sub={d.kpis?.maior_dia_data ? `lotes em ${fmtDataPt(d.kpis.maior_dia_data)}` : undefined}
+          accent="#0891b2" />
       </KpiRow>
 
-      {/* 1 gráfico principal */}
+      {/* Gráfico diário WIN vs WDO */}
       {d.isPending && d.diario.length === 0
         ? <BlockSkeleton height={320} />
         : <WinVsWdoBlock data={d.diario} onClickDia={abrirDrilldown} />}
 
-      {/* Tabela: clientes em risco operacional */}
-      <Block title="Clientes em risco operacional"
-        subtitle="Score 0-100 (15d atual vs 16-30d anterior) — frequência, volume, eventos de zeragem total e elevação do % zeragem.">
-        {d.riscoOp.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Nenhum cliente em risco detectado.'}</p>
+      {/* Volume por produto */}
+      <Block title="Volume por produto (período)"
+        subtitle="Lotes operados/zerados e clientes distintos (por conta) em cada produto.">
+        {d.produtos.length === 0
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados no período.'}</p>
           : (
             <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
               <table className="text-xs border-collapse min-w-max w-full">
                 <thead style={{ background: 'var(--surface-2)' }}>
                   <tr>
-                    {['#', 'Cliente', 'Barra', 'Score', 'Lotes', '% ze', 'Motivo'].map((h, i) => (
-                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 2 || i === 6 ? 'text-left' : 'text-right'}`}>{h}</th>
+                    {['Produto', 'Lotes op.', '% do total', 'Lotes ze.', '% zer.', 'Clientes', 'Dias'].map((h, i) => (
+                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {d.riscoOp.map(r => {
-                    const palette = r.score_risco >= 70
-                      ? { bg: 'rgba(239,68,68,0.08)', tx: '#dc2626' }
-                      : r.score_risco >= 50
-                      ? { bg: 'rgba(245,158,11,0.08)', tx: '#d97706' }
-                      : { bg: 'rgba(23,100,244,0.04)', tx: '#1764f4' }
+                  {d.produtos.map((p, i) => {
+                    const pctTotal = totalOperado > 0 ? (p.lotes_operados / totalOperado) * 100 : 0
+                    const pctZe = p.lotes_operados > 0 ? (p.lotes_zerados / p.lotes_operados) * 100 : 0
                     return (
-                      <tr key={`${r.cliente_id ?? r.cliente_nome}-${r.rank}`}
-                        onClick={() => { if (r.cliente_id) window.location.href = `/clientes/${r.cliente_id}` }}
-                        className={r.cliente_id ? 'cursor-pointer hover:bg-blue-50' : ''}
-                        style={{ borderTop: '1px solid var(--border)', background: palette.bg }}>
-                        <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{r.rank}</td>
-                        <td className="px-3 py-1.5 font-medium text-gray-700">{r.cliente_nome}</td>
-                        <td className="px-3 py-1.5 text-gray-500">{r.assessor_nome ?? '—'}</td>
-                        <td className="px-3 py-1.5 text-right font-bold tabular-nums" style={{ color: palette.tx }}>
-                          {r.score_risco}
-                        </td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.lotes_atual)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{r.pct_ze_atual.toFixed(1)}%</td>
-                        <td className="px-3 py-1.5 text-xs text-gray-600">{r.motivo}</td>
+                      <tr key={p.produto}
+                        style={{ borderTop: '1px solid var(--border)',
+                                 background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                        <td className="px-3 py-1.5 font-semibold text-gray-700">{p.produto}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(p.lotes_operados)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{pctTotal.toFixed(1)}%</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.lotes_zerados)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.num_clientes)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.num_dias)}</td>
                       </tr>
                     )
                   })}
@@ -122,7 +108,19 @@ export function OperacionalView() {
           )}
       </Block>
 
-      {drillData && <DrilldownModal data={drillData} rows={drillRows} onClose={() => setDrillData(null)} />}
+      {drillData && (
+        drillErro
+          ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              style={{ background: 'rgba(15,23,42,0.7)' }} onClick={() => setDrillData(null)}>
+              <div className="rounded-2xl p-6 text-sm"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: '#ef4444' }}>
+                Falha ao carregar o detalhe do dia. Clique pra fechar.
+              </div>
+            </div>
+          )
+          : <DrilldownModal data={drillData} rows={drillRows} onClose={() => setDrillData(null)} />
+      )}
 
       {/* loading inline */}
       {d.isPending && (

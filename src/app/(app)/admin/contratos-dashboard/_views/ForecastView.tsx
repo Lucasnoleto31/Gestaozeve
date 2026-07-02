@@ -9,7 +9,7 @@ import { Sparkles, Loader2, AlertTriangle, TrendingUp, Target, Activity, Layers 
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { Block } from '../View'
+import { Block } from '../_lib/Blocks'
 import { fmtNum } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { ACTIONS } from '../_lib/dashboardActions'
@@ -29,10 +29,14 @@ export function ForecastView() {
     if (d.kpis?.dataset_max) shell.setDatasetMax(d.kpis.dataset_max)
   }, [d.kpis?.dataset_max, shell])
 
-  // Holt-Winters mensal
+  // Holt-Winters mensal — o último mês está em andamento (parcial) e
+  // entraria como observação cheia, puxando nível/tendência pra baixo: fica fora.
   const { forecastData, forecastProxMes } = useMemo(() => {
-    if (d.evolucao.length < 3) return { forecastData: [], forecastProxMes: 0 }
-    const ordenado = [...d.evolucao].sort((a, b) => a.mes_data.localeCompare(b.mes_data))
+    const fechados = [...d.evolucao]
+      .sort((a, b) => a.mes_data.localeCompare(b.mes_data))
+      .slice(0, -1)
+    if (fechados.length < 3) return { forecastData: [], forecastProxMes: null as number | null }
+    const ordenado = fechados
     const valores = ordenado.map(e => e.lotes_operados)
     const hw = holtWintersAdd(valores, { seasonLen: 3, horizon: 4 })
     const fmt = (iso: string) => {
@@ -57,7 +61,7 @@ export function ForecastView() {
         Forecast: Math.round(v),
       }
     })
-    return { forecastData: [...histor, ...future], forecastProxMes: hw.forecast[0] ?? 0 }
+    return { forecastData: [...histor, ...future], forecastProxMes: hw.forecast[0] ?? null }
   }, [d.evolucao])
 
   const [insights, setInsights] = useState<InsightsResposta | null>(null)
@@ -86,15 +90,19 @@ export function ForecastView() {
       {/* 4 KPIs preditivos */}
       <KpiRow>
         <KpiCard icon={TrendingUp} label="Forecast próx. mês"
-          value={forecastProxMes ? fmtNum(Math.round(forecastProxMes)) : '—'}
-          sub="lotes operados (Holt-Winters)" accent="#a855f7" />
-        <KpiCard icon={Target} label="MAPE"
+          value={forecastProxMes != null ? fmtNum(Math.round(forecastProxMes)) : '—'}
+          sub="lotes operados · meses fechados" accent="#a855f7" />
+        <KpiCard icon={Target} label="Variação diária"
           value={d.acuracidade ? `${d.acuracidade.mape.toFixed(1)}%` : '—'}
-          sub={d.acuracidade ? `${d.acuracidade.num_dias}d de histórico` : undefined}
+          sub={d.acuracidade ? `vs média móvel 7d · ${d.acuracidade.num_dias}d` : undefined}
           accent="#1764f4" />
-        <KpiCard icon={Activity} label="Viés"
+        <KpiCard icon={Activity} label="Tendência recente"
           value={d.acuracidade ? `${d.acuracidade.vies > 0 ? '+' : ''}${d.acuracidade.vies.toFixed(1)}` : '—'}
-          sub={d.acuracidade?.vies_label ?? '—'}
+          sub={d.acuracidade
+            ? (d.acuracidade.vies_label === 'subestima' ? 'acima da média 7d'
+              : d.acuracidade.vies_label === 'superestima' ? 'abaixo da média 7d'
+              : d.acuracidade.vies_label)
+            : '—'}
           accent="#10b981" />
         <KpiCard icon={Sparkles} label="Insights IA"
           value={insights ? `${insights.insights.length}` : '—'}
@@ -104,9 +112,9 @@ export function ForecastView() {
 
       {/* 1 gráfico — Forecast Holt-Winters */}
       <Block title="Previsão de volume — próximos 4 meses"
-        subtitle="Holt-Winters com sazonalidade trimestral. Linha azul = realizado, roxa tracejada = previsão.">
+        subtitle="Suavização exponencial (Holt-Winters) sobre os meses fechados — o mês em andamento fica fora. Linha azul = realizado, roxa tracejada = previsão.">
         {forecastData.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados históricos suficientes.'}</p>
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'São necessários pelo menos 4 meses de histórico.'}</p>
           : (
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={forecastData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
@@ -129,8 +137,8 @@ export function ForecastView() {
       </Block>
 
       {/* Tabela: acuracidade dia a dia */}
-      <Block title="Acuracidade — previsto vs realizado"
-        subtitle={`Últimos ${d.acuracidade?.num_dias ?? 60} dias. Erro % = |realizado - previsto| / realizado.`}>
+      <Block title="Volume diário vs média móvel"
+        subtitle="Últimos 30 dias. “Previsto” = média móvel dos 7 pregões anteriores (referência simples, não um modelo). Erro % = desvio do dia vs essa média.">
         {d.acuracidadeSerie.length === 0
           ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
           : (

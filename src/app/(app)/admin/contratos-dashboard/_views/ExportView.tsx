@@ -6,7 +6,11 @@ import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
 import { ACTIONS } from '../_lib/dashboardActions'
 import { fmtNum, fmtBRL2, fmtDataPt } from '../_lib/utils'
-import type { DashboardKpis, ReceitaTotal, MetaAnual } from '../actions'
+import type { DashboardKpis, MetaAnual } from '../actions'
+
+// Mesma normalização usada no backend (norm_barra) pra casar a barra selecionada
+const normBarra = (s: string) =>
+  s.trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
 type Formato = 'story' | 'feed' | 'a4'
 
@@ -41,8 +45,14 @@ export function ExportView() {
 
   const fmt = FORMATOS.find(f => f.id === formato)!
 
+  // Receita coerente com o filtro: com barra selecionada, usa a linha daquela
+  // barra em receita-por-assessor (getReceitaTotal é sempre do escritório todo).
+  const receitaExibida = barra
+    ? d.receitaPorAss.find(r => normBarra(r.barra_nome) === normBarra(barra))?.receita_total ?? null
+    : d.receitaTotal?.receita_total ?? null
+
   return (
-    <div className="px-6 lg:px-8 py-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div className="flex flex-wrap gap-2">
           {FORMATOS.map(f => {
@@ -72,22 +82,34 @@ export function ExportView() {
       </p>
 
       <div className="flex justify-center">
-        <div style={{
+        <div className="export-print-area" style={{
           transform: `scale(${escala})`,
           transformOrigin: 'top center',
           width: fmt.w,
           height: fmt.h,
           marginBottom: -fmt.h * (1 - escala),
         }}>
-          <ExportCard formato={formato} kpis={d.kpis} receita={d.receitaTotal} meta={d.meta}
+          <ExportCard formato={formato} kpis={d.kpis} receita={receitaExibida} meta={d.meta}
             periodo={periodo} barra={barra} alertas={d.alertas.length} />
         </div>
       </div>
 
+      {/* Na impressão: esconde todo o app (header/tabs/filtros) e imprime só o
+          card em escala 1:1 fixado no topo da página. */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body { background: white !important; }
           @page { size: ${fmt.w}px ${fmt.h}px; margin: 0; }
+          body * { visibility: hidden; }
+          .export-print-area, .export-print-area * { visibility: visible; }
+          .export-print-area {
+            visibility: visible;
+            transform: none !important;
+            margin: 0 !important;
+            position: fixed;
+            top: 0;
+            left: 0;
+          }
         }
       ` }} />
     </div>
@@ -99,7 +121,7 @@ function ExportCard({
 }: {
   formato: Formato
   kpis: DashboardKpis | null
-  receita: ReceitaTotal | null
+  receita: number | null
   meta: MetaAnual | null
   periodo: string
   barra: string | null
@@ -157,7 +179,7 @@ function ExportCard({
         <KpiCard label="Volume operado" value={kpis ? fmtNum(kpis.volume_operados) : '—'} suffix="lotes" titleSize={kpiTitleSize} valueSize={kpiValueSize} accent="#1764f4" />
         <KpiCard label="Volume zerado" value={kpis ? fmtNum(kpis.volume_zerados) : '—'} suffix="lotes" titleSize={kpiTitleSize} valueSize={kpiValueSize} accent="#dc2626" />
         <KpiCard label="Clientes ativos" value={kpis ? fmtNum(kpis.num_clientes_ativos) : '—'} titleSize={kpiTitleSize} valueSize={kpiValueSize} accent="#10b981" />
-        <KpiCard label="Receita" value={receita ? fmtBRL2(receita.receita_total) : '—'} titleSize={kpiTitleSize} valueSize={kpiValueSize} accent="#a855f7" />
+        <KpiCard label="Receita estimada" value={receita != null ? fmtBRL2(receita) : '—'} titleSize={kpiTitleSize} valueSize={kpiValueSize} accent="#a855f7" />
       </div>
 
       {/* Meta */}
@@ -218,12 +240,13 @@ function KpiCard({ label, value, suffix, titleSize, valueSize, accent }: {
 }
 
 function periodoLabel(p: string): string {
+  const m = /^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/.exec(p)
+  if (m) return `${fmtDataPt(m[1])} – ${fmtDataPt(m[2])}`
   switch (p) {
-    case 'hoje': return 'Hoje'
-    case 'semana': return 'Últimos 7 dias'
     case '30d': return 'Últimos 30 dias'
-    case 'mes': return 'Mês atual'
-    case 'mes_anterior': return 'Mês anterior'
+    case '60d': return 'Últimos 60 dias'
+    case '90d': return 'Últimos 90 dias'
+    case 'ano': return 'Ano atual'
     case 'tudo': return 'Histórico completo'
     default: return p
   }

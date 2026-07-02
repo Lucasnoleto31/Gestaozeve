@@ -7,24 +7,25 @@ import { getProfile } from '@/lib/auth/getProfile'
 // Tipos compartilhados com a View
 // -----------------------------------------------------------
 export type Periodo =
-  | 'hoje'
-  | 'semana'      // últimos 7 dias
   | '30d'         // últimos 30 dias
-  | 'mes'         // mês atual
-  | 'mes_anterior'
+  | '60d'         // últimos 60 dias
+  | '90d'         // últimos 90 dias
+  | 'ano'         // ano atual (1º jan → hoje)
   | 'tudo'
+  | `custom:${string}:${string}`   // intervalo escolhido: 'custom:YYYY-MM-DD:YYYY-MM-DD'
 
 export type DateRange = { inicio: string; fim: string } // 'YYYY-MM-DD'
 
 export type DashboardKpis = {
   volume_operados: number
   volume_zerados: number
-  num_clientes_ativos: number
-  num_dias_com_dado: number
+  num_clientes_ativos: number      // contas distintas que operaram no período
+  num_dias_com_dado: number        // pregões com registro no período
   maior_dia_data: string | null
   maior_dia_lotes: number
-  volume_hoje: number
-  media_30d: number
+  ultimo_dia_data: string | null
+  ultimo_dia_lotes: number
+  media_diaria: number             // lotes operados / pregão no período
   dataset_max: string | null
 }
 
@@ -66,8 +67,38 @@ export type EvolucaoMensalRow = {
   mes_data: string
   lotes_operados: number
   lotes_zerados: number
-  num_dias_uteis: number
+  num_pregoes: number    // dias com registro no mês
+  num_clientes: number   // contas distintas que operaram no mês
+}
+
+export type RetencaoMensalRow = {
+  mes: string
+  mes_seguinte: string
+  ativos: number
+  continuaram: number
+  pararam: number
+  churn_pct: number
+  retencao_pct: number
+  parcial: boolean
+}
+
+export type IncentivoMensalRow = {
+  mes: string
+  faixa_min: number       // 0 = "Resto" (não atingiu 1.000 pontos)
+  valor_unitario: number
   num_clientes: number
+  valor_total: number
+}
+
+export type IncentivoClienteRow = {
+  conta: string
+  cliente_nome: string
+  pontos: number
+  lotes_operados: number
+  faixa_min: number
+  valor_incentivo: number
+  proxima_faixa: number | null
+  pontos_faltantes: number | null
 }
 
 export type DrilldownRow = {
@@ -81,40 +112,51 @@ export type DrilldownRow = {
 }
 
 // -----------------------------------------------------------
-// Resolve preset → range de datas (UTC + ISO date string)
+// Resolve preset → range de datas.
+// "Hoje" é calculado no fuso America/Sao_Paulo: o servidor roda em UTC
+// e viraria o dia às 21h de Brasília, zerando os cards à noite.
 // -----------------------------------------------------------
+function hojeBrasil(): Date {
+  const iso = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date()) // 'YYYY-MM-DD'
+  return new Date(iso + 'T12:00:00') // meio-dia evita drift de DST ao somar/subtrair dias
+}
+
 function todayStr(): string {
-  // YYYY-MM-DD no fuso local — Supabase aceita
-  const d = new Date()
+  return fmtDate(hojeBrasil())
+}
+
+function fmtDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export async function resolvePeriodo(p: Periodo): Promise<DateRange> {
-  const today = new Date()
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const today = hojeBrasil()
 
-  if (p === 'hoje')   return { inicio: fmt(today), fim: fmt(today) }
+  // intervalo personalizado: 'custom:YYYY-MM-DD:YYYY-MM-DD'
+  if (p.startsWith('custom:')) {
+    const [, inicio, fim] = p.split(':')
+    const re = /^\d{4}-\d{2}-\d{2}$/
+    if (re.test(inicio) && re.test(fim)) {
+      // normaliza ordem caso venha invertido
+      return inicio <= fim ? { inicio, fim } : { inicio: fim, fim: inicio }
+    }
+    // formato inválido → cai no fallback (últimos 30 dias)
+    p = '30d'
+  }
 
-  if (p === 'semana') {
-    const i = new Date(today); i.setDate(i.getDate() - 6)
-    return { inicio: fmt(i), fim: fmt(today) }
+  const rolling = (dias: number) => {
+    const i = new Date(today); i.setDate(i.getDate() - (dias - 1))
+    return { inicio: fmtDate(i), fim: fmtDate(today) }
   }
-  if (p === '30d') {
-    const i = new Date(today); i.setDate(i.getDate() - 29)
-    return { inicio: fmt(i), fim: fmt(today) }
-  }
-  if (p === 'mes') {
-    const i = new Date(today.getFullYear(), today.getMonth(), 1)
-    return { inicio: fmt(i), fim: fmt(today) }
-  }
-  if (p === 'mes_anterior') {
-    const i = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-    const f = new Date(today.getFullYear(), today.getMonth(), 0) // último dia do mês anterior
-    return { inicio: fmt(i), fim: fmt(f) }
-  }
-  // tudo — usa o min/max do dataset, com fallback razoável
-  return { inicio: '2000-01-01', fim: fmt(today) }
+
+  if (p === '30d') return rolling(30)
+  if (p === '60d') return rolling(60)
+  if (p === '90d') return rolling(90)
+  if (p === 'ano') return { inicio: `${today.getFullYear()}-01-01`, fim: fmtDate(today) }
+  // 'tudo' (e qualquer valor legado desconhecido vindo de URL antiga)
+  return { inicio: '2000-01-01', fim: fmtDate(today) }
 }
 
 // -----------------------------------------------------------
@@ -147,8 +189,9 @@ export async function getKpis(p: Periodo, barra: string | null = null): Promise<
     num_dias_com_dado: num(r?.num_dias_com_dado),
     maior_dia_data: str(r?.maior_dia_data),
     maior_dia_lotes: num(r?.maior_dia_lotes),
-    volume_hoje: num(r?.volume_hoje),
-    media_30d: num(r?.media_30d),
+    ultimo_dia_data: str(r?.ultimo_dia_data),
+    ultimo_dia_lotes: num(r?.ultimo_dia_lotes),
+    media_diaria: num(r?.media_diaria),
     dataset_max: str(r?.dataset_max),
   }
 }
@@ -219,22 +262,67 @@ export async function getHeatmapDow(p: Periodo, barra: string | null = null): Pr
   }))
 }
 
-export async function getEvolucaoMensal(): Promise<EvolucaoMensalRow[]> {
+export async function getEvolucaoMensal(barra: string | null = null): Promise<EvolucaoMensalRow[]> {
   const supabase = await adminOnly()
-  const { data, error } = await supabase.rpc('dashboard_contratos_evolucao_mensal')
+  const { data, error } = await supabase.rpc('dashboard_contratos_evolucao_mensal', { p_barra: barra })
   if (error) throw new Error(error.message)
   return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
     mes_data: String(r.mes_data),
     lotes_operados: num(r.lotes_operados),
     lotes_zerados: num(r.lotes_zerados),
-    num_dias_uteis: num(r.num_dias_uteis),
+    num_pregoes: num(r.num_pregoes),
     num_clientes: num(r.num_clientes),
   }))
 }
 
-export async function getDrilldownDia(data: string): Promise<DrilldownRow[]> {
+export async function getRetencaoMensal(barra: string | null = null): Promise<RetencaoMensalRow[]> {
   const supabase = await adminOnly()
-  const { data: rows, error } = await supabase.rpc('dashboard_contratos_drilldown_dia', { p_data: data })
+  const { data, error } = await supabase.rpc('dashboard_retencao_mensal', { p_barra: barra })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    mes: String(r.mes),
+    mes_seguinte: String(r.mes_seguinte),
+    ativos: num(r.ativos),
+    continuaram: num(r.continuaram),
+    pararam: num(r.pararam),
+    churn_pct: num(r.churn_pct),
+    retencao_pct: num(r.retencao_pct),
+    parcial: Boolean(r.parcial),
+  }))
+}
+
+export async function getIncentivoMensal(): Promise<IncentivoMensalRow[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_incentivo_mensal')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    mes: String(r.mes),
+    faixa_min: num(r.faixa_min),
+    valor_unitario: num(r.valor_unitario),
+    num_clientes: num(r.num_clientes),
+    valor_total: num(r.valor_total),
+  }))
+}
+
+export async function getIncentivoClientes(mes: string | null = null): Promise<IncentivoClienteRow[]> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase.rpc('dashboard_incentivo_clientes', { p_mes: mes })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    conta: String(r.conta ?? ''),
+    cliente_nome: String(r.cliente_nome ?? 'Sem cliente'),
+    pontos: num(r.pontos),
+    lotes_operados: num(r.lotes_operados),
+    faixa_min: num(r.faixa_min),
+    valor_incentivo: num(r.valor_incentivo),
+    proxima_faixa: r.proxima_faixa != null ? Number(r.proxima_faixa) : null,
+    pontos_faltantes: r.pontos_faltantes != null ? Number(r.pontos_faltantes) : null,
+  }))
+}
+
+export async function getDrilldownDia(data: string, barra: string | null = null): Promise<DrilldownRow[]> {
+  const supabase = await adminOnly()
+  const { data: rows, error } = await supabase.rpc('dashboard_contratos_drilldown_dia', { p_data: data, p_barra: barra })
   if (error) throw new Error(error.message)
   return ((rows ?? []) as Record<string, unknown>[]).map((r) => ({
     tipo: r.tipo as DrilldownRow['tipo'],
@@ -306,7 +394,7 @@ Dados (período: ${ctx.periodo}):
 - Volume zerado: ${ctx.kpis.volume_zerados.toLocaleString('pt-BR')} lotes
 - Clientes ativos: ${ctx.kpis.num_clientes_ativos}
 - Maior dia: ${ctx.kpis.maior_dia_data ?? '—'} (${ctx.kpis.maior_dia_lotes} lotes)
-- Média 30d: ${ctx.kpis.media_30d.toFixed(0)} lotes/dia
+- Média diária no período: ${ctx.kpis.media_diaria.toFixed(0)} lotes/pregão
 ${ctx.receita ? `- Receita total: R$ ${ctx.receita.receita_total.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} (operados ${ctx.receita.receita_operados.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} + zeragem ${ctx.receita.receita_zeragem.toLocaleString('pt-BR', { maximumFractionDigits: 2 })})` : ''}
 ${ctx.meta ? `- Meta anual: ${ctx.meta.pct_receita.toFixed(1)}% de R$ ${ctx.meta.meta_receita.toLocaleString('pt-BR')} batido. Faltam ${ctx.meta.dias_corridos_restantes} dias.` : ''}
 - Top 5 clientes: ${ctx.topClientes.slice(0, 5).map(c => `${c.cliente_nome} (${c.lotes_operados} lotes)`).join(', ')}
@@ -1083,9 +1171,10 @@ export async function getBudgetZeragem(p: Periodo): Promise<BudgetZeragemRow[]> 
 export async function getRankingAssessores(p: Periodo): Promise<RankingAssessorRow[]> {
   const supabase = await adminOnly()
   const { inicio, fim } = await resolvePeriodo(p)
-  // Período anterior: mesma duração imediatamente antes
-  const inicioD = new Date(inicio)
-  const fimD = new Date(fim)
+  // Período anterior: mesma duração imediatamente antes.
+  // T12:00 evita o off-by-one de new Date('YYYY-MM-DD') interpretar UTC.
+  const inicioD = new Date(inicio + 'T12:00:00')
+  const fimD = new Date(fim + 'T12:00:00')
   const dur = Math.round((fimD.getTime() - inicioD.getTime()) / 86400000)
   const fimAnt = new Date(inicioD); fimAnt.setDate(fimAnt.getDate() - 1)
   const inicioAnt = new Date(fimAnt); inicioAnt.setDate(inicioAnt.getDate() - dur)

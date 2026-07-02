@@ -11,12 +11,11 @@ import { useDashboardFilters } from './useDashboardFilters'
 import { fmtDataPt } from './utils'
 
 const PERIODOS: { id: Periodo; label: string }[] = [
-  { id: 'hoje',         label: 'Hoje' },
-  { id: 'semana',       label: '7 dias' },
-  { id: '30d',          label: '30 dias' },
-  { id: 'mes',          label: 'Mês' },
-  { id: 'mes_anterior', label: 'Mês anterior' },
-  { id: 'tudo',         label: 'Tudo' },
+  { id: '30d',  label: '30 dias' },
+  { id: '60d',  label: '60 dias' },
+  { id: '90d',  label: '90 dias' },
+  { id: 'ano',  label: 'Ano' },
+  { id: 'tudo', label: 'Tudo' },
 ]
 
 // Context pra sub-rotas reportarem dataset_max e estado de loading pro Shell
@@ -98,10 +97,54 @@ function DashboardNav() {
 // ===========================================================
 // Filtros globais (período + barra) sincronizados com URL
 // ===========================================================
+function RangeFilter({ customRange, datasetMax, isLoading, onApply }:
+  { customRange: { inicio: string; fim: string } | null; datasetMax: string | null; isLoading: boolean;
+    onApply: (inicio: string, fim: string) => void }
+) {
+  const [de, setDe] = useState(customRange?.inicio ?? '')
+  const [ate, setAte] = useState(customRange?.fim ?? '')
+
+  // Mantém os inputs em sincronia com a URL (ex.: navegação, reload) —
+  // reconciliação durante o render em vez de useEffect (evita render extra).
+  const rangeKey = customRange ? `${customRange.inicio}:${customRange.fim}` : ''
+  const [prevRangeKey, setPrevRangeKey] = useState(rangeKey)
+  if (rangeKey !== prevRangeKey) {
+    setPrevRangeKey(rangeKey)
+    if (customRange) { setDe(customRange.inicio); setAte(customRange.fim) }
+  }
+
+  const active = customRange != null
+  function update(nextDe: string, nextAte: string) {
+    setDe(nextDe); setAte(nextAte)
+    if (nextDe && nextAte) onApply(nextDe, nextAte)
+  }
+
+  const inputStyle = {
+    background: active ? 'var(--blue)' : 'var(--surface)',
+    color: active ? '#fff' : 'var(--muted)',
+    border: '1px solid var(--border)',
+    colorScheme: 'light' as const,
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input type="date" value={de} max={ate || datasetMax || undefined} disabled={isLoading}
+        onChange={e => update(e.target.value, ate)}
+        className="px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 cursor-pointer"
+        style={inputStyle} aria-label="Data inicial" />
+      <span className="text-xs text-gray-400">até</span>
+      <input type="date" value={ate} min={de || undefined} max={datasetMax || undefined} disabled={isLoading}
+        onChange={e => update(de, e.target.value)}
+        className="px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 cursor-pointer"
+        style={inputStyle} aria-label="Data final" />
+    </div>
+  )
+}
+
 function FilterBar({ barras, datasetMax, isLoading }:
   { barras: { barra_nome: string; numero: string | null }[]; datasetMax: string | null; isLoading: boolean }
 ) {
-  const { periodo, barra, setPeriodo, setBarra } = useDashboardFilters()
+  const { periodo, barra, customRange, setPeriodo, setRange, setBarra } = useDashboardFilters()
   return (
     <div className="rounded-2xl p-4 flex flex-wrap items-center gap-3"
       style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
@@ -120,6 +163,9 @@ function FilterBar({ barras, datasetMax, isLoading }:
           )
         })}
       </div>
+
+      <span className="text-[11px] text-gray-300">ou</span>
+      <RangeFilter customRange={customRange} datasetMax={datasetMax} isLoading={isLoading} onApply={setRange} />
 
       <span className="text-xs uppercase tracking-widest text-gray-400 font-semibold ml-2">Barra</span>
       <select

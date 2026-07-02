@@ -8,7 +8,7 @@ import { DollarSign, TrendingUp, Calendar, Layers } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { Block } from '../View'
+import { Block } from '../_lib/Blocks'
 import { fmtBRL, fmtBRL2 } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { ACTIONS } from '../_lib/dashboardActions'
@@ -56,22 +56,28 @@ export function ReceitaView() {
         </div>
       )}
 
-      {/* 4 KPIs financeiros */}
+      {/* 4 KPIs financeiros — sempre do escritório inteiro (a receita não tem filtro por barra) */}
+      {barra && (
+        <p className="text-xs text-gray-500">
+          Os 4 cards abaixo são do <strong>escritório inteiro</strong> — a receita ainda não filtra por barra
+          (a curva ABC abaixo respeita o filtro).
+        </p>
+      )}
       <KpiRow>
         <KpiCard icon={DollarSign} label="Receita bruta"
           value={d.receitaBL ? fmtBRL2(d.receitaBL.receita_bruta) : '—'}
-          sub="operados + zeragem" accent="#1764f4" />
+          sub="operados + zeragem · só WIN/WDO" accent="#1764f4" />
         <KpiCard icon={DollarSign} label="Receita líquida"
           value={d.receitaBL ? fmtBRL2(d.receitaBL.receita_liquida) : '—'}
-          sub={d.receitaBL ? `${d.receitaBL.pct_repasse_medio.toFixed(0)}% repasse médio` : undefined}
+          sub={d.receitaBL ? `retenção média de ${d.receitaBL.pct_repasse_medio.toFixed(0)}%` : undefined}
           accent="#10b981" />
-        <KpiCard icon={TrendingUp} label="Projeção do mês"
+        <KpiCard icon={TrendingUp} label="Projeção do mês atual"
           value={d.receitaProj ? fmtBRL(d.receitaProj.projecao_total) : '—'}
-          sub={d.receitaProj ? `${d.receitaProj.dias_corridos_restantes}d restantes` : undefined}
+          sub={d.receitaProj ? `${d.receitaProj.dias_corridos_restantes} dias úteis restantes` : undefined}
           accent="#a855f7" />
         <KpiCard icon={Calendar} label="Ritmo necessário"
           value={d.meta && d.meta.meta_receita > 0 ? fmtBRL(d.meta.ritmo_receita_necessario) : '—'}
-          sub={d.meta ? `meta ${d.meta.pct_receita.toFixed(1)}% atingida` : undefined}
+          sub={d.meta && d.meta.meta_receita > 0 ? `meta ${d.meta.pct_receita.toFixed(1)}% atingida` : 'sem meta cadastrada'}
           accent="#f59e0b" />
       </KpiRow>
 

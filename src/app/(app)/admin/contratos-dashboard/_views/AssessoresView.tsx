@@ -8,7 +8,7 @@ import { Layers, TrendingUp, TrendingDown, UserPlus, UserX, DollarSign, Users } 
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { Block } from '../View'
+import { Block } from '../_lib/Blocks'
 import { fmtNum, fmtBRL, fmtBRL2 } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { ACTIONS } from '../_lib/dashboardActions'
@@ -16,7 +16,7 @@ import { ACTIONS } from '../_lib/dashboardActions'
 export function AssessoresView() {
   const { periodo, barra } = useDashboardFilters()
   const d = useDashboardData(ACTIONS, periodo, barra, {
-    receita: true, kpis: true, rankingAssessores: true,
+    kpis: true, rankingAssessores: true,
   })
 
   const shell = useShell()
@@ -29,7 +29,10 @@ export function AssessoresView() {
   const numBarras = d.ranking.length
   const receitaTotal = d.ranking.reduce((s, r) => s + r.receita_total, 0)
   const clientesAtivosMedio = numBarras > 0 ? d.ranking.reduce((s, r) => s + r.clientes_ativos, 0) / numBarras : 0
-  const pctZerMedio = numBarras > 0 ? d.ranking.reduce((s, r) => s + r.pct_zeragem, 0) / numBarras : 0
+  // Ponderada pelos lotes de cada barra (média simples deixava barra minúscula distorcer)
+  const totalOp = d.ranking.reduce((s, r) => s + r.lotes_operados, 0)
+  const totalZe = d.ranking.reduce((s, r) => s + r.lotes_zerados, 0)
+  const pctZerMedio = totalOp > 0 ? (totalZe / totalOp) * 100 : 0
 
   // Gráfico: barras horizontais por receita_total (top 10)
   const chartData = useMemo(() => d.ranking.slice(0, 10).map(r => ({
@@ -57,8 +60,14 @@ export function AssessoresView() {
           sub="média de ativos" accent="#a855f7" />
         <KpiCard icon={TrendingDown} label="% zeragem média"
           value={`${pctZerMedio.toFixed(1)}%`}
-          sub="ponderada por barra" accent="#f59e0b" />
+          sub="ponderada pelos lotes" accent="#f59e0b" />
       </KpiRow>
+
+      {barra && (
+        <p className="text-xs text-gray-500">
+          Esta aba compara <strong>todas as barras</strong> entre si — o filtro de barra não se aplica aqui.
+        </p>
+      )}
 
       {/* 1 gráfico — top 10 barras por receita */}
       <Block title="Top 10 barras por receita"

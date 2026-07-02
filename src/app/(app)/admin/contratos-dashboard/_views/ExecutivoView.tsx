@@ -3,23 +3,30 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import {
-  Download, TrendingDown, Users, Activity, DollarSign,
-  Layers, AlertCircle, Gauge,
+  Download, TrendingDown, Users, Activity, DollarSign, Layers, CalendarDays,
 } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { Block } from '../View'
+import { Block } from '../_lib/Blocks'
 import { EvolucaoMensalChart, BlockSkeleton } from '../Charts'
 import { fmtNum, fmtBRL, fmtBRL2 } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { ACTIONS } from '../_lib/dashboardActions'
+import type { RetencaoMensalRow } from '../actions'
+
+const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+function labelMesAno(iso: string): string {
+  const m = parseInt(iso.slice(5, 7), 10)
+  return `${MESES_ABREV[m - 1] ?? iso.slice(5, 7)}/${iso.slice(0, 4)}`
+}
 
 export function ExecutivoView() {
   const { periodo, barra } = useDashboardFilters()
   const d = useDashboardData(ACTIONS, periodo, barra, {
     kpis: true, receita: true, meta: true, evolucao: true,
-    receitaBrutaLiquida: true, riscoEscritorio: true, alertasExecutivos: true,
+    receitaBrutaLiquida: true, retencao: true,
   })
 
   const shell = useShell()
@@ -30,10 +37,7 @@ export function ExecutivoView() {
 
   const pctZeragem = d.kpis && d.kpis.volume_operados > 0
     ? (d.kpis.volume_zerados / d.kpis.volume_operados) * 100
-    : 0
-
-  const riscoColor = d.riscoEsc?.classificacao === 'critico' ? '#dc2626'
-    : d.riscoEsc?.classificacao === 'atencao' ? '#f59e0b' : '#10b981'
+    : null
 
   return (
     <div className="space-y-5">
@@ -53,37 +57,45 @@ export function ExecutivoView() {
         </Link>
       </div>
 
-      {/* 5 KPIs no topo */}
+      {/* 5 KPIs no topo — todos respeitam período + barra */}
       <KpiRow cols={5}>
         <KpiCard icon={Activity} label="Volume operado"
           value={d.kpis ? fmtNum(d.kpis.volume_operados) : '—'}
           sub="lotes no período" accent="#1764f4" />
         <KpiCard icon={TrendingDown} label="Volume zerado"
           value={d.kpis ? fmtNum(d.kpis.volume_zerados) : '—'}
-          sub={`${pctZeragem.toFixed(1)}% do operado`} accent="#dc2626" />
-        <KpiCard icon={DollarSign} label="Receita líquida"
-          value={d.receitaBL ? fmtBRL2(d.receitaBL.receita_liquida) : '—'}
-          sub={d.receitaBL ? `bruta ${fmtBRL(d.receitaBL.receita_bruta)}` : undefined}
-          accent="#10b981" />
+          sub={pctZeragem != null ? `${pctZeragem.toFixed(1)}% do operado` : undefined} accent="#dc2626" />
         <KpiCard icon={Users} label="Clientes ativos"
           value={d.kpis ? fmtNum(d.kpis.num_clientes_ativos) : '—'}
-          sub="operaram no período" accent="#a855f7" />
-        <KpiCard icon={Gauge} label="Risco do escritório"
-          value={d.riscoEsc ? `${d.riscoEsc.indice}/100` : '—'}
-          sub={d.riscoEsc?.classificacao ?? '—'}
-          accent={riscoColor} valueColor={riscoColor} />
+          sub="contas que operaram no período" accent="#a855f7" />
+        <KpiCard icon={CalendarDays} label="Média diária"
+          value={d.kpis ? fmtNum(d.kpis.media_diaria) : '—'}
+          sub={d.kpis ? `lotes/pregão · ${d.kpis.num_dias_com_dado} pregões` : undefined} accent="#0891b2" />
+        <KpiCard icon={DollarSign} label="Receita estimada"
+          value={d.receitaBL ? fmtBRL2(d.receitaBL.receita_liquida) : '—'}
+          sub={d.receitaBL ? `líquida · bruta ${fmtBRL(d.receitaBL.receita_bruta)} · só WIN/WDO` : 'só WIN/WDO'}
+          accent="#10b981" />
       </KpiRow>
 
       {/* 1 gráfico principal */}
-      <Block title="Evolução mensal" subtitle="Operados (azul) + zerados (vermelho) por mês.">
+      <Block title="Evolução mensal"
+        subtitle="Lotes operados (azul) e zerados (vermelho) lado a lado + clientes ativos (linha roxa, eixo direito). * = mês em andamento.">
         {d.isPending && d.evolucao.length === 0
           ? <BlockSkeleton height={280} />
           : <EvolucaoMensalChart data={d.evolucao} />}
       </Block>
 
-      {/* Tabela 1: Receita por barra */}
-      <Block title="Receita por barra (período)"
-        subtitle="Ordenado por receita total. Coluna líquida aplica % repasse cadastrado em Tarifas.">
+      {/* Retenção e churn mês a mês */}
+      <Block title="Retenção e churn"
+        subtitle="Clientes (por número de conta) que operaram no mês e pararam no mês seguinte. Linha marcada como parcial ainda muda com novas importações.">
+        {d.retencao.length === 0
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
+          : <RetencaoTable rows={d.retencao} />}
+      </Block>
+
+      {/* Receita por barra */}
+      <Block title="Receita estimada por barra (período)"
+        subtitle="Tarifa cadastrada em Tarifas × lotes WIN/WDO. Lotes de outros produtos aparecem no volume mas ainda não geram receita aqui.">
         {d.receitaPorAss.length === 0
           ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
           : (
@@ -119,41 +131,19 @@ export function ExecutivoView() {
           )}
       </Block>
 
-      {/* Tabela 2: Alertas executivos agregados */}
-      {d.alertasExec.length > 0 && (
-        <Block title="Alertas executivos"
-          subtitle="Sinais agregados — clique nos cards pra acessar a aba correspondente.">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {d.alertasExec.map((a, i) => {
-              const palette = {
-                alta:  { bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.3)', tx: '#dc2626' },
-                media: { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)', tx: '#d97706' },
-                baixa: { bg: 'rgba(23,100,244,0.08)', border: 'rgba(23,100,244,0.3)', tx: '#1764f4' },
-              }[a.severidade]
-              return (
-                <div key={i} className="rounded-xl px-4 py-3 flex items-start gap-3"
-                  style={{ background: palette.bg, border: `1px solid ${palette.border}` }}>
-                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: palette.tx }} />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-sm" style={{ color: palette.tx }}>{a.titulo}</p>
-                    <p className="text-xs text-gray-700 mt-0.5">{a.descricao}</p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Block>
-      )}
-
-      {/* Meta — apenas progresso compacto */}
-      {d.meta && d.meta.meta_receita > 0 && (
+      {/* Meta — progresso compacto (mostra se qualquer meta estiver cadastrada) */}
+      {d.meta && (d.meta.meta_receita > 0 || d.meta.meta_lotes > 0) && (
         <Block title={`Meta ${d.meta.ano}`}
-          subtitle={`${d.meta.dias_corridos_restantes} dias corridos restantes · ritmo necessário: ${fmtBRL(d.meta.ritmo_receita_necessario)}/dia`}>
+          subtitle={`${d.meta.dias_corridos_restantes} dias úteis restantes · ritmo necessário: ${fmtBRL(d.meta.ritmo_receita_necessario)}/pregão`}>
           <div className="space-y-3">
-            <MetaProgresso label="Lotes operados" pct={d.meta.pct_lotes}
-              realizado={d.meta.realizado_lotes} meta={d.meta.meta_lotes} sufixo=" lotes" />
-            <MetaProgresso label="Receita" pct={d.meta.pct_receita}
-              realizado={d.meta.realizado_receita} meta={d.meta.meta_receita} isCurrency />
+            {d.meta.meta_lotes > 0 && (
+              <MetaProgresso label="Lotes operados" pct={d.meta.pct_lotes}
+                realizado={d.meta.realizado_lotes} meta={d.meta.meta_lotes} sufixo=" lotes" />
+            )}
+            {d.meta.meta_receita > 0 && (
+              <MetaProgresso label="Receita" pct={d.meta.pct_receita}
+                realizado={d.meta.realizado_receita} meta={d.meta.meta_receita} isCurrency />
+            )}
           </div>
         </Block>
       )}
@@ -164,6 +154,48 @@ export function ExecutivoView() {
           <Layers className="w-3 h-3 animate-pulse" /> atualizando…
         </div>
       )}
+    </div>
+  )
+}
+
+// Tabela mensal: Ativos → Continuaram / Pararam → Churn % / Retenção %
+function RetencaoTable({ rows }: { rows: RetencaoMensalRow[] }) {
+  const churnColor = (pct: number) =>
+    pct >= 40 ? '#dc2626' : pct >= 30 ? '#d97706' : '#059669'
+  return (
+    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+      <table className="text-xs border-collapse min-w-max w-full">
+        <thead style={{ background: 'var(--surface-2)' }}>
+          <tr>
+            <th className="px-3 py-2 font-semibold text-gray-500 text-left">Mês</th>
+            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Ativos no mês</th>
+            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Continuaram</th>
+            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Pararam</th>
+            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Churn %</th>
+            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Retenção %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.mes}
+              style={{ borderTop: '1px solid var(--border)',
+                       background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+              <td className="px-3 py-1.5 font-medium text-gray-700 whitespace-nowrap">
+                {labelMesAno(r.mes)} → {labelMesAno(r.mes_seguinte)}{r.parcial ? ' (parcial)' : ''}
+              </td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.ativos)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-emerald-700">{fmtNum(r.continuaram)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-red-700">{fmtNum(r.pararam)}</td>
+              <td className="px-3 py-1.5 text-right font-semibold tabular-nums" style={{ color: churnColor(r.churn_pct) }}>
+                {r.churn_pct.toFixed(1)}%
+              </td>
+              <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-gray-700">
+                {r.retencao_pct.toFixed(1)}%
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

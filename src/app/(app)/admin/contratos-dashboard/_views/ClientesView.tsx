@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect } from 'react'
-import { Users, UserPlus, UserX, DollarSign, Layers } from 'lucide-react'
+import { Users, UserPlus, UserX, Activity, Layers } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { Block } from '../View'
+import { Block } from '../_lib/Blocks'
 import { CohortHeatmap, BlockSkeleton } from '../Charts'
 import { fmtNum, fmtBRL2, fmtDataPt } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
@@ -23,12 +23,15 @@ export function ClientesView() {
     if (d.kpis?.dataset_max) shell.setDatasetMax(d.kpis.dataset_max)
   }, [d.kpis?.dataset_max, shell])
 
-  // Agregado: clientes novos + churn total (soma do ranking expandido)
+  // Agregado: clientes novos + churn total (soma do ranking expandido).
+  // O ranking não recebe o filtro de barra — quando há barra selecionada,
+  // esses dois cards continuam sendo do escritório inteiro (indicado no sub).
   const novosTotal = d.ranking.reduce((s, r) => s + r.clientes_novos, 0)
   const churnTotal = d.ranking.reduce((s, r) => s + r.clientes_churn, 0)
-  const ticketMedio = d.ltv.length > 0
-    ? d.ltv.reduce((s, c) => s + c.receita_media_mensal, 0) / d.ltv.length
-    : 0
+  const escopoNota = barra ? ' · escritório todo' : ''
+  const lotesPorCliente = d.kpis && d.kpis.num_clientes_ativos > 0
+    ? d.kpis.volume_operados / d.kpis.num_clientes_ativos
+    : null
 
   return (
     <div className="space-y-5">
@@ -43,21 +46,21 @@ export function ClientesView() {
       <KpiRow>
         <KpiCard icon={Users} label="Clientes ativos"
           value={d.kpis ? fmtNum(d.kpis.num_clientes_ativos) : '—'}
-          sub="no período" accent="#1764f4" />
+          sub="contas que operaram no período" accent="#1764f4" />
         <KpiCard icon={UserPlus} label="Novos"
           value={fmtNum(novosTotal)}
-          sub="vs período anterior" accent="#10b981" />
+          sub={`vs período anterior${escopoNota}`} accent="#10b981" />
         <KpiCard icon={UserX} label="Churn"
           value={fmtNum(churnTotal)}
-          sub="pararam de operar" accent="#dc2626" />
-        <KpiCard icon={DollarSign} label="Ticket médio/mês"
-          value={fmtBRL2(ticketMedio)}
-          sub="top 50 LTV" accent="#a855f7" />
+          sub={`pararam de operar${escopoNota}`} accent="#dc2626" />
+        <KpiCard icon={Activity} label="Lotes por cliente"
+          value={lotesPorCliente != null ? fmtNum(lotesPorCliente) : '—'}
+          sub="volume operado ÷ clientes ativos" accent="#a855f7" />
       </KpiRow>
 
       {/* 1 gráfico principal — Cohort heatmap */}
       <Block title="Cohort de retenção"
-        subtitle="Cada linha = mês de entrada do cliente. Colunas = % que continuam operando nos meses seguintes.">
+        subtitle="Cada linha = mês de entrada do cliente. Colunas = % que continuam operando nos meses seguintes. Histórico completo — não segue os filtros acima.">
         {d.isPending && d.cohort.length === 0
           ? <BlockSkeleton height={300} />
           : <CohortHeatmap data={d.cohort} />}
@@ -65,7 +68,7 @@ export function ClientesView() {
 
       {/* Tabela: Top 50 LTV */}
       <Block title="Top 50 clientes — LTV"
-        subtitle="Receita acumulada life-to-date (futuros + zeragem). Clique pra abrir o perfil.">
+        subtitle="Receita estimada acumulada desde a primeira operação (só WIN/WDO). Histórico completo — não segue os filtros acima. Clique pra abrir o perfil.">
         {d.ltv.length === 0
           ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
           : (

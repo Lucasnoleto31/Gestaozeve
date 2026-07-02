@@ -13,20 +13,38 @@ interface Props {
 function parseBrazilianNumber(value: unknown): number {
   if (value === null || value === undefined || value === '') return 0
   if (typeof value === 'number') return value
-  const str = String(value).trim().replace(/\./g, '').replace(',', '.')
+  let str = String(value).trim().replace(/\s/g, '').replace(/^R\$/i, '')
+  if (str === '') return 0
+  const hasComma = str.includes(',')
+  const hasDot = str.includes('.')
+  if (hasComma && hasDot) {
+    // o separador mais à direita é o decimal: '1.234,56' (BR) ou '1,234.56' (US)
+    if (str.lastIndexOf(',') > str.lastIndexOf('.')) str = str.replace(/\./g, '').replace(',', '.')
+    else str = str.replace(/,/g, '')
+  } else if (hasComma) {
+    str = str.replace(/\./g, '').replace(',', '.')
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(str)) {
+    // só pontos em grupos de 3 → milhar BR ('1.234' = 1234); '10.5' segue decimal
+    str = str.replace(/\./g, '')
+  }
   return parseFloat(str) || 0
 }
 
 function parseExcelDate(value: unknown): string {
   if (!value) return ''
   if (typeof value === 'number') {
-    const date = new Date((value - 25569) * 86400 * 1000)
+    // serial do Excel; parte fracionária é hora — descarta
+    const date = new Date((Math.floor(value) - 25569) * 86400 * 1000)
     return date.toISOString().split('T')[0]
   }
   if (typeof value === 'string') {
-    const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-    if (match) return `${match[3]}-${match[2]}-${match[1]}`
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+    const v = value.trim()
+    // dd/mm/yyyy (com ou sem hora, dia/mês com 1 ou 2 dígitos)
+    const br = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[\sT].*)?$/)
+    if (br) return `${br[3]}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`
+    // yyyy-mm-dd (com ou sem hora)
+    const iso = v.match(/^(\d{4}-\d{2}-\d{2})(?:[\sT].*)?$/)
+    if (iso) return iso[1]
   }
   return ''
 }

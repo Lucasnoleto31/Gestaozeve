@@ -12,6 +12,7 @@ import {
   getMetasAssessor, getAlertasExecutivos,
   getFluxoOperacional, getIndiceSobrevivencia, getRiscoOperacional,
   getCurvaAbc, getScoreCliente, getClustersClientes, getCorrelacoes, getRiscoEscritorio,
+  getRetencaoMensal, getIncentivoMensal, getIncentivoClientes,
 } from '../actions'
 import type { DashboardActions } from './types'
 
@@ -27,4 +28,5 @@ export const ACTIONS: DashboardActions = {
   getMetasAssessor, getAlertasExecutivos,
   getFluxoOperacional, getIndiceSobrevivencia, getRiscoOperacional,
   getCurvaAbc, getScoreCliente, getClustersClientes, getCorrelacoes, getRiscoEscritorio,
+  getRetencaoMensal, getIncentivoMensal, getIncentivoClientes,
 }

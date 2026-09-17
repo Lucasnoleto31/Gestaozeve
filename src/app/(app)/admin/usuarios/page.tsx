@@ -11,7 +11,6 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NovoUsuarioButton } from './NovoUsuarioButton'
 import { EditarUsuarioButton } from './EditarUsuarioButton'
 import { DeletarUsuarioButton } from './DeletarUsuarioButton'
-import { Users, ShieldCheck } from 'lucide-react'
 
 const roleMap: Record<string, { label: string; variant: 'info' | 'warning' | 'success' }> = {
   admin: { label: 'Admin', variant: 'info' },

@@ -15,15 +15,12 @@ export default async function ContratosDashboardLayout({ children }: { children:
   return (
     <div>
       <Header title="Dashboard de Contratos" />
-      <HeroBanner>
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6">
+      <HeroBanner compact>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-2">
-              Administração
-            </p>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Dashboard de Contratos</h1>
-            <p className="text-blue-200/60 mt-1 text-sm">
-              Visão analítica de lotes girados — operacional, receita, clientes, assessores
+            <h1 className="text-xl font-bold text-white tracking-tight">Dashboard de Contratos</h1>
+            <p className="text-blue-200/60 text-xs">
+              Lotes girados por corretora, barra, produto e cliente. Filtros no topo valem para todas as abas.
             </p>
           </div>
         </div>

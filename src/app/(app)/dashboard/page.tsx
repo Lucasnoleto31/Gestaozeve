@@ -9,10 +9,10 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { EvolucaoMensalChart } from '@/app/(app)/admin/contratos-dashboard/Charts'
 import { CorretoraBadge } from '@/app/(app)/admin/contratos-dashboard/ChartsCorretora'
 import { getResumoContratos, type ResumoContratos } from '@/app/(app)/admin/contratos-dashboard/actions'
-import { fmtNum, fmtBRL, fmtBRL2, fmtDataPt } from '@/app/(app)/admin/contratos-dashboard/_lib/utils'
+import { fmtNum, fmtBRL, fmtBRL2, fmtDataPt, fmtDelta } from '@/app/(app)/admin/contratos-dashboard/_lib/utils'
 import { formatDateTime } from '@/lib/utils'
 import { CORRETORA_COLOR, isCorretora } from '@/lib/corretoras'
-import { ArrowRight, BarChart2, Upload, Target, FileStack, Layers, Monitor, Users, Building2 } from 'lucide-react'
+import { ArrowRight, BarChart2, Upload, Target, FileStack, Layers, Monitor, Users, Building2, Award } from 'lucide-react'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -43,6 +43,27 @@ const rowStyle = (i: number) => ({
 
 function Vazio({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-gray-400 py-6 text-center">{children}</p>
+}
+
+function CardTop({ icon: Icon, cor, titulo, sub, href, acao }: {
+  icon: React.ElementType; cor: string; titulo: string; sub?: string; href?: string; acao?: string
+}) {
+  return (
+    <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon className="w-4 h-4 shrink-0" style={{ color: cor }} />
+        <div className="min-w-0">
+          <CardTitle>{titulo}</CardTitle>
+          {sub && <p className="text-xs text-gray-500 mt-0.5 truncate">{sub}</p>}
+        </div>
+      </div>
+      {href && (
+        <Link href={href} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 shrink-0">
+          {acao ?? 'Ver'} <ArrowRight className="w-3 h-3" />
+        </Link>
+      )}
+    </div>
+  )
 }
 
 // ── page ───────────────────────────────────────────────────────────────────
@@ -146,7 +167,7 @@ export default async function DashboardPage() {
           <CorretorasResumo corretoras={r.corretoras} />
         </Card>
 
-        {/* Linha 1: evolução mensal + meta + importações */}
+        {/* Linha 1: evolução mensal + top barras + meta */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <Card>
@@ -163,21 +184,19 @@ export default async function DashboardPage() {
           </div>
 
           <div className="space-y-6">
+            <Card className="p-0 overflow-hidden">
+              <CardTop icon={Award} cor="#1764f4" titulo="Top 5 barras do mês" sub="Lotes operados vs mês anterior"
+                href="/admin/contratos-dashboard/barras" acao="Ranking" />
+              <TopBarrasLista barras={r.topBarras} />
+            </Card>
             <MetaCard meta={r.meta} />
-            <ImportacoesCard importacoes={r.importacoes} />
           </div>
         </div>
 
         {/* Linha 2: top clientes + produtos + plataformas (mês atual) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="p-0 overflow-hidden">
-            <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <Users className="w-4 h-4 text-blue-600" />
-              <div>
-                <CardTitle>Top 10 clientes do mês</CardTitle>
-                <p className="text-xs text-gray-500 mt-0.5">Por lotes operados · % acumulado do total</p>
-              </div>
-            </div>
+            <CardTop icon={Users} cor="#a855f7" titulo="Top 10 clientes do mês" sub="Por lotes operados · % acumulado" />
             {r.topClientes.length === 0 ? <Vazio>Sem operações no mês.</Vazio> : (
               <table className="text-xs border-collapse w-full">
                 <thead style={{ background: 'var(--surface-2)' }}>
@@ -206,27 +225,17 @@ export default async function DashboardPage() {
           </Card>
 
           <Card className="p-0 overflow-hidden">
-            <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <Layers className="w-4 h-4 text-purple-600" />
-              <div>
-                <CardTitle>Lotes por produto no mês</CardTitle>
-                <p className="text-xs text-gray-500 mt-0.5">Operados, participação e % de zeragem</p>
-              </div>
-            </div>
+            <CardTop icon={Layers} cor="#0891b2" titulo="Lotes por produto no mês" sub="Operados, participação e % de zeragem" />
             <ProdutosTable produtos={r.produtos} />
           </Card>
 
           <Card className="p-0 overflow-hidden">
-            <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <Monitor className="w-4 h-4 text-cyan-600" />
-              <div>
-                <CardTitle>Lotes por plataforma no mês</CardTitle>
-                <p className="text-xs text-gray-500 mt-0.5">Plataforma de negociação informada na importação</p>
-              </div>
-            </div>
+            <CardTop icon={Monitor} cor="#f59e0b" titulo="Lotes por plataforma no mês" sub="Plataforma informada na importação" />
             <PlataformasTable plataformas={r.plataformas} />
           </Card>
         </div>
+
+        <ImportacoesCard importacoes={r.importacoes} />
       </div>
     </div>
   )
@@ -271,6 +280,37 @@ function CorretorasResumo({ corretoras }: { corretoras: ResumoContratos['correto
               <span className="text-right tabular-nums text-gray-700">{fmtNum(c.num_dias)}</span>
               <span className="text-gray-500">Receita líquida</span>
               <span className="text-right tabular-nums font-semibold text-emerald-700">{fmtBRL2(c.receita_liquida)}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TopBarrasLista({ barras }: { barras: ResumoContratos['topBarras'] }) {
+  if (barras.length === 0) return <Vazio>Sem operações no mês.</Vazio>
+  const max = Math.max(...barras.map(b => b.lotes_operados), 1)
+  return (
+    <div>
+      {barras.map((b, i) => {
+        const delta = b.delta_lotes_pct
+        const cor = delta == null ? '#9ca3af' : delta > 0.05 ? '#059669' : delta < -0.05 ? '#dc2626' : '#6b7280'
+        return (
+          <div key={`${b.corretora}|${b.barra_nome}`} className="px-5 py-2.5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-bold text-gray-400 tabular-nums w-4">{i + 1}</span>
+                <span className={`text-sm font-medium truncate ${b.barra_nome === 'Sem barra' ? 'text-gray-400 italic' : 'text-gray-900'}`}>{b.barra_nome}</span>
+                <CorretoraBadge corretora={b.corretora} />
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtNum(b.lotes_operados)}</span>
+                {delta != null && <span className="ml-2 text-[11px] font-semibold tabular-nums" style={{ color: cor }}>{fmtDelta(delta)}</span>}
+              </div>
+            </div>
+            <div className="w-full h-1 rounded-full overflow-hidden mt-1.5 ml-6" style={{ background: 'rgba(148,163,184,0.2)', width: 'calc(100% - 1.5rem)' }}>
+              <div className="h-full" style={{ width: `${(b.lotes_operados / max) * 100}%`, background: '#1764f4', opacity: 0.75 }} />
             </div>
           </div>
         )
@@ -335,31 +375,19 @@ function MetaProgresso({ label, pct, realizado, alvo }: {
 function ImportacoesCard({ importacoes }: { importacoes: ResumoContratos['importacoes'] }) {
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-        <div className="flex items-center gap-2">
-          <FileStack className="w-4 h-4 text-blue-600" />
-          <CardTitle>Últimas importações</CardTitle>
-        </div>
-        <Link href="/admin/contratos" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
-          Ver todas <ArrowRight className="w-3 h-3" />
-        </Link>
-      </div>
+      <CardTop icon={FileStack} cor="#1764f4" titulo="Últimas importações" href="/admin/contratos" acao="Ver todas" />
       {importacoes.length === 0 ? <Vazio>Nenhuma importação ainda.</Vazio> : (
-        <div>
+        <div className="grid grid-cols-1 md:grid-cols-5">
           {importacoes.map(imp => (
-            <div key={imp.id} className="flex items-center justify-between gap-3 px-5 py-3"
-              style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-2">
-                  <span className="truncate">{imp.nome_arquivo || 'Sem nome'}</span>
-                  {imp.corretora && <CorretoraBadge corretora={imp.corretora} />}
-                </p>
-                <p className="text-xs text-gray-500">{imp.created_at ? formatDateTime(imp.created_at) : '—'} · {fmtNum(imp.total_linhas)} linhas</p>
+            <div key={imp.id} className="px-5 py-3 min-w-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-gray-900 truncate">{imp.nome_arquivo || 'Sem nome'}</p>
+                {imp.corretora && <CorretoraBadge corretora={imp.corretora} />}
               </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-sm font-semibold text-gray-900 tabular-nums">{fmtNum(imp.total_lotes_operados)}</p>
-                <p className="text-[10px] uppercase tracking-wide text-gray-400">lotes op.</p>
-              </div>
+              <p className="text-xs text-gray-500 mt-0.5">{imp.created_at ? formatDateTime(imp.created_at) : '—'}</p>
+              <p className="text-xs text-gray-700 mt-0.5 tabular-nums">
+                <span className="font-semibold">{fmtNum(imp.total_lotes_operados)}</span> lotes op. · {fmtNum(imp.total_linhas)} linhas
+              </p>
             </div>
           ))}
         </div>

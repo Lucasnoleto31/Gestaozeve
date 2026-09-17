@@ -4,7 +4,7 @@ import {
   LineChart, Line, Bar, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import type { DiarioProdutoRow, EvolucaoMensalRow, CohortPonto } from './actions'
+import type { DiarioProdutoRow, EvolucaoMensalRow } from './actions'
 
 const fmtNum = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 
@@ -182,89 +182,6 @@ export function EvolucaoMensalChart({ data }: { data: EvolucaoMensalRow[] }) {
           dot={{ r: 2, fill: '#a855f7' }} activeDot={{ r: 4 }} animationDuration={400} />
       </ComposedChart>
     </ResponsiveContainer>
-  )
-}
-
-// ===========================================================
-// 3. Cohort Heatmap — retenção por mês × offset
-// ===========================================================
-export function CohortHeatmap({ data }: { data: CohortPonto[] }) {
-  if (data.length === 0) return <p className="text-sm text-gray-400 py-4">Sem dados de cohort.</p>
-
-  // Pivot: cohort_mes → { mes_offset → retencao_pct }
-  const cohorts = new Map<string, { size: number; cells: Map<number, number> }>()
-  let maxOffset = 0
-  data.forEach(p => {
-    if (!cohorts.has(p.cohort_mes)) cohorts.set(p.cohort_mes, { size: p.cohort_size, cells: new Map() })
-    cohorts.get(p.cohort_mes)!.cells.set(p.mes_offset, p.retencao_pct)
-    if (p.mes_offset > maxOffset) maxOffset = p.mes_offset
-  })
-  const cohortList = Array.from(cohorts.keys()).sort().reverse()
-  const offsets = Array.from({ length: maxOffset + 1 }, (_, i) => i)
-
-  const fmtMes = (iso: string) => {
-    const d = new Date(iso + 'T00:00:00')
-    return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' })
-      .replace('.', '').toLowerCase()
-  }
-  const colorFor = (pct: number | undefined) => {
-    if (pct == null) return 'transparent'
-    // Escala: 0 = cinza claro, 100 = azul forte
-    const intensity = Math.min(1, pct / 100)
-    const r = Math.round(241 - intensity * 218)
-    const g = Math.round(245 - intensity * 145)
-    const b = Math.round(249 - intensity * 5)
-    return `rgb(${r},${g},${b})`
-  }
-  const textColorFor = (pct: number | undefined) => {
-    if (pct == null) return '#94a3b8'
-    return pct > 50 ? '#fff' : '#0f172a'
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-      <table className="text-xs border-collapse min-w-max w-full">
-        <thead style={{ background: 'var(--surface-2)' }}>
-          <tr>
-            <th className="px-2 py-2 font-semibold text-gray-500 text-left sticky left-0 z-10"
-              style={{ background: 'var(--surface-2)' }}>Cohort</th>
-            <th className="px-2 py-2 font-semibold text-gray-500 text-right">Tam.</th>
-            {offsets.map(o => (
-              <th key={o} className="px-2 py-2 font-semibold text-gray-500 text-center" style={{ minWidth: 56 }}>
-                M{o}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {cohortList.map(cm => {
-            const c = cohorts.get(cm)!
-            return (
-              <tr key={cm} style={{ borderTop: '1px solid var(--border)' }}>
-                <td className="px-2 py-1.5 font-medium text-gray-700 sticky left-0 z-10"
-                  style={{ background: 'var(--surface)' }}>
-                  {fmtMes(cm)}
-                </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">{c.size}</td>
-                {offsets.map(o => {
-                  const pct = c.cells.get(o)
-                  return (
-                    <td key={o} className="px-1 py-1 text-center tabular-nums font-semibold"
-                      style={{
-                        background: colorFor(pct),
-                        color: textColorFor(pct),
-                        borderLeft: '1px solid rgba(148,163,184,0.1)',
-                      }}>
-                      {pct != null ? `${pct.toFixed(0)}%` : ''}
-                    </td>
-                  )
-                })}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
   )
 }
 

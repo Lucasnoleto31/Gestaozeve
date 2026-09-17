@@ -1,8 +1,10 @@
 interface HeroBannerProps {
   children: React.ReactNode
+  // compact = faixa mais baixa (páginas de trabalho, onde o conteúdo importa mais que o cabeçalho)
+  compact?: boolean
 }
 
-export function HeroBanner({ children }: HeroBannerProps) {
+export function HeroBanner({ children, compact }: HeroBannerProps) {
   return (
     <div
       className="relative overflow-hidden"
@@ -25,7 +27,7 @@ export function HeroBanner({ children }: HeroBannerProps) {
             'radial-gradient(ellipse 60% 80% at 80% 40%, rgba(23,100,244,0.4) 0%, transparent 70%)',
         }}
       />
-      <div className="relative z-10 px-6 py-8">{children}</div>
+      <div className={`relative z-10 px-6 ${compact ? 'py-4' : 'py-8'}`}>{children}</div>
     </div>
   )
 }

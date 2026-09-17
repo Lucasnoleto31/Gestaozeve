@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { LogOut, Bell, Menu } from 'lucide-react'
+import { LogOut, Menu } from 'lucide-react'
 import { useSidebar } from '@/lib/sidebar-context'
 
 interface HeaderProps {
@@ -44,20 +44,6 @@ export function Header({ title }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-1">
-        <button
-          className="p-2 rounded-lg transition-colors"
-          style={{ color: 'var(--muted)' }}
-          onMouseEnter={(e) => {
-            ;(e.currentTarget as HTMLElement).style.background = 'var(--surface-3)'
-            ;(e.currentTarget as HTMLElement).style.color = 'var(--foreground)'
-          }}
-          onMouseLeave={(e) => {
-            ;(e.currentTarget as HTMLElement).style.background = ''
-            ;(e.currentTarget as HTMLElement).style.color = 'var(--muted)'
-          }}
-        >
-          <Bell className="w-4 h-4" />
-        </button>
         <button
           onClick={handleLogout}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors"

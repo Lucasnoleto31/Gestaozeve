@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getProfile } from '@/lib/auth/getProfile'
 import { revalidatePath } from 'next/cache'
 import { isCorretora, type Corretora } from '@/lib/corretoras'
+import { normalizarBarra, normalizarNome, pareceNomeDePlataforma } from '@/lib/texto'
 
 export interface ContratoRow {
   data: string
@@ -18,11 +19,60 @@ export interface ContratoRow {
   lotes_zerados: number
 }
 
+async function adminOnly() {
+  const profile = await getProfile()
+  if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
+  return profile
+}
+
+// Barras cadastradas (tabela barras + tarifas) de uma corretora, já normalizadas
+async function barrasConhecidas(corretora: Corretora): Promise<Set<string>> {
+  const supabase = createAdminClient()
+  const [{ data: barras }, { data: tarifas }] = await Promise.all([
+    supabase.from('barras').select('nome').eq('corretora', corretora).range(0, 9999),
+    supabase.from('assessor_pricing').select('barra_nome').eq('corretora', corretora).eq('ativo', true).range(0, 9999),
+  ])
+  const set = new Set<string>()
+  for (const b of barras ?? []) set.add(normalizarBarra(b.nome))
+  for (const t of tarifas ?? []) set.add(normalizarBarra(t.barra_nome))
+  return set
+}
+
+export type ChecagemImportacao = {
+  desconhecidas: { nome: string; linhas: number; lotes: number }[]   // barras que não existem no cadastro da corretora
+  parecemPlataforma: string[]                                        // nomes de plataforma na coluna de assessor
+  semBarra: { linhas: number; lotes: number }                        // linhas sem assessor
+}
+
+// Checagem antes de gravar: barras desconhecidas, plataforma no lugar da barra, linhas sem barra.
+export async function checarImportacao(corretora: Corretora, rows: ContratoRow[]): Promise<ChecagemImportacao> {
+  await adminOnly()
+  if (!isCorretora(corretora)) throw new Error('Corretora inválida')
+  const conhecidas = await barrasConhecidas(corretora)
+
+  const porBarra = new Map<string, { nome: string; linhas: number; lotes: number }>()
+  const semBarra = { linhas: 0, lotes: 0 }
+  const plataforma = new Set<string>()
+  for (const r of rows) {
+    const nome = normalizarBarra(r.assessor_nome)
+    if (!nome) { semBarra.linhas++; semBarra.lotes += r.lotes_operados || 0; continue }
+    if (pareceNomeDePlataforma(nome)) { plataforma.add(nome); continue }
+    if (conhecidas.has(nome)) continue
+    const acc = porBarra.get(nome) ?? { nome, linhas: 0, lotes: 0 }
+    acc.linhas++; acc.lotes += r.lotes_operados || 0
+    porBarra.set(nome, acc)
+  }
+  return {
+    desconhecidas: Array.from(porBarra.values()).sort((a, b) => b.lotes - a.lotes),
+    parecemPlataforma: Array.from(plataforma),
+    semBarra,
+  }
+}
+
 // Cada arquivo importado pertence a UMA corretora (escolhida no modal).
 // A corretora vai para a importação e para cada linha de contratos.
 export async function importarContratos(nomeArquivo: string, corretora: Corretora, rows: ContratoRow[]) {
-  const profile = await getProfile()
-  if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
+  const profile = await adminOnly()
   if (!isCorretora(corretora)) throw new Error('Escolha a corretora do arquivo (Genial, XP ou BTG).')
 
   const supabase = createAdminClient()
@@ -36,7 +86,7 @@ export async function importarContratos(nomeArquivo: string, corretora: Corretor
   const clientesByCpf = new Map<string, string>()
   const clientesByNome = new Map<string, string>()
   const contasByNumero = new Map<string, string>()
-  // Barras são de uma corretora só: a chave é (corretora, nome)
+  // Barras são de uma corretora só: a chave é (corretora, nome normalizado)
   const barraMap = new Map<string, { assessor_id: string | null; influenciador_id: string | null }>()
 
   for (const c of clientes ?? []) {
@@ -48,7 +98,7 @@ export async function importarContratos(nomeArquivo: string, corretora: Corretor
   }
   for (const b of barras ?? []) {
     const corr = String(b.corretora ?? 'GENIAL').toUpperCase()
-    barraMap.set(`${corr}|${b.nome.toUpperCase().trim()}`, { assessor_id: b.assessor_id, influenciador_id: b.influenciador_id })
+    barraMap.set(`${corr}|${normalizarBarra(b.nome)}`, { assessor_id: b.assessor_id, influenciador_id: b.influenciador_id })
   }
 
   const totalLotesOperados = rows.reduce((s, r) => s + (r.lotes_operados || 0), 0)
@@ -72,6 +122,14 @@ export async function importarContratos(nomeArquivo: string, corretora: Corretor
   const contratosToInsert = rows.map((row) => {
     const cpfLimpo = row.cpf?.replace(/\D/g, '') ?? ''
     const numeroConta = row.numero_conta?.trim() ?? ''
+    const clienteNome = normalizarNome(row.cliente_nome)
+    // Nome da barra limpo (acentos quebrados, espaços, maiúsculas) — é o que os
+    // dashboards agrupam e o que casa com barras/tarifas. Plataforma na coluna
+    // de assessor vira "Sem barra" (e preenche a plataforma se ela veio vazia).
+    const barraBruta = normalizarBarra(row.assessor_nome)
+    const ehPlataforma = !!barraBruta && pareceNomeDePlataforma(barraBruta)
+    const barraNome = ehPlataforma ? '' : barraBruta
+    const plataforma = (row.plataforma || '').trim().toUpperCase() || (ehPlataforma ? barraBruta : '')
 
     // Resolve cliente: conta sinacor > CPF > nome
     let clienteId: string | null = null
@@ -80,13 +138,13 @@ export async function importarContratos(nomeArquivo: string, corretora: Corretor
     } else if (cpfLimpo && clientesByCpf.has(cpfLimpo)) {
       clienteId = clientesByCpf.get(cpfLimpo)!
     } else {
-      clienteId = clientesByNome.get(row.cliente_nome?.toLowerCase().trim() ?? '') ?? null
+      clienteId = clientesByNome.get(clienteNome.toLowerCase()) ?? null
     }
 
     // Resolve assessor via barras da corretora do arquivo
     let assessorId: string | null = null
-    if (row.assessor_nome) {
-      const barra = barraMap.get(`${corretora}|${row.assessor_nome.toUpperCase().trim()}`)
+    if (barraNome) {
+      const barra = barraMap.get(`${corretora}|${barraNome}`)
       if (barra) assessorId = barra.assessor_id
     }
 
@@ -96,13 +154,13 @@ export async function importarContratos(nomeArquivo: string, corretora: Corretor
       cliente_id: clienteId,
       assessor_id: assessorId,
       data: row.data || null,
-      numero_conta: row.numero_conta || null,
+      numero_conta: numeroConta || null,
       cpf: row.cpf || null,
       cnpj: row.cnpj || null,
-      cliente_nome: row.cliente_nome || null,
-      assessor_nome: row.assessor_nome || null,
-      ativo: row.ativo || null,
-      plataforma: row.plataforma || null,
+      cliente_nome: clienteNome || null,
+      assessor_nome: barraNome || null,
+      ativo: (row.ativo || '').trim().toUpperCase() || null,
+      plataforma: plataforma || null,
       lotes_operados: row.lotes_operados || 0,
       lotes_zerados: row.lotes_zerados || 0,
     }
@@ -124,16 +182,16 @@ export async function importarContratos(nomeArquivo: string, corretora: Corretor
   }
 
   revalidatePath('/admin/contratos')
+  revalidatePath('/dashboard')
   return { ok: inseridos }
 }
 
 export async function deletarImportacaoContrato(importacaoId: string) {
-  const profile = await getProfile()
-  if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
-
+  await adminOnly()
   const supabase = createAdminClient()
   await supabase.from('contratos_importacoes').delete().eq('id', importacaoId)
   revalidatePath('/admin/contratos')
+  revalidatePath('/dashboard')
 }
 
 export interface ContratoExportRow {
@@ -141,15 +199,15 @@ export interface ContratoExportRow {
   corretora: string
   numero_conta: string | null
   cliente_nome: string | null
+  assessor_nome: string | null
   ativo: string | null
+  plataforma: string | null
   lotes_operados: number
   lotes_zerados: number
 }
 
 export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
-  const profile = await getProfile()
-  if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
-
+  await adminOnly()
   const supabase = createAdminClient()
 
   const PAGE = 1000
@@ -159,7 +217,7 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
   while (true) {
     const { data, error } = await supabase
       .from('contratos')
-      .select('data, corretora, numero_conta, cliente_nome, ativo, lotes_operados, lotes_zerados, cliente:clientes(nome)')
+      .select('data, corretora, numero_conta, cliente_nome, assessor_nome, ativo, plataforma, lotes_operados, lotes_zerados, cliente:clientes(nome)')
       .order('data', { ascending: false })
       .range(from, from + PAGE - 1)
 
@@ -171,7 +229,9 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
       corretora: string | null
       numero_conta: string | null
       cliente_nome: string | null
+      assessor_nome: string | null
       ativo: string | null
+      plataforma: string | null
       lotes_operados: number
       lotes_zerados: number
       cliente: { nome: string } | { nome: string }[] | null
@@ -182,7 +242,9 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
         corretora: c.corretora ?? 'GENIAL',
         numero_conta: c.numero_conta,
         cliente_nome: clienteRel?.nome ?? c.cliente_nome,
+        assessor_nome: c.assessor_nome,
         ativo: c.ativo,
+        plataforma: c.plataforma,
         lotes_operados: Number(c.lotes_operados ?? 0),
         lotes_zerados: Number(c.lotes_zerados ?? 0),
       })

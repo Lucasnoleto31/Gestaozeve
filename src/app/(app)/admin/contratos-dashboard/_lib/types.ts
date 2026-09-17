@@ -1,20 +1,9 @@
-export type DashboardTab =
-  | 'executivo'
-  | 'operacional'
-  | 'incentivo'
-  | 'receita'
-  | 'clientes'
-  | 'assessores'
-  | 'analises'
-  | 'forecast'
+export type DashboardTab = 'executivo' | 'barras' | 'operacional' | 'receita' | 'incentivo'
 
-export const TABS: { id: DashboardTab; label: string; href: string }[] = [
-  { id: 'executivo',   label: 'Executivo',    href: '/admin/contratos-dashboard' },
-  { id: 'operacional', label: 'Operacional',  href: '/admin/contratos-dashboard/operacional' },
-  { id: 'incentivo',   label: 'Incentivo',    href: '/admin/contratos-dashboard/incentivo' },
-  { id: 'receita',     label: 'Receita',      href: '/admin/contratos-dashboard/receita' },
-  { id: 'clientes',    label: 'Clientes',     href: '/admin/contratos-dashboard/clientes' },
-  { id: 'assessores',  label: 'Assessores',   href: '/admin/contratos-dashboard/assessores' },
-  { id: 'analises',    label: 'Análises',     href: '/admin/contratos-dashboard/analises' },
-  { id: 'forecast',    label: 'Forecast',     href: '/admin/contratos-dashboard/forecast' },
+export const TABS: { id: DashboardTab; label: string; href: string; hint: string }[] = [
+  { id: 'executivo',   label: 'Executivo',   href: '/admin/contratos-dashboard',             hint: 'Visão geral: corretoras, barras, clientes e metas' },
+  { id: 'barras',      label: 'Barras',      href: '/admin/contratos-dashboard/barras',      hint: 'Quem está girando: ranking por lotes ou receita' },
+  { id: 'operacional', label: 'Operacional', href: '/admin/contratos-dashboard/operacional', hint: 'Pregão a pregão e produto a produto' },
+  { id: 'receita',     label: 'Receita',     href: '/admin/contratos-dashboard/receita',     hint: 'Receita estimada, curva ABC e projeção' },
+  { id: 'incentivo',   label: 'Incentivo',   href: '/admin/contratos-dashboard/incentivo',   hint: 'Programa de pontos da Genial' },
 ]

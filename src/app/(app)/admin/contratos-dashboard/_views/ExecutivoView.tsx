@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import {
-  Download, TrendingDown, Users, Activity, DollarSign, Layers, CalendarDays,
+  TrendingDown, Users, Activity, DollarSign, Layers, CalendarDays, ArrowRight,
 } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
@@ -11,10 +11,10 @@ import { useDashboardData } from '../_lib/useDashboardData'
 import { Block } from '../_lib/Blocks'
 import { EvolucaoMensalChart, BlockSkeleton } from '../Charts'
 import { EvolucaoCorretoraChart, CorretoraBadge } from '../ChartsCorretora'
-import { fmtNum, fmtBRL, fmtBRL2 } from '../_lib/utils'
-import { KpiCard, KpiRow } from '../_lib/Kpi'
+import { fmtNum, fmtBRL, fmtBRL2, fmtDelta, fmtDataPt } from '../_lib/utils'
+import { KpiCard, KpiRow, Vazio } from '../_lib/Kpi'
 import { CORRETORA_COLOR, CORRETORA_LABEL, isCorretora } from '@/lib/corretoras'
-import type { RetencaoMensalRow, LotesPorPlataformaRow, ResumoCorretoraRow, MetaAnual } from '../actions'
+import type { RetencaoMensalRow, LotesPorPlataformaRow, ResumoCorretoraRow, MetaAnual, BarraRankingRow, TopClienteRow } from '../actions'
 
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -23,12 +23,25 @@ function labelMesAno(iso: string): string {
   return `${MESES_ABREV[m - 1] ?? iso.slice(5, 7)}/${iso.slice(0, 4)}`
 }
 
+const th = (align: 'left' | 'right') =>
+  `px-3 py-2 font-semibold text-gray-500 ${align === 'left' ? 'text-left' : 'text-right'}`
+const rowStyle = (i: number) => ({
+  borderTop: '1px solid var(--border)',
+  background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)',
+})
+
+function DeltaTxt({ pct }: { pct: number | null }) {
+  if (pct == null) return <span className="text-gray-300">—</span>
+  const color = pct > 0.05 ? '#059669' : pct < -0.05 ? '#dc2626' : '#6b7280'
+  return <span className="font-semibold tabular-nums" style={{ color }}>{fmtDelta(pct)}</span>
+}
+
 export function ExecutivoView() {
   const { periodo, barra, excluir, corretora } = useDashboardFilters()
   const d = useDashboardData(periodo, barra, excluir, corretora, {
-    kpis: true, receita: true, meta: true, evolucao: true,
+    kpis: true, receita: true, meta: true, metasCorretoras: true, evolucao: true,
     receitaBrutaLiquida: true, retencao: true, plataformas: true,
-    corretoras: true, evolucaoCorretora: true, metasCorretoras: true,
+    corretoras: true, evolucaoCorretora: true, ranking: true, topClientes: true,
   })
 
   const shell = useShell()
@@ -37,19 +50,21 @@ export function ExecutivoView() {
     if (d.kpis?.dataset_max) shell.setDatasetMax(d.kpis.dataset_max)
   }, [d.kpis?.dataset_max, shell])
 
-  const pctZeragem = d.kpis && d.kpis.volume_operados > 0
-    ? (d.kpis.volume_zerados / d.kpis.volume_operados) * 100
-    : null
+  const k = d.kpis
+  const ka = d.kpisAnterior
+  const pctZeragem = k && k.volume_operados > 0 ? (k.volume_zerados / k.volume_operados) * 100 : null
+  const pctZeragemAnt = ka && ka.volume_operados > 0 ? (ka.volume_zerados / ka.volume_operados) * 100 : null
 
-  const exportHref = `/admin/contratos-dashboard/export?periodo=${periodo}`
-    + (corretora ? `&corretora=${corretora}` : '')
-    + (barra ? `&barra=${encodeURIComponent(barra)}` : '')
-    + (excluir ? `&excluir=${encodeURIComponent(excluir)}` : '')
+  // Receita bruta do período anterior vem do ranking (soma das barras)
+  const receitaAnterior = useMemo(() => d.ranking.reduce((s, r) => s + r.receita_anterior, 0), [d.ranking])
+  const topBarras = useMemo(() => [...d.ranking].sort((a, b) => b.lotes_operados - a.lotes_operados).slice(0, 10), [d.ranking])
+  const totalLotesBarras = useMemo(() => d.ranking.reduce((s, r) => s + r.lotes_operados, 0), [d.ranking])
 
   const temMetaEscopo = !!d.meta && (d.meta.meta_receita > 0 || d.meta.meta_lotes > 0)
   const metasCorr = d.metasCorretoras.filter(m => m.meta_receita > 0 || m.meta_lotes > 0)
   const mostraMetas = temMetaEscopo || (!corretora && metasCorr.length > 0)
   const escopoLabel = corretora ? CORRETORA_LABEL[corretora] : 'escritório'
+  const rotuloAnterior = periodo === 'tudo' ? undefined : 'vs período anterior'
 
   return (
     <div className="space-y-5">
@@ -60,122 +75,101 @@ export function ExecutivoView() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {(corretora || barra || excluir) ? (
-          <p className="text-xs text-gray-500">
-            {corretora && <>Mostrando só a <strong className="text-gray-700">{CORRETORA_LABEL[corretora]}</strong>. </>}
-            {excluir && <>Excluindo <strong className="text-gray-700">{excluir}</strong> de lotes, clientes, plataformas, retenção e receita. </>}
-            Projeção do mês e meta valem para o {escopoLabel} inteiro e não seguem barra nem exclusão.
-          </p>
-        ) : <span />}
-        <Link href={exportHref}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold"
-          style={{ background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--border)' }}>
-          <Download className="w-3.5 h-3.5" />
-          Exportar
-        </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+        <p>
+          {d.range.inicio && <>Período <strong className="text-gray-700">{fmtDataPt(d.range.inicio)} a {fmtDataPt(d.range.fim)}</strong>. </>}
+          {corretora && <>Só a <strong className="text-gray-700">{CORRETORA_LABEL[corretora]}</strong>. </>}
+          {excluir && <>Excluindo <strong className="text-gray-700">{excluir}</strong>. </>}
+          Projeção do mês e meta valem para o {escopoLabel} inteiro e não seguem barra nem exclusão.
+        </p>
       </div>
 
-      {/* 5 KPIs no topo — todos respeitam corretora + período + barra + exclusão */}
+      {/* KPIs com variação vs período anterior (mesma duração) */}
       <KpiRow cols={5}>
-        <KpiCard icon={Activity} label="Volume operado"
-          value={d.kpis ? fmtNum(d.kpis.volume_operados) : '—'}
-          sub="lotes no período" accent="#1764f4" />
-        <KpiCard icon={TrendingDown} label="Volume zerado"
-          value={d.kpis ? fmtNum(d.kpis.volume_zerados) : '—'}
-          sub={pctZeragem != null ? `${pctZeragem.toFixed(1)}% do operado` : undefined} accent="#dc2626" />
-        <KpiCard icon={Users} label="Clientes ativos"
-          value={d.kpis ? fmtNum(d.kpis.num_clientes_ativos) : '—'}
-          sub="contas que operaram no período" accent="#a855f7" />
-        <KpiCard icon={CalendarDays} label="Média diária"
-          value={d.kpis ? fmtNum(d.kpis.media_diaria) : '—'}
-          sub={d.kpis ? `lotes/pregão · ${d.kpis.num_dias_com_dado} pregões` : undefined} accent="#0891b2" />
-        <KpiCard icon={DollarSign} label="Receita estimada"
+        <KpiCard icon={Activity} label="Volume operado" loading={d.loading && !k}
+          value={k ? fmtNum(k.volume_operados) : '—'} sub="lotes no período" accent="#1764f4"
+          delta={k && ka ? { atual: k.volume_operados, anterior: ka.volume_operados, rotulo: rotuloAnterior, fmt: fmtNum } : null} />
+        <KpiCard icon={TrendingDown} label="Volume zerado" loading={d.loading && !k}
+          value={k ? fmtNum(k.volume_zerados) : '—'}
+          sub={pctZeragem != null ? `${pctZeragem.toFixed(1)}% do operado` : undefined} accent="#dc2626"
+          delta={pctZeragem != null && pctZeragemAnt != null
+            ? { atual: pctZeragem, anterior: pctZeragemAnt, menorMelhor: true, rotulo: '% zer. vs anterior', fmt: n => `${n.toFixed(1)}%` }
+            : null} />
+        <KpiCard icon={Users} label="Clientes ativos" loading={d.loading && !k}
+          value={k ? fmtNum(k.num_clientes_ativos) : '—'} sub="contas que operaram" accent="#a855f7"
+          delta={k && ka ? { atual: k.num_clientes_ativos, anterior: ka.num_clientes_ativos, rotulo: rotuloAnterior, fmt: fmtNum } : null} />
+        <KpiCard icon={CalendarDays} label="Média diária" loading={d.loading && !k}
+          value={k ? fmtNum(k.media_diaria) : '—'}
+          sub={k ? `lotes/pregão · ${k.num_dias_com_dado} pregões` : undefined} accent="#0891b2"
+          delta={k && ka ? { atual: k.media_diaria, anterior: ka.media_diaria, rotulo: rotuloAnterior, fmt: fmtNum } : null} />
+        <KpiCard icon={DollarSign} label="Receita estimada" loading={d.loading && !d.receitaBL}
           value={d.receitaBL ? fmtBRL2(d.receitaBL.receita_liquida) : '—'}
           sub={d.receitaBL ? `líquida · bruta ${fmtBRL(d.receitaBL.receita_bruta)} · só WIN/WDO` : 'só WIN/WDO'}
-          accent="#10b981" />
+          accent="#10b981"
+          delta={d.receitaBL && d.ranking.length > 0 && periodo !== 'tudo'
+            ? { atual: d.receitaBL.receita_bruta, anterior: receitaAnterior, rotulo: 'bruta vs anterior', fmt: fmtBRL }
+            : null} />
       </KpiRow>
 
-      {/* Lotes por corretora — Genial, XP e BTG lado a lado */}
-      <Block title="Lotes por corretora (período)"
+      {/* Corretoras lado a lado */}
+      <Block title="Lotes por corretora"
         subtitle="Genial, XP e BTG lado a lado: lotes, participação, zeragem, clientes por conta e receita líquida estimada pela tarifa de cada corretora. Segue período, barra e exclusão de cliente.">
         {d.corretoras.length === 0
-          ? <p className="text-sm text-gray-400 py-4">
-              {d.isPending ? 'Carregando…' : 'Indisponível: rode o supabase-s13-corretoras.sql no SQL Editor do Supabase.'}
-            </p>
+          ? <Vazio loading={d.loading}>Indisponível: rode o supabase-s13-corretoras.sql no SQL Editor do Supabase.</Vazio>
           : <CorretorasCards rows={d.corretoras} selecionada={corretora} />}
       </Block>
 
-      {!corretora && (
-        <Block title="Evolução mensal por corretora"
-          subtitle="Lotes operados por mês, empilhados por corretora. Últimos 12 meses · * = mês em andamento.">
-          {d.isPending && d.evolucaoCorretora.length === 0
+      {/* Top 10 barras */}
+      <Block title="Top 10 barras por lotes"
+        subtitle="Quem mais girou no período, com variação contra o período anterior de mesma duração. Ranking completo na aba Barras."
+        action={
+          <Link href="/admin/contratos-dashboard/barras" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700">
+            Ver todas <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        }>
+        {topBarras.length === 0
+          ? <Vazio loading={d.loading} />
+          : <TopBarrasTable rows={topBarras} totalLotes={totalLotesBarras} mostraDelta={periodo !== 'tudo'} />}
+      </Block>
+
+      {/* Evolução mensal */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <Block title={`Evolução mensal${corretora ? ` · ${CORRETORA_LABEL[corretora]}` : ''}`}
+          subtitle="Lotes operados (azul) e zerados (vermelho) + clientes ativos (linha roxa). * = mês em andamento.">
+          {d.loading && d.evolucao.length === 0
             ? <BlockSkeleton height={280} />
-            : <EvolucaoCorretoraChart data={d.evolucaoCorretora} />}
+            : <EvolucaoMensalChart data={d.evolucao.slice(-12)} />}
         </Block>
-      )}
+        {!corretora ? (
+          <Block title="Evolução mensal por corretora"
+            subtitle="Lotes operados por mês, empilhados por corretora. Últimos 12 meses · * = mês em andamento.">
+            {d.loading && d.evolucaoCorretora.length === 0
+              ? <BlockSkeleton height={280} />
+              : <EvolucaoCorretoraChart data={d.evolucaoCorretora} />}
+          </Block>
+        ) : (
+          <Block title="Top 10 clientes do período" subtitle="Por lotes operados · % acumulado do total.">
+            {d.topClientes.length === 0 ? <Vazio loading={d.loading} /> : <TopClientesTable rows={d.topClientes} />}
+          </Block>
+        )}
+      </div>
 
-      {/* Lotes por plataforma */}
-      <Block title="Lotes por plataforma (período)"
-        subtitle="Lotes operados e zerados em cada plataforma de negociação, com clientes distintos (por conta) e pregões. Segue corretora, período, barra e exclusão de cliente.">
-        {d.plataformas.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados no período.'}</p>
-          : <PlataformasTable rows={d.plataformas} />}
-      </Block>
-
-      {/* 1 gráfico principal */}
-      <Block title={`Evolução mensal${corretora ? ` · ${CORRETORA_LABEL[corretora]}` : ''}`}
-        subtitle="Lotes operados (azul) e zerados (vermelho) lado a lado + clientes ativos (linha roxa, eixo direito). * = mês em andamento.">
-        {d.isPending && d.evolucao.length === 0
-          ? <BlockSkeleton height={280} />
-          : <EvolucaoMensalChart data={d.evolucao} />}
-      </Block>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        {!corretora && (
+          <Block title="Top 10 clientes do período" subtitle="Por lotes operados · % acumulado do total.">
+            {d.topClientes.length === 0 ? <Vazio loading={d.loading} /> : <TopClientesTable rows={d.topClientes} />}
+          </Block>
+        )}
+        <Block title="Lotes por plataforma"
+          subtitle="Plataforma de negociação informada na importação. Segue todos os filtros.">
+          {d.plataformas.length === 0 ? <Vazio loading={d.loading} /> : <PlataformasTable rows={d.plataformas} />}
+        </Block>
+      </div>
 
       {/* Retenção e churn mês a mês */}
       <Block title="Retenção e churn"
         subtitle="Clientes (por número de conta) que operaram no mês e pararam no mês seguinte. Linha marcada como parcial ainda muda com novas importações.">
-        {d.retencao.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
-          : <RetencaoTable rows={d.retencao} />}
-      </Block>
-
-      {/* Receita por barra */}
-      <Block title="Receita estimada por barra (período)"
-        subtitle="Tarifa cadastrada em Tarifas × lotes WIN/WDO, com a tarifa da corretora de cada barra. Lotes de outros produtos aparecem no volume mas ainda não geram receita aqui.">
-        {d.receitaPorAss.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
-          : (
-            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-              <table className="text-xs border-collapse min-w-max w-full">
-                <thead style={{ background: 'var(--surface-2)' }}>
-                  <tr>
-                    {['#', 'Barra', 'Corretora', 'Nº', 'Lotes op.', 'Lotes ze.', '% zer.', 'Receita'].map((h, i) => (
-                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 3 ? 'text-left' : 'text-right'}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...d.receitaPorAss].sort((a, b) => b.receita_total - a.receita_total).map((r, i) => {
-                    const pctZe = r.lotes_operados > 0 ? (r.lotes_zerados / r.lotes_operados) * 100 : 0
-                    return (
-                      <tr key={`${r.corretora}|${r.barra_nome}|${i}`}
-                        style={{ borderTop: '1px solid var(--border)',
-                                 background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
-                        <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{i + 1}</td>
-                        <td className="px-3 py-1.5 font-medium text-gray-700">{r.barra_nome}</td>
-                        <td className="px-3 py-1.5"><CorretoraBadge corretora={r.corretora} /></td>
-                        <td className="px-3 py-1.5 text-gray-500 tabular-nums">{r.numero ?? '—'}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.lotes_operados)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(r.lotes_zerados)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
-                        <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-emerald-700">{fmtBRL2(r.receita_total)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+        {d.retencao.length === 0 ? <Vazio loading={d.loading} /> : <RetencaoTable rows={d.retencao.slice(-12)} />}
       </Block>
 
       {/* Meta — escopo (escritório ou corretora) + metas de cada corretora */}
@@ -205,7 +199,6 @@ export function ExecutivoView() {
         </Block>
       )}
 
-      {/* Indicador de loading inline */}
       {d.isPending && (
         <div className="text-xs text-gray-400 flex items-center gap-2 justify-end">
           <Layers className="w-3 h-3 animate-pulse" /> atualizando…
@@ -257,6 +250,91 @@ function CorretorasCards({ rows, selecionada }: { rows: ResumoCorretoraRow[]; se
   )
 }
 
+function TopBarrasTable({ rows, totalLotes, mostraDelta }: { rows: BarraRankingRow[]; totalLotes: number; mostraDelta: boolean }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+      <table className="text-xs border-collapse w-full min-w-max">
+        <thead style={{ background: 'var(--surface-2)' }}>
+          <tr>
+            <th className={th('left')}>#</th>
+            <th className={th('left')}>Barra</th>
+            <th className={th('right')}>Lotes op.</th>
+            <th className={th('left')}>Participação</th>
+            {mostraDelta && <th className={th('right')}>Δ lotes</th>}
+            <th className={th('right')}>Clientes</th>
+            <th className={th('right')}>% zer.</th>
+            <th className={th('right')}>Receita</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const share = totalLotes > 0 ? (r.lotes_operados / totalLotes) * 100 : 0
+            const semBarra = r.barra_nome === 'Sem barra'
+            return (
+              <tr key={`${r.corretora}|${r.barra_nome}`} style={rowStyle(i)}>
+                <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{i + 1}</td>
+                <td className="px-3 py-1.5">
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`font-medium ${semBarra ? 'text-gray-400 italic' : 'text-gray-700'}`}>{r.barra_nome}</span>
+                    {r.numero && <span className="text-gray-400 tabular-nums">{r.numero}</span>}
+                    <CorretoraBadge corretora={r.corretora} />
+                  </span>
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{fmtNum(r.lotes_operados)}</td>
+                <td className="px-3 py-1.5">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-1.5 rounded-full" style={{ width: `${Math.max(3, Math.round(share * 1.2))}px`, background: '#1764f4', opacity: 0.7 }} />
+                    <span className="tabular-nums text-gray-500">{share.toFixed(1)}%</span>
+                  </span>
+                </td>
+                {mostraDelta && <td className="px-3 py-1.5 text-right"><DeltaTxt pct={r.delta_lotes_pct} /></td>}
+                <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.clientes_ativos)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{r.pct_zeragem.toFixed(1)}%</td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-emerald-700">{fmtBRL(r.receita_total)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TopClientesTable({ rows }: { rows: TopClienteRow[] }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+      <table className="text-xs border-collapse w-full">
+        <thead style={{ background: 'var(--surface-2)' }}>
+          <tr>
+            <th className={th('left')}>#</th>
+            <th className={th('left')}>Cliente</th>
+            <th className={th('right')}>Lotes op.</th>
+            <th className={th('right')}>% zer.</th>
+            <th className={th('right')}>% acum.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c, i) => {
+            const pctZe = c.lotes_operados > 0 ? (c.lotes_zerados / c.lotes_operados) * 100 : 0
+            return (
+              <tr key={`${c.cliente_nome}-${c.rank}`} style={rowStyle(i)}>
+                <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{c.rank}</td>
+                <td className="px-3 py-1.5">
+                  <p className="font-medium text-gray-700 truncate max-w-[220px]">{c.cliente_nome}</p>
+                  {c.assessor_nome && <p className="text-[10px] text-gray-400 truncate max-w-[220px]">{c.assessor_nome}</p>}
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(c.lotes_operados)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{pctZe.toFixed(1)}%</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{c.pct_acumulado.toFixed(1)}%</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // Meta de uma corretora em formato compacto
 function MetaCorretoraMini({ meta }: { meta: MetaAnual }) {
   const c = isCorretora(meta.corretora) ? meta.corretora : null
@@ -288,11 +366,11 @@ function PlataformasTable({ rows }: { rows: LotesPorPlataformaRow[] }) {
   const totalZe = rows.reduce((s, r) => s + r.lotes_zerados, 0)
   return (
     <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-      <table className="text-xs border-collapse min-w-max w-full">
+      <table className="text-xs border-collapse w-full">
         <thead style={{ background: 'var(--surface-2)' }}>
           <tr>
-            {['Plataforma', 'Lotes op.', '% do total', 'Lotes ze.', '% zer.', 'Clientes', 'Pregões'].map((h, i) => (
-              <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+            {['Plataforma', 'Lotes op.', '% do total', '% zer.', 'Clientes'].map((h, i) => (
+              <th key={i} className={th(i === 0 ? 'left' : 'right')}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -301,9 +379,7 @@ function PlataformasTable({ rows }: { rows: LotesPorPlataformaRow[] }) {
             const pctTotal = totalOp > 0 ? (r.lotes_operados / totalOp) * 100 : 0
             const pctZe = r.lotes_operados > 0 ? (r.lotes_zerados / r.lotes_operados) * 100 : 0
             return (
-              <tr key={r.plataforma}
-                style={{ borderTop: '1px solid var(--border)',
-                         background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+              <tr key={r.plataforma} style={rowStyle(i)}>
                 <td className="px-3 py-1.5 font-semibold text-gray-700">{r.plataforma}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(r.lotes_operados)}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">
@@ -313,10 +389,8 @@ function PlataformasTable({ rows }: { rows: LotesPorPlataformaRow[] }) {
                     {pctTotal.toFixed(1)}%
                   </span>
                 </td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(r.lotes_zerados)}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.num_clientes)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(r.num_dias)}</td>
               </tr>
             )
           })}
@@ -324,11 +398,10 @@ function PlataformasTable({ rows }: { rows: LotesPorPlataformaRow[] }) {
             <td className="px-3 py-2 font-bold text-gray-800">Total</td>
             <td className="px-3 py-2 text-right tabular-nums font-bold text-gray-800">{fmtNum(totalOp)}</td>
             <td className="px-3 py-2 text-right tabular-nums text-gray-500">100%</td>
-            <td className="px-3 py-2 text-right tabular-nums font-bold text-gray-700">{fmtNum(totalZe)}</td>
             <td className="px-3 py-2 text-right tabular-nums font-semibold">
               {totalOp > 0 ? `${((totalZe / totalOp) * 100).toFixed(1)}%` : '—'}
             </td>
-            <td className="px-3 py-2" colSpan={2} />
+            <td className="px-3 py-2" />
           </tr>
         </tbody>
       </table>
@@ -345,19 +418,17 @@ function RetencaoTable({ rows }: { rows: RetencaoMensalRow[] }) {
       <table className="text-xs border-collapse min-w-max w-full">
         <thead style={{ background: 'var(--surface-2)' }}>
           <tr>
-            <th className="px-3 py-2 font-semibold text-gray-500 text-left">Mês</th>
-            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Ativos no mês</th>
-            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Continuaram</th>
-            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Pararam</th>
-            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Churn %</th>
-            <th className="px-3 py-2 font-semibold text-gray-500 text-right">Retenção %</th>
+            <th className={th('left')}>Mês</th>
+            <th className={th('right')}>Ativos no mês</th>
+            <th className={th('right')}>Continuaram</th>
+            <th className={th('right')}>Pararam</th>
+            <th className={th('right')}>Churn %</th>
+            <th className={th('right')}>Retenção %</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={r.mes}
-              style={{ borderTop: '1px solid var(--border)',
-                       background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+            <tr key={r.mes} style={rowStyle(i)}>
               <td className="px-3 py-1.5 font-medium text-gray-700 whitespace-nowrap">
                 {labelMesAno(r.mes)} → {labelMesAno(r.mes_seguinte)}{r.parcial ? ' (parcial)' : ''}
               </td>
@@ -396,3 +467,4 @@ function MetaProgresso({ label, pct, realizado, meta, sufixo, isCurrency }: {
     </div>
   )
 }
+

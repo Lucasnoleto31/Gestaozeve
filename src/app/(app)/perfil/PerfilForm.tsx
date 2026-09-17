@@ -239,12 +239,6 @@ function SenhaSection() {
     }
   }
 
-  const EyeToggle = ({ show, onToggle }: { show: boolean; onToggle: () => void }) => (
-    <button type="button" onClick={onToggle} className="text-gray-400 hover:text-gray-600 transition-colors">
-      {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-    </button>
-  )
-
   return (
     <FormSection title="Segurança" icon={Lock}>
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -293,5 +287,14 @@ export function PerfilForm({ profile }: Props) {
       <EmailSection emailAtual={profile.email} />
       <SenhaSection />
     </div>
+  )
+}
+
+// Fora do componente: criar componentes durante o render reinicia o estado deles a cada renderização.
+function EyeToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle} className="text-gray-400 hover:text-gray-600 transition-colors">
+      {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+    </button>
   )
 }

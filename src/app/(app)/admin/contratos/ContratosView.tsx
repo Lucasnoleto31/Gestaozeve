@@ -211,13 +211,15 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
         Corretora: labelCorretora(r.corretora),
         'Número Conta': r.numero_conta ?? '',
         Cliente: r.cliente_nome ?? '',
+        Barra: r.assessor_nome ?? '',
+        Plataforma: r.plataforma ?? '',
         Ativo: r.ativo ?? '',
         'Lotes Operados': r.lotes_operados,
         'Lotes Zerados': r.lotes_zerados,
       }))
 
       const ws = XLSX.utils.json_to_sheet(dataFormatada)
-      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 40 }, { wch: 14 }, { wch: 16 }, { wch: 16 }]
+      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 40 }, { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 16 }]
 
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Contratos')

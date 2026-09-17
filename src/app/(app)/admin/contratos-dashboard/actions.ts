@@ -2,7 +2,6 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/getProfile'
-import { CORRETORAS } from '@/lib/corretoras'
 
 type Db = Awaited<ReturnType<typeof createClient>>
 
@@ -470,6 +469,8 @@ export type ReceitaPorAssessor = {
   receita_operados: number
   receita_zeragem: number
   receita_total: number
+  pct_repasse: number      // fração da receita que fica com o escritório (S14)
+  receita_liquida: number  // receita_total × pct_repasse (S14)
 }
 
 export type ReceitaProjecao = {
@@ -496,22 +497,6 @@ export type MetaAnual = {
   ritmo_receita_necessario: number
 }
 
-async function fetchReceitaTotal(supabase: Db, p: Periodo, corretora: string | null = null, barra: string | null = null, excluir: string | null = null): Promise<ReceitaTotal> {
-  const { inicio, fim } = await resolvePeriodo(p)
-  const { data, error } = await supabase.rpc('dashboard_contratos_receita_total', {
-    p_inicio: inicio, p_fim: fim, ...filtroCorretora(corretora), ...filtroBarra(barra), ...exclusao(excluir),
-  })
-  if (error) throw new Error(error.message)
-  const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
-  return {
-    receita_operados: num(r?.receita_operados),
-    receita_zeragem: num(r?.receita_zeragem),
-    receita_total: num(r?.receita_total),
-    num_barras: num(r?.num_barras),
-    num_barras_sem_pricing: num(r?.num_barras_sem_pricing),
-  }
-}
-
 async function fetchReceitaPorAssessor(supabase: Db, p: Periodo, corretora: string | null = null, barra: string | null = null, excluir: string | null = null): Promise<ReceitaPorAssessor[]> {
   const { inicio, fim } = await resolvePeriodo(p)
   const { data, error } = await supabase.rpc('dashboard_contratos_receita_por_assessor', {
@@ -530,6 +515,9 @@ async function fetchReceitaPorAssessor(supabase: Db, p: Periodo, corretora: stri
     receita_operados: num(r.receita_operados),
     receita_zeragem: num(r.receita_zeragem),
     receita_total: num(r.receita_total),
+    // Antes do supabase-s14 essas colunas não existem: assume 50% de repasse
+    pct_repasse: r.pct_repasse != null ? num(r.pct_repasse) : 0.5,
+    receita_liquida: r.receita_liquida != null ? num(r.receita_liquida) : num(r.receita_total) * 0.5,
   }))
 }
 
@@ -848,20 +836,6 @@ async function fetchZeragemDistribuicao(supabase: Db, p: Periodo, barra: string 
     lotes_zerados: num(r.lotes_zerados),
     pct_dos_zerados: num(r.pct_dos_zerados),
   }))
-}
-
-async function fetchReceitaBrutaLiquida(supabase: Db, p: Periodo, corretora: string | null = null, barra: string | null = null, excluir: string | null = null): Promise<ReceitaBrutaLiquida> {
-  const { inicio, fim } = await resolvePeriodo(p)
-  const { data, error } = await supabase.rpc('dashboard_receita_bruta_liquida', {
-    p_inicio: inicio, p_fim: fim, ...filtroCorretora(corretora), ...filtroBarra(barra), ...exclusao(excluir),
-  })
-  if (error) throw new Error(error.message)
-  const r = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
-  return {
-    receita_bruta: num(r?.receita_bruta),
-    receita_liquida: num(r?.receita_liquida),
-    pct_repasse_medio: num(r?.pct_repasse_medio),
-  }
 }
 
 // Lotes por plataforma — respeita período, barra e exclusão de cliente (supabase-s12)
@@ -1255,6 +1229,77 @@ async function fetchMetaAnual(supabase: Db, corretora: string | null = null): Pr
 }
 
 // -----------------------------------------------------------
+// Menos idas ao banco (supabase-s14)
+// -----------------------------------------------------------
+// Metas do ano de todos os escopos (TOTAL + corretoras) numa única RPC.
+// Antes eram 4 chamadas, cada uma varrendo o ano inteiro.
+async function fetchMetasAnuais(supabase: Db, corretoraAtual: string | null): Promise<MetaAnual[]> {
+  const { data, error } = await supabase.rpc('dashboard_metas_anuais')
+  if (error) {
+    // Antes do supabase-s14 a RPC não existe: calcula só o escopo em uso (mais lento).
+    if (error.code === 'PGRST202') {
+      const total = await fetchMetaAnual(supabase, null)
+      if (!corretoraAtual) return [total]
+      return [total, await fetchMetaAnual(supabase, corretoraAtual)]
+    }
+    throw new Error(error.message)
+  }
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    corretora: String(r.corretora ?? 'TOTAL'),
+    ano: num(r.ano),
+    meta_lotes: num(r.meta_lotes),
+    meta_receita: num(r.meta_receita),
+    realizado_lotes: num(r.realizado_lotes),
+    realizado_receita: num(r.realizado_receita),
+    pct_lotes: num(r.pct_lotes),
+    pct_receita: num(r.pct_receita),
+    dias_corridos_restantes: num(r.dias_corridos_restantes),
+    ritmo_lotes_necessario: num(r.ritmo_lotes_necessario),
+    ritmo_receita_necessario: num(r.ritmo_receita_necessario),
+  }))
+}
+
+// Totais derivados da receita por barra — evita 2 RPCs que refaziam a mesma conta.
+function totalizarReceita(rows: ReceitaPorAssessor[]): ReceitaTotal {
+  const soma = (f: (r: ReceitaPorAssessor) => number) => rows.reduce((acc, r) => acc + f(r), 0)
+  return {
+    receita_operados: soma(r => r.receita_operados),
+    receita_zeragem: soma(r => r.receita_zeragem),
+    receita_total: soma(r => r.receita_total),
+    num_barras: rows.length,
+    num_barras_sem_pricing: rows.filter(r => r.preco_lote_futuros === 0 && r.modelo_zeragem === 'b2b').length,
+  }
+}
+
+function brutaLiquidaDe(rows: ReceitaPorAssessor[]): ReceitaBrutaLiquida {
+  const bruta = rows.reduce((acc, r) => acc + r.receita_total, 0)
+  const liquida = rows.reduce((acc, r) => acc + r.receita_liquida, 0)
+  return {
+    receita_bruta: Math.round(bruta * 100) / 100,
+    receita_liquida: Math.round(liquida * 100) / 100,
+    pct_repasse_medio: bruta > 0 ? Math.round((liquida / bruta) * 10000) / 100 : 0,
+  }
+}
+
+// Limita quantas RPCs rodam ao mesmo tempo. O banco é pequeno: 14 consultas
+// simultâneas faziam cada uma passar do statement_timeout e serem canceladas.
+const MAX_RPC_SIMULTANEAS = 4
+function criarFila(max: number) {
+  let ativos = 0
+  const espera: (() => void)[] = []
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (ativos >= max) await new Promise<void>(resolve => espera.push(resolve))
+    ativos++
+    try {
+      return await fn()
+    } finally {
+      ativos--
+      espera.shift()?.()
+    }
+  }
+}
+
+// -----------------------------------------------------------
 // Corretoras — resumo e evolução mensal por corretora (supabase-s13)
 // -----------------------------------------------------------
 export type ResumoCorretoraRow = {
@@ -1403,44 +1448,50 @@ export async function getDashboardBundle(
 ): Promise<DashboardBundle> {
   const supabase = await adminOnly()
   const erros: string[] = []
+  const fila = criarFila(MAX_RPC_SIMULTANEAS)
   // Cada chamada captura o próprio erro: uma RPC quebrada não descarta as demais.
   const safe = <T>(cond: boolean | undefined, call: () => Promise<T>, fallback: T): Promise<T> =>
     cond
-      ? call().catch((e: Error) => { erros.push(e?.message ?? 'Falha ao carregar dados'); return fallback })
+      ? fila(call).catch((e: Error) => { erros.push(e?.message ?? 'Falha ao carregar dados'); return fallback })
       : Promise.resolve(fallback)
 
+  // Receita total e bruta/líquida saem da mesma consulta de receita por barra;
+  // as metas de todos os escopos vêm de uma RPC só.
+  const querReceita = !!(flags.receita || flags.receitaBrutaLiquida)
+  const querMetas = !!(flags.meta || flags.metasCorretoras)
+  const escopo = corretora ?? 'TOTAL'
+
+  // As mais pesadas entram primeiro na fila
   const [
-    kpis, produtos, topClientes, diario, heatmap, evolucao,
-    receitaTotal, receitaPorAss, receitaProj, meta,
+    metas, receitaPorAssTodas, receitaProj, kpis, corretoras,
+    produtos, topClientes, diario, heatmap, evolucao,
     alertas, acuracidade, acuracidadeSerie,
     cohort, ltv, ranking, budget,
-    produtosDetalhados, zeragemDist, receitaBL, plataformas, receitaClear,
+    produtosDetalhados, zeragemDist, plataformas, receitaClear,
     score, metasAss, alertasExec,
     fluxoOp, indiceSobr, riscoOp,
     abc, scoreCli, clusters, correl, riscoEsc,
-    retencao, incentivo, incentivoCli,
-    corretoras, evolucaoCorretora, metasCorretoras,
+    retencao, incentivo, incentivoCli, evolucaoCorretora,
   ] = await Promise.all([
-    safe(flags.kpis,        () => fetchKpis(supabase, periodo, barra, excluir, corretora),            null),
-    safe(flags.produtos,    () => fetchPorProduto(supabase, periodo, barra, excluir, corretora),      []),
-    safe(flags.topClientes, () => fetchTopClientes(supabase, periodo, 20, barra, excluir, corretora), []),
-    safe(flags.diario,      () => fetchDiarioProduto(supabase, periodo, barra, excluir, corretora),   []),
-    safe(flags.heatmap,     () => fetchHeatmapDow(supabase, periodo, barra),                          []),
-    safe(flags.evolucao,    () => fetchEvolucaoMensal(supabase, barra, excluir, corretora),           []),
-    safe(flags.receita,     () => fetchReceitaTotal(supabase, periodo, corretora, barra, excluir),    null),
-    safe(flags.receita,     () => fetchReceitaPorAssessor(supabase, periodo, corretora, barra, excluir), []),
-    safe(flags.receita,     () => fetchReceitaProjecao(supabase, corretora),                          null),
-    safe(flags.meta,        () => fetchMetaAnual(supabase, corretora),                                null),
-    safe(flags.alertas,     () => fetchAlertas(supabase, 30, barra, corretora),                       []),
-    safe(flags.acuracidade, () => fetchAcuracidadeResumo(supabase, 60),                               null),
-    safe(flags.acuracidade, () => fetchAcuracidadeSerie(supabase, 60),                                []),
-    safe(flags.cohort,      () => fetchCohortRetencao(supabase, 12),                                  []),
-    safe(flags.ltv,         () => fetchLtvClientes(supabase, 50),                                     []),
-    safe(flags.rankingAssessores, () => fetchRankingAssessores(supabase, periodo, corretora),         []),
-    safe(flags.budget,      () => fetchBudgetZeragem(supabase, periodo),                              []),
+    safe(querMetas,         () => fetchMetasAnuais(supabase, corretora),                                [] as MetaAnual[]),
+    safe(querReceita,       () => fetchReceitaPorAssessor(supabase, periodo, corretora, barra, excluir), [] as ReceitaPorAssessor[]),
+    safe(flags.receita,     () => fetchReceitaProjecao(supabase, corretora),                            null),
+    safe(flags.kpis,        () => fetchKpis(supabase, periodo, barra, excluir, corretora),              null),
+    safe(flags.corretoras,  () => fetchResumoCorretoras(supabase, periodo, barra, excluir),             []),
+    safe(flags.produtos,    () => fetchPorProduto(supabase, periodo, barra, excluir, corretora),        []),
+    safe(flags.topClientes, () => fetchTopClientes(supabase, periodo, 20, barra, excluir, corretora),   []),
+    safe(flags.diario,      () => fetchDiarioProduto(supabase, periodo, barra, excluir, corretora),     []),
+    safe(flags.heatmap,     () => fetchHeatmapDow(supabase, periodo, barra),                            []),
+    safe(flags.evolucao,    () => fetchEvolucaoMensal(supabase, barra, excluir, corretora),             []),
+    safe(flags.alertas,     () => fetchAlertas(supabase, 30, barra, corretora),                         []),
+    safe(flags.acuracidade, () => fetchAcuracidadeResumo(supabase, 60),                                 null),
+    safe(flags.acuracidade, () => fetchAcuracidadeSerie(supabase, 60),                                  []),
+    safe(flags.cohort,      () => fetchCohortRetencao(supabase, 12),                                    []),
+    safe(flags.ltv,         () => fetchLtvClientes(supabase, 50),                                       []),
+    safe(flags.rankingAssessores, () => fetchRankingAssessores(supabase, periodo, corretora),           []),
+    safe(flags.budget,      () => fetchBudgetZeragem(supabase, periodo),                                []),
     safe(flags.produtosDetalhados,  () => fetchProdutosDetalhados(supabase, periodo, barra),                     []),
     safe(flags.zeragemDistribuicao, () => fetchZeragemDistribuicao(supabase, periodo, barra),                    []),
-    safe(flags.receitaBrutaLiquida, () => fetchReceitaBrutaLiquida(supabase, periodo, corretora, barra, excluir), null),
     safe(flags.plataformas,         () => fetchLotesPorPlataforma(supabase, periodo, barra, excluir, corretora),  []),
     safe(flags.receitaClearing,     () => fetchReceitaPorClearing(supabase, periodo),                            []),
     safe(flags.scoreQualidade,      () => fetchScoreQualidade(supabase, periodo),                                []),
@@ -1457,10 +1508,14 @@ export async function getDashboardBundle(
     safe(flags.retencao,            () => fetchRetencaoMensal(supabase, barra, excluir, corretora),              []),
     safe(flags.incentivo,           () => fetchIncentivoMensal(supabase),                                        []),
     safe(flags.incentivoClientes,   () => fetchIncentivoClientes(supabase, null),                                []),
-    safe(flags.corretoras,          () => fetchResumoCorretoras(supabase, periodo, barra, excluir),              []),
     safe(flags.evolucaoCorretora,   () => fetchEvolucaoCorretora(supabase, barra, excluir),                      []),
-    safe(flags.metasCorretoras,     () => Promise.all(CORRETORAS.map(c => fetchMetaAnual(supabase, c))),         []),
   ])
+
+  const receitaPorAss = flags.receita ? receitaPorAssTodas : []
+  const receitaTotal = flags.receita ? totalizarReceita(receitaPorAssTodas) : null
+  const receitaBL = flags.receitaBrutaLiquida ? brutaLiquidaDe(receitaPorAssTodas) : null
+  const meta = flags.meta ? (metas.find(m => m.corretora === escopo) ?? null) : null
+  const metasCorretoras = flags.metasCorretoras ? metas.filter(m => m.corretora !== 'TOTAL') : []
 
   return {
     kpis, produtos, topClientes, diario, heatmap, evolucao,
@@ -1534,27 +1589,31 @@ export async function getResumoContratos(): Promise<ResumoContratos> {
   }
   const periodo: Periodo = `custom:${mes.inicio}:${mes.fim}`
   const erros: string[] = []
+  const fila = criarFila(MAX_RPC_SIMULTANEAS)
   const safe = <T>(call: () => Promise<T>, fallback: T): Promise<T> =>
-    call().catch((e: Error) => { erros.push(e?.message ?? 'Falha ao carregar dados'); return fallback })
+    fila(call).catch((e: Error) => { erros.push(e?.message ?? 'Falha ao carregar dados'); return fallback })
 
-  const [kpis, receitaBL, receitaProj, meta, evolucao, topClientes, produtos, plataformas, importacoes, corretoras] =
+  const [metas, receitaPorAss, receitaProj, kpis, evolucao, topClientes, produtos, plataformas, importacoes, corretoras] =
     await Promise.all([
-      safe(() => fetchKpis(supabase, periodo),                null),
-      safe(() => fetchReceitaBrutaLiquida(supabase, periodo), null),
+      safe(() => fetchMetasAnuais(supabase, null),            [] as MetaAnual[]),
+      safe(() => fetchReceitaPorAssessor(supabase, periodo),  [] as ReceitaPorAssessor[]),
       safe(() => fetchReceitaProjecao(supabase),              null),
-      safe(() => fetchMetaAnual(supabase),                    null),
+      safe(() => fetchKpis(supabase, periodo),                null),
       safe(() => fetchEvolucaoMensal(supabase),               []),
       safe(() => fetchTopClientes(supabase, periodo, 10),     []),
       safe(() => fetchPorProduto(supabase, periodo),          []),
       // Depende do supabase-s12: sem a RPC, vira null e a home mostra um aviso (não um erro).
-      fetchLotesPorPlataforma(supabase, periodo).catch(() => null),
+      fila(() => fetchLotesPorPlataforma(supabase, periodo)).catch(() => null),
       safe(() => fetchImportacoesRecentes(supabase, 5),       []),
       // Depende do supabase-s13: sem a RPC, vira null e a home esconde o bloco.
-      fetchResumoCorretoras(supabase, periodo).catch(() => null),
+      fila(() => fetchResumoCorretoras(supabase, periodo)).catch(() => null),
     ])
 
   return {
-    mes, kpis, receitaBL, receitaProj, meta,
+    mes, kpis,
+    receitaBL: brutaLiquidaDe(receitaPorAss),
+    receitaProj,
+    meta: metas.find(m => m.corretora === 'TOTAL') ?? null,
     evolucao: evolucao.slice(-12),
     topClientes, produtos, plataformas, corretoras, importacoes, erros,
   }

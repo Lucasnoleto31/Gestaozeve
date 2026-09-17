@@ -14,11 +14,12 @@ export const CORRETORA_LABEL: Record<EscopoMeta, string> = {
   BTG: 'BTG',
 }
 
-// Cores fixas por corretora (gráficos e badges)
+// Cor por corretora como variável CSS: muda com o tema (globals.css).
+// Pra gráficos (SVG precisa de cor literal) use useChartColors().corretora.
 export const CORRETORA_COLOR: Record<Corretora, string> = {
-  GENIAL: '#1764f4',
-  XP: '#f59e0b',
-  BTG: '#10b981',
+  GENIAL: 'var(--c-genial)',
+  XP: 'var(--c-xp)',
+  BTG: 'var(--c-btg)',
 }
 
 export function isCorretora(v: unknown): v is Corretora {

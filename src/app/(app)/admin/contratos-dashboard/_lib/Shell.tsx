@@ -1,15 +1,16 @@
 'use client'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, X } from 'lucide-react'
 import { TABS } from './types'
 import type { Periodo, ClienteListaRow, BarraLista } from '../actions'
 import { getFiltrosOpcoes } from '../actions'
 import { useDashboardFilters } from './useDashboardFilters'
-import { fmtDataPt, fmtNum } from './utils'
+import { fmtDataPt, fmtNum } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { CORRETORAS, CORRETORA_COLOR, CORRETORA_LABEL, isCorretora } from '@/lib/corretoras'
+import { PageBody, PageHeader } from '@/components/ui/PageHeader'
+import { PageTabs } from '@/components/ui/PageTabs'
 
 const PERIODOS: { id: Periodo; label: string }[] = [
   { id: '30d',  label: '30 dias' },
@@ -34,8 +35,8 @@ const ShellContext = createContext<ShellCtx>({
 export function useShell() { return useContext(ShellContext) }
 
 // ===========================================================
-// Shell client component que envolve as sub-rotas
-// Renderiza tabs + filtros globais (fixos no topo); o conteúdo da rota vem via children.
+// Shell: cabeçalho da página + abas + filtros globais fixos no topo.
+// O conteúdo da aba vem via children.
 // ===========================================================
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [barras, setBarras] = useState<BarraLista[]>([])
@@ -50,55 +51,46 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       .catch(() => {})
   }, [])
 
+  const ctx = useMemo<ShellCtx>(
+    () => ({ datasetMax, setDatasetMax, isLoading, setIsLoading }),
+    [datasetMax, isLoading],
+  )
+
+  const tabs = useMemo(
+    () => TABS.map(t => ({ label: t.label, href: t.href, hint: t.hint, exact: t.id === 'executivo' })),
+    [],
+  )
+
   return (
-    <ShellContext.Provider value={{ datasetMax, setDatasetMax, isLoading, setIsLoading }}>
-      <div className="px-4 lg:px-8 py-4 space-y-4">
-        <div className="sticky top-0 z-30 -mx-4 lg:-mx-8 px-4 lg:px-8 pt-1 pb-3 space-y-3"
-          style={{ background: 'var(--background)', borderBottom: '1px solid var(--border-subtle)' }}>
-          <DashboardNav />
-          <FilterBar barras={barras} clientes={clientes} datasetMax={datasetMax} isLoading={isLoading} />
-        </div>
-        {children}
+    <ShellContext.Provider value={ctx}>
+      <PageHeader
+        eyebrow="Lotes"
+        title="Painel de lotes"
+        description="Lotes girados nas três corretoras por barra, produto e cliente. Os filtros abaixo valem para todas as abas."
+        actions={<StatusDados datasetMax={datasetMax} isLoading={isLoading} />}
+      >
+        <PageTabs items={tabs} />
+      </PageHeader>
+
+      <div className="sticky top-14 z-20 border-b border-line bg-bg/95 px-4 py-2.5 backdrop-blur lg:px-8">
+        <FilterBar barras={barras} clientes={clientes} datasetMax={datasetMax} isLoading={isLoading} />
       </div>
+
+      <PageBody>{children}</PageBody>
     </ShellContext.Provider>
   )
 }
 
-// ===========================================================
-// Tabs (sub-rotas)
-// ===========================================================
-function DashboardNav() {
-  const pathname = usePathname()
+function StatusDados({ datasetMax, isLoading }: { datasetMax: string | null; isLoading: boolean }) {
   return (
-    <nav className="flex flex-wrap gap-1 rounded-2xl p-1.5"
-      style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-      {TABS.map(t => {
-        const active = t.href === '/admin/contratos-dashboard'
-          ? pathname === t.href
-          : pathname.startsWith(t.href)
-        return (
-          <Link key={t.id} href={t.href} title={t.hint}
-            className="px-4 py-2 rounded-xl text-xs font-semibold transition-colors"
-            style={active
-              ? { background: 'var(--blue)', color: '#fff' }
-              : { color: 'var(--muted)' }}
-            onMouseEnter={(e) => {
-              if (!active) {
-                ;(e.currentTarget as HTMLElement).style.background = 'var(--surface-3)'
-                ;(e.currentTarget as HTMLElement).style.color = 'var(--foreground)'
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!active) {
-                ;(e.currentTarget as HTMLElement).style.background = ''
-                ;(e.currentTarget as HTMLElement).style.color = 'var(--muted)'
-              }
-            }}>
-            {t.label}
-          </Link>
-        )
-      })}
-    </nav>
+    <div className="flex items-center gap-2 text-xs text-fg-muted">
+      {isLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-accent" />}
+      {datasetMax && (
+        <span title="Data mais recente importada">
+          Dados até <strong className="font-semibold text-fg">{fmtDataPt(datasetMax)}</strong>
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -112,7 +104,7 @@ function RangeFilter({ customRange, datasetMax, isLoading, onApply }:
   const [de, setDe] = useState(customRange?.inicio ?? '')
   const [ate, setAte] = useState(customRange?.fim ?? '')
 
-  // Mantém os inputs em sincronia com a URL (ex.: navegação, reload) —
+  // Mantém os inputs em sincronia com a URL (navegação, reload):
   // reconciliação durante o render em vez de useEffect (evita render extra).
   const rangeKey = customRange ? `${customRange.inicio}:${customRange.fim}` : ''
   const [prevRangeKey, setPrevRangeKey] = useState(rangeKey)
@@ -127,30 +119,26 @@ function RangeFilter({ customRange, datasetMax, isLoading, onApply }:
     if (nextDe && nextAte) onApply(nextDe, nextAte)
   }
 
-  const inputStyle = {
-    background: active ? 'var(--blue)' : 'var(--surface)',
-    color: active ? '#fff' : 'var(--muted)',
-    border: '1px solid var(--border)',
-    colorScheme: 'light' as const,
-  }
+  const cls = cn('field-sm w-[128px] cursor-pointer', active ? 'border-accent font-medium text-fg' : 'text-fg-muted')
 
   return (
     <div className="flex items-center gap-1.5">
       <input type="date" value={de} max={ate || datasetMax || undefined} disabled={isLoading}
-        onChange={e => update(e.target.value, ate)}
-        className="px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 cursor-pointer"
-        style={inputStyle} aria-label="Data inicial" />
-      <span className="text-xs text-gray-400">até</span>
+        onChange={e => update(e.target.value, ate)} className={cls} aria-label="Data inicial" />
+      <span className="text-xs text-fg-subtle">até</span>
       <input type="date" value={ate} min={de || undefined} max={datasetMax || undefined} disabled={isLoading}
-        onChange={e => update(de, e.target.value)}
-        className="px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 cursor-pointer"
-        style={inputStyle} aria-label="Data final" />
+        onChange={e => update(de, e.target.value)} className={cls} aria-label="Data final" />
     </div>
   )
 }
 
-function Rotulo({ children }: { children: React.ReactNode }) {
-  return <span className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">{children}</span>
+function Grupo({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="label">{label}</span>
+      {children}
+    </div>
+  )
 }
 
 function FilterBar({ barras, clientes, datasetMax, isLoading }:
@@ -169,75 +157,49 @@ function FilterBar({ barras, clientes, datasetMax, isLoading }:
   // nome antigo), mantém a opção pra o select mostrar o que está ativo.
   const excluirForaDaLista = excluir != null && !clientes.some(c => c.cliente_nome === excluir)
 
-  const selectStyle = (ativo: boolean, minWidth: number) => ({
-    background: ativo ? 'var(--blue)' : 'var(--surface)',
-    color: ativo ? '#fff' : 'var(--muted)',
-    border: '1px solid var(--border)',
-    minWidth,
-  })
+  const selectCls = (ativo: boolean) =>
+    cn('field-sm max-w-[260px] cursor-pointer', ativo ? 'border-accent font-medium text-fg' : 'text-fg-muted')
 
   const temFiltro = !!(corretora || barra || excluir || customRange || periodo !== '30d')
 
   return (
-    <div className="rounded-2xl px-4 py-3 space-y-2.5"
-      style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2">
-          <Rotulo>Corretora</Rotulo>
+    <div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <Grupo label="Corretora">
           <div className="flex flex-wrap gap-1">
-            <button onClick={() => setCorretora(null)} disabled={isLoading}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-              style={corretora === null
-                ? { background: 'var(--blue)', color: '#fff' }
-                : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
+            <button type="button" className="chip" data-active={corretora === null} disabled={isLoading}
+              onClick={() => setCorretora(null)}>
               Todas
             </button>
             {CORRETORAS.map(c => {
               const active = c === corretora
               return (
-                <button key={c} onClick={() => setCorretora(c)} disabled={isLoading}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
-                  style={active
-                    ? { background: CORRETORA_COLOR[c], color: '#fff' }
-                    : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: active ? '#fff' : CORRETORA_COLOR[c] }} />
+                <button key={c} type="button" className="chip" data-active={active} disabled={isLoading}
+                  onClick={() => setCorretora(c)}
+                  style={active ? { background: CORRETORA_COLOR[c], borderColor: CORRETORA_COLOR[c], color: '#fff' } : undefined}>
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: active ? '#fff' : CORRETORA_COLOR[c] }} />
                   {CORRETORA_LABEL[c]}
                 </button>
               )
             })}
           </div>
-        </div>
+        </Grupo>
 
-        <div className="flex items-center gap-2">
-          <Rotulo>Período</Rotulo>
-          <div className="flex flex-wrap gap-1">
-            {PERIODOS.map(p => {
-              const active = p.id === periodo
-              return (
-                <button key={p.id} onClick={() => setPeriodo(p.id)} disabled={isLoading}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                  style={active
-                    ? { background: 'var(--blue)', color: '#fff' }
-                    : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-                  {p.label}
-                </button>
-              )
-            })}
+        <Grupo label="Período">
+          <div className="seg">
+            {PERIODOS.map(p => (
+              <button key={p.id} type="button" data-active={p.id === periodo} disabled={isLoading}
+                onClick={() => setPeriodo(p.id)}>
+                {p.label}
+              </button>
+            ))}
           </div>
-          <span className="text-[11px] text-gray-300">ou</span>
           <RangeFilter customRange={customRange} datasetMax={datasetMax} isLoading={isLoading} onApply={setRange} />
-        </div>
-      </div>
+        </Grupo>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2">
-          <Rotulo>Barra</Rotulo>
-          <select
-            value={barra ?? ''}
-            onChange={e => setBarra(e.target.value || null)}
-            disabled={isLoading}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 cursor-pointer"
-            style={selectStyle(!!barra, 200)}>
+        <Grupo label="Barra">
+          <select value={barra ?? ''} onChange={e => setBarra(e.target.value || null)} disabled={isLoading}
+            className={selectCls(!!barra)} aria-label="Filtrar por barra">
             <option value="">{corretora ? `Todas as barras da ${CORRETORA_LABEL[corretora]}` : 'Todas as barras'}</option>
             {barraForaDaLista && <option value={barra!}>{barra}</option>}
             {barrasVisiveis.map(b => (
@@ -246,17 +208,11 @@ function FilterBar({ barras, clientes, datasetMax, isLoading }:
               </option>
             ))}
           </select>
-        </div>
+        </Grupo>
 
-        <div className="flex items-center gap-2">
-          <Rotulo>Excluir cliente</Rotulo>
-          <select
-            value={excluir ?? ''}
-            onChange={e => setExcluir(e.target.value || null)}
-            disabled={isLoading}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 cursor-pointer"
-            style={selectStyle(!!excluir, 220)}
-            aria-label="Excluir cliente dos lotes">
+        <Grupo label="Excluir cliente">
+          <select value={excluir ?? ''} onChange={e => setExcluir(e.target.value || null)} disabled={isLoading}
+            className={selectCls(!!excluir)} aria-label="Excluir cliente dos lotes">
             <option value="">Nenhum (todos os clientes)</option>
             {excluirForaDaLista && <option value={excluir!}>{excluir}</option>}
             {clientes.map(c => (
@@ -265,28 +221,20 @@ function FilterBar({ barras, clientes, datasetMax, isLoading }:
               </option>
             ))}
           </select>
-        </div>
+        </Grupo>
 
         {temFiltro && (
-          <button onClick={() => { setCorretora(null); setExcluir(null); setPeriodo('30d') }} disabled={isLoading}
-            className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 disabled:opacity-50">
-            <X className="w-3.5 h-3.5" /> Limpar filtros
+          <button type="button" disabled={isLoading}
+            onClick={() => { setCorretora(null); setExcluir(null); setPeriodo('30d') }}
+            className="inline-flex items-center gap-1 text-xs font-medium text-fg-muted hover:text-fg disabled:opacity-50">
+            <X className="h-3.5 w-3.5" /> Limpar filtros
           </button>
         )}
-
-        <div className="ml-auto flex items-center gap-3 text-xs text-gray-500">
-          {isLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-          {datasetMax && (
-            <span title="Data mais recente no dataset">
-              Dados até <strong className="text-gray-700">{fmtDataPt(datasetMax)}</strong>
-            </span>
-          )}
-        </div>
       </div>
 
       {excluir && (
-        <p className="text-xs text-gray-500">
-          Mostrando todos os lotes <strong className="text-gray-700">exceto {excluir}</strong> (todas as contas desse cliente).
+        <p className="mt-1.5 text-xs text-fg-muted">
+          Mostrando todos os lotes <strong className="font-medium text-fg">exceto {excluir}</strong> (todas as contas desse cliente).
         </p>
       )}
     </div>

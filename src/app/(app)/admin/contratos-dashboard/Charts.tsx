@@ -5,47 +5,31 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import type { DiarioProdutoRow, EvolucaoMensalRow } from './actions'
-
-const fmtNum = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-
-const PRODUTO_COLOR: Record<string, string> = {
-  WIN: '#1764f4',
-  WDO: '#16a34a',
-  BIT: '#f59e0b',
-  IND: '#a855f7',
-  DOL: '#dc2626',
-  WSP: '#06b6d4',
-  CCM: '#84cc16',
-  SOL: '#ec4899',
-  OUTRO: '#64748b',
-}
-const colorFor = (p: string) => PRODUTO_COLOR[p] ?? '#64748b'
+import { fmtNum, labelMesCurto } from '@/lib/format'
+import { useChartColors } from '@/lib/theme'
 
 // ===========================================================
-// Tooltip premium (dark) — usado em todos os gráficos
+// Tooltip compartilhado (HTML, segue o tema)
 // ===========================================================
-function PremiumTooltip({ active, payload, label, formatter, labelFormatter }: {
+export function ChartTooltip({ active, payload, label, formatter, labelFormatter, nameFormatter }: {
   active?: boolean
   payload?: Array<{ name?: string; value?: number; color?: string; dataKey?: string }>
   label?: string | number
-  formatter?: (v: number) => string
+  formatter?: (v: number, name?: string) => string
   labelFormatter?: (l: string | number) => string
+  nameFormatter?: (name: string) => string
 }) {
   if (!active || !payload || !payload.length) return null
-  const fmt = formatter ?? fmtNum
+  const fmt = formatter ?? ((v: number) => fmtNum(v))
   return (
-    <div className="rounded-xl px-3 py-2.5 text-xs"
-      style={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(148,163,184,0.2)',
-               boxShadow: '0 10px 25px rgba(0,0,0,0.3)', color: '#e2e8f0' }}>
-      <p className="font-bold text-white mb-1.5">
-        {labelFormatter ? labelFormatter(label!) : label}
-      </p>
+    <div className="panel px-3 py-2.5 text-xs shadow-lg">
+      <p className="mb-1.5 font-semibold text-fg">{labelFormatter ? labelFormatter(label!) : label}</p>
       {payload.map((p, i) => (
-        <div key={i} className="flex items-center gap-2 mb-0.5">
-          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span className="text-slate-300 mr-2">{p.name}:</span>
-          <span className="font-semibold tabular-nums" style={{ color: p.color }}>
-            {p.value != null ? fmt(p.value) : '—'}
+        <div key={i} className="mb-0.5 flex items-center gap-2">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: p.color }} />
+          <span className="mr-2 text-fg-muted">{nameFormatter && p.name ? nameFormatter(p.name) : p.name}:</span>
+          <span className="ml-auto font-semibold tabular-nums text-fg">
+            {p.value != null ? fmt(p.value, p.name) : '—'}
           </span>
         </div>
       ))}
@@ -54,7 +38,7 @@ function PremiumTooltip({ active, payload, label, formatter, labelFormatter }: {
 }
 
 // ===========================================================
-// Média móvel (mesma fórmula do antigo, agora pra Recharts)
+// Média móvel
 // ===========================================================
 function rollingMean(values: number[], window: number): (number | null)[] {
   const out: (number | null)[] = []
@@ -71,13 +55,15 @@ function rollingMean(values: number[], window: number): (number | null)[] {
 // ===========================================================
 // 1. WIN vs WDO diário com média móvel configurável
 // Dia de pregão sem volume do produto conta como 0 tanto na linha
-// quanto na média móvel (antes a linha mostrava buraco e a MM despencava).
+// quanto na média móvel.
 // ===========================================================
 export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
   { data: DiarioProdutoRow[]; onClickDia: (data: string) => void; mm?: number }
 ) {
+  const c = useChartColors()
   const winKey = `WIN MM${mm}`
   const wdoKey = `WDO MM${mm}`
+
   // Pivot por dia: { data, WIN, WDO, ... }
   const byDay = new Map<string, Record<string, number>>()
   data.forEach(r => {
@@ -86,19 +72,17 @@ export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
   })
   const dias = Array.from(byDay.keys()).sort()
 
-  // Quais produtos plotar (apenas os que tiveram volume no período)
   const produtos = new Set<string>()
   data.forEach(r => { if (r.lotes_operados > 0) produtos.add(r.produto) })
   const principais = ['WIN', 'WDO'].filter(p => produtos.has(p))
 
-  // Monta linha do tempo + médias móveis (período configurável) das duas séries principais
   const winSeries = dias.map(d => byDay.get(d)?.WIN ?? 0)
   const wdoSeries = dias.map(d => byDay.get(d)?.WDO ?? 0)
   const winMM = rollingMean(winSeries, mm)
   const wdoMM = rollingMean(wdoSeries, mm)
 
   const chartData = dias.map((d, i) => ({
-    dia: `${d.slice(8, 10)}/${d.slice(5, 7)}`, // DD/MM
+    dia: `${d.slice(8, 10)}/${d.slice(5, 7)}`,
     fullDate: d,
     WIN: winSeries[i],
     WDO: wdoSeries[i],
@@ -107,7 +91,7 @@ export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
   }))
 
   if (chartData.length === 0 || principais.length === 0) {
-    return <p className="text-sm text-gray-400 py-4">Sem volume de WIN/WDO no período.</p>
+    return <p className="py-8 text-center text-sm text-fg-subtle">Sem volume de WIN/WDO no período.</p>
   }
 
   return (
@@ -118,24 +102,24 @@ export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
           const idx = (e?.activeTooltipIndex ?? -1) as number
           if (idx >= 0 && chartData[idx]) onClickDia(chartData[idx].fullDate)
         }}>
-        <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
-        <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={fmtNum} />
-        <Tooltip content={<PremiumTooltip />} />
-        <Legend wrapperStyle={{ fontSize: 12 }} iconType="rect" />
+        <CartesianGrid stroke={c.grid} strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="dia" tick={{ fontSize: 11, fill: c.axis }} axisLine={{ stroke: c.grid }} tickLine={false} />
+        <YAxis tick={{ fontSize: 11, fill: c.axis }} tickFormatter={fmtNum} axisLine={false} tickLine={false} width={48} />
+        <Tooltip content={<ChartTooltip />} cursor={{ stroke: c.axis, strokeDasharray: '3 3' }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: c.text }} iconType="plainline" />
         {principais.includes('WIN') && (
           <>
-            <Line type="monotone" dataKey="WIN" stroke={colorFor('WIN')} strokeWidth={2.5}
-              dot={{ r: 2, fill: colorFor('WIN') }} activeDot={{ r: 5 }} animationDuration={400} />
-            <Line type="monotone" dataKey={winKey} stroke={colorFor('WIN')} strokeWidth={1.5}
+            <Line type="monotone" dataKey="WIN" stroke={c.produto.WIN} strokeWidth={2.2}
+              dot={{ r: 2, fill: c.produto.WIN, strokeWidth: 0 }} activeDot={{ r: 5 }} animationDuration={400} />
+            <Line type="monotone" dataKey={winKey} stroke={c.produto.WIN} strokeWidth={1.4}
               strokeDasharray="4 3" dot={false} opacity={0.6} animationDuration={400} />
           </>
         )}
         {principais.includes('WDO') && (
           <>
-            <Line type="monotone" dataKey="WDO" stroke={colorFor('WDO')} strokeWidth={2.5}
-              dot={{ r: 2, fill: colorFor('WDO') }} activeDot={{ r: 5 }} animationDuration={400} />
-            <Line type="monotone" dataKey={wdoKey} stroke={colorFor('WDO')} strokeWidth={1.5}
+            <Line type="monotone" dataKey="WDO" stroke={c.produto.WDO} strokeWidth={2.2}
+              dot={{ r: 2, fill: c.produto.WDO, strokeWidth: 0 }} activeDot={{ r: 5 }} animationDuration={400} />
+            <Line type="monotone" dataKey={wdoKey} stroke={c.produto.WDO} strokeWidth={1.4}
               strokeDasharray="4 3" dot={false} opacity={0.6} animationDuration={400} />
           </>
         )}
@@ -145,23 +129,15 @@ export function WinVsWdoChart({ data, onClickDia, mm = 7 }:
 }
 
 // ===========================================================
-// 2. Evolução mensal — barras lado a lado (antes eram empilhadas e a
-// altura total virava um número sem sentido) + linha de clientes ativos.
+// 2. Evolução mensal — barras lado a lado + linha de clientes ativos
 // ===========================================================
-const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
-
-function labelMes(iso: string): string {
-  // 'YYYY-MM-DD' → 'mmm/AA' sem passar por Date (evita drift de fuso)
-  const m = parseInt(iso.slice(5, 7), 10)
-  return `${MESES_ABREV[m - 1] ?? iso.slice(5, 7)}/${iso.slice(2, 4)}`
-}
-
 export function EvolucaoMensalChart({ data }: { data: EvolucaoMensalRow[] }) {
-  if (data.length === 0) return <p className="text-sm text-gray-400 py-4">Sem dados.</p>
+  const c = useChartColors()
+  if (data.length === 0) return <p className="py-8 text-center text-sm text-fg-subtle">Sem dados.</p>
 
   const chartData = data.map((r, i) => ({
     // último mês está em andamento — marca com *
-    mes: labelMes(r.mes_data) + (i === data.length - 1 ? '*' : ''),
+    mes: labelMesCurto(r.mes_data) + (i === data.length - 1 ? '*' : ''),
     Operados: r.lotes_operados,
     Zerados: r.lotes_zerados,
     Clientes: r.num_clientes,
@@ -170,32 +146,17 @@ export function EvolucaoMensalChart({ data }: { data: EvolucaoMensalRow[] }) {
   return (
     <ResponsiveContainer width="100%" height={280}>
       <ComposedChart data={chartData} margin={{ top: 10, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
-        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-        <YAxis yAxisId="lotes" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={fmtNum} />
-        <YAxis yAxisId="clientes" orientation="right" tick={{ fontSize: 11, fill: '#a855f7' }} tickFormatter={fmtNum} />
-        <Tooltip content={<PremiumTooltip />} />
-        <Legend wrapperStyle={{ fontSize: 12 }} iconType="rect" />
-        <Bar yAxisId="lotes" dataKey="Operados" fill="#1764f4" radius={[4, 4, 0, 0]} animationDuration={400} />
-        <Bar yAxisId="lotes" dataKey="Zerados"  fill="#dc2626" radius={[4, 4, 0, 0]} animationDuration={400} />
-        <Line yAxisId="clientes" type="monotone" dataKey="Clientes" stroke="#a855f7" strokeWidth={2}
-          dot={{ r: 2, fill: '#a855f7' }} activeDot={{ r: 4 }} animationDuration={400} />
+        <CartesianGrid stroke={c.grid} strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey="mes" tick={{ fontSize: 11, fill: c.axis }} axisLine={{ stroke: c.grid }} tickLine={false} />
+        <YAxis yAxisId="lotes" tick={{ fontSize: 11, fill: c.axis }} tickFormatter={fmtNum} axisLine={false} tickLine={false} width={48} />
+        <YAxis yAxisId="clientes" orientation="right" tick={{ fontSize: 11, fill: c.clientes }} tickFormatter={fmtNum} axisLine={false} tickLine={false} width={40} />
+        <Tooltip content={<ChartTooltip />} cursor={{ fill: c.grid }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: c.text }} iconType="circle" />
+        <Bar yAxisId="lotes" dataKey="Operados" fill={c.operados} radius={[3, 3, 0, 0]} animationDuration={400} />
+        <Bar yAxisId="lotes" dataKey="Zerados" fill={c.zerados} radius={[3, 3, 0, 0]} animationDuration={400} />
+        <Line yAxisId="clientes" type="monotone" dataKey="Clientes" stroke={c.clientes} strokeWidth={2}
+          dot={{ r: 2, fill: c.clientes, strokeWidth: 0 }} activeDot={{ r: 4 }} animationDuration={400} />
       </ComposedChart>
     </ResponsiveContainer>
-  )
-}
-
-// ===========================================================
-// Skeleton — bloco placeholder enquanto carrega
-// ===========================================================
-export function BlockSkeleton({ height = 280 }: { height?: number }) {
-  return (
-    <div className="rounded-2xl p-5 animate-pulse"
-      style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-      <div className="h-4 w-48 rounded bg-slate-200 mb-2" />
-      <div className="h-3 w-72 rounded bg-slate-100 mb-5" />
-      <div className="rounded-xl bg-gradient-to-br from-slate-100 to-slate-50"
-        style={{ height }} />
-    </div>
   )
 }

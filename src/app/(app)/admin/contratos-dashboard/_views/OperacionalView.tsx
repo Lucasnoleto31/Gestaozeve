@@ -1,23 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, Calendar, Users, Trophy, Layers } from 'lucide-react'
+import { Activity, Calendar, Trophy, Users } from 'lucide-react'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { WinVsWdoBlock, DrilldownModal, Block } from '../_lib/Blocks'
-import { BlockSkeleton } from '../Charts'
+import { WinVsWdoBlock, DrilldownModal } from '../_lib/Blocks'
 import type { DrilldownRow, ProdutoDetalhado } from '../actions'
 import { getDrilldownDia } from '../actions'
-import { KpiCard, KpiRow, Vazio } from '../_lib/Kpi'
-import { fmtNum, fmtDataPt, fmtDelta } from '../_lib/utils'
-
-const th = (align: 'left' | 'right') =>
-  `px-3 py-2 font-semibold text-gray-500 ${align === 'left' ? 'text-left' : 'text-right'}`
-const rowStyle = (i: number) => ({
-  borderTop: '1px solid var(--border)',
-  background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)',
-})
+import { fmtNum, fmtDataPt } from '@/lib/format'
+import { Panel } from '@/components/ui/Panel'
+import { KpiCard, KpiRow, DeltaText } from '@/components/ui/Kpi'
+import { Alert } from '@/components/ui/Alert'
+import { ChartSkeleton, Empty } from '@/components/ui/Skeleton'
+import { Modal } from '@/components/ui/Modal'
 
 export function OperacionalView() {
   const { periodo, barra, excluir, corretora } = useDashboardFilters()
@@ -45,78 +41,71 @@ export function OperacionalView() {
   const totalOperado = d.produtos.reduce((acc, p) => acc + p.lotes_operados, 0)
 
   return (
-    <div className="space-y-5">
-      {d.erro && (
-        <div className="rounded-xl px-4 py-3 text-sm"
-          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
-          {d.erro}
-        </div>
-      )}
+    <>
+      {d.erro && <Alert tone="danger">{d.erro}</Alert>}
 
       {/* 4 KPIs operacionais — todos do período/filtros */}
       <KpiRow>
-        <KpiCard icon={Calendar} label="Pregões" loading={d.loading && !k}
-          value={k ? fmtNum(k.num_dias_com_dado) : '—'}
-          sub="dias com operação no período" accent="#1764f4" />
-        <KpiCard icon={Users} label="Clientes ativos" loading={d.loading && !k}
-          value={k ? fmtNum(k.num_clientes_ativos) : '—'}
-          sub="contas que operaram" accent="#10b981"
+        <KpiCard icon={Calendar} label="Pregões" tone="accent" loading={d.loading && !k}
+          value={k ? fmtNum(k.num_dias_com_dado) : '—'} sub="dias com operação no período" />
+        <KpiCard icon={Users} label="Clientes ativos" tone="success" loading={d.loading && !k}
+          value={k ? fmtNum(k.num_clientes_ativos) : '—'} sub="contas que operaram"
           delta={k && ka ? { atual: k.num_clientes_ativos, anterior: ka.num_clientes_ativos, rotulo, fmt: fmtNum } : null} />
-        <KpiCard icon={Activity} label="Lotes por pregão" loading={d.loading && !k}
+        <KpiCard icon={Activity} label="Lotes por pregão" tone="violet" loading={d.loading && !k}
           value={k ? fmtNum(k.media_diaria) : '—'}
-          sub={k?.ultimo_dia_data
-            ? `último dia (${fmtDataPt(k.ultimo_dia_data)}): ${fmtNum(k.ultimo_dia_lotes)}`
-            : undefined}
-          accent="#a855f7"
+          sub={k?.ultimo_dia_data ? `último dia (${fmtDataPt(k.ultimo_dia_data)}): ${fmtNum(k.ultimo_dia_lotes)}` : undefined}
           delta={k && ka ? { atual: k.media_diaria, anterior: ka.media_diaria, rotulo, fmt: fmtNum } : null} />
-        <KpiCard icon={Trophy} label="Melhor dia" loading={d.loading && !k}
+        <KpiCard icon={Trophy} label="Melhor dia" tone="info" loading={d.loading && !k}
           value={k?.maior_dia_data ? fmtNum(k.maior_dia_lotes) : '—'}
-          sub={k?.maior_dia_data ? `lotes em ${fmtDataPt(k.maior_dia_data)}` : undefined}
-          accent="#0891b2" />
+          sub={k?.maior_dia_data ? `lotes em ${fmtDataPt(k.maior_dia_data)}` : undefined} />
       </KpiRow>
 
       {/* Gráfico diário WIN vs WDO */}
       {d.loading && d.diario.length === 0
-        ? <BlockSkeleton height={320} />
+        ? <Panel title="Volume diário — WIN vs WDO"><ChartSkeleton height={320} /></Panel>
         : <WinVsWdoBlock data={d.diario} onClickDia={abrirDrilldown} />}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         {/* Comparativo por produto: dia / mês / mês anterior */}
-        <Block title="Ritmo por produto"
+        <Panel flush title="Ritmo por produto"
           subtitle="Último pregão, mês atual (MTD), mês anterior completo e variação MTD vs mês anterior. Média diária = lotes do período ÷ pregões.">
           {d.produtosDetalhados.length === 0
-            ? <Vazio loading={d.loading}>Sem dados no período (ou supabase-s15 ainda não aplicado).</Vazio>
+            ? <div className="p-5"><Empty loading={d.loading}>Sem dados no período (ou supabase-s15 ainda não aplicado).</Empty></div>
             : <ProdutosDetalhadosTable rows={d.produtosDetalhados} />}
-        </Block>
+        </Panel>
 
         {/* Volume por produto */}
-        <Block title="Volume por produto no período"
+        <Panel flush title="Volume por produto no período"
           subtitle="Lotes operados/zerados e clientes distintos (por conta) em cada produto.">
           {d.produtos.length === 0
-            ? <Vazio loading={d.loading} />
+            ? <div className="p-5"><Empty loading={d.loading} /></div>
             : (
-              <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-                <table className="text-xs border-collapse min-w-max w-full">
-                  <thead style={{ background: 'var(--surface-2)' }}>
+              <div className="overflow-x-auto">
+                <table className="tbl">
+                  <thead>
                     <tr>
-                      {['Produto', 'Lotes op.', '% do total', 'Lotes ze.', '% zer.', 'Clientes', 'Dias'].map((h, i) => (
-                        <th key={i} className={th(i === 0 ? 'left' : 'right')}>{h}</th>
-                      ))}
+                      <th>Produto</th>
+                      <th className="num">Lotes op.</th>
+                      <th className="num">% do total</th>
+                      <th className="num">Lotes ze.</th>
+                      <th className="num">% zer.</th>
+                      <th className="num">Clientes</th>
+                      <th className="num">Dias</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {d.produtos.map((p, i) => {
+                    {d.produtos.map(p => {
                       const pctTotal = totalOperado > 0 ? (p.lotes_operados / totalOperado) * 100 : 0
                       const pctZe = p.lotes_operados > 0 ? (p.lotes_zerados / p.lotes_operados) * 100 : 0
                       return (
-                        <tr key={p.produto} style={rowStyle(i)}>
-                          <td className="px-3 py-1.5 font-semibold text-gray-700">{p.produto}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(p.lotes_operados)}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{pctTotal.toFixed(1)}%</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.lotes_zerados)}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.num_clientes)}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.num_dias)}</td>
+                        <tr key={p.produto}>
+                          <td className="font-semibold">{p.produto}</td>
+                          <td className="num font-medium">{fmtNum(p.lotes_operados)}</td>
+                          <td className="num muted">{pctTotal.toFixed(1)}%</td>
+                          <td className="num muted">{fmtNum(p.lotes_zerados)}</td>
+                          <td className="num">{pctZe.toFixed(1)}%</td>
+                          <td className="num">{fmtNum(p.num_clientes)}</td>
+                          <td className="num muted">{fmtNum(p.num_dias)}</td>
                         </tr>
                       )
                     })}
@@ -124,59 +113,49 @@ export function OperacionalView() {
                 </table>
               </div>
             )}
-        </Block>
+        </Panel>
       </div>
 
       {drillData && (
         drillErro
           ? (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              style={{ background: 'rgba(15,23,42,0.7)' }} onClick={() => setDrillData(null)}>
-              <div className="rounded-2xl p-6 text-sm"
-                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: '#ef4444' }}>
-                Falha ao carregar o detalhe do dia. Clique pra fechar.
-              </div>
-            </div>
+            <Modal open onClose={() => setDrillData(null)} size="sm" title="Detalhe do dia">
+              <Alert tone="danger">Falha ao carregar o detalhe do dia. Tente de novo.</Alert>
+            </Modal>
           )
           : <DrilldownModal data={drillData} rows={drillRows} onClose={() => setDrillData(null)} />
       )}
-
-      {d.isPending && (
-        <div className="text-xs text-gray-400 flex items-center gap-2 justify-end">
-          <Layers className="w-3 h-3 animate-pulse" /> atualizando…
-        </div>
-      )}
-    </div>
+    </>
   )
 }
 
 function ProdutosDetalhadosTable({ rows }: { rows: ProdutoDetalhado[] }) {
   return (
-    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-      <table className="text-xs border-collapse min-w-max w-full">
-        <thead style={{ background: 'var(--surface-2)' }}>
+    <div className="overflow-x-auto">
+      <table className="tbl">
+        <thead>
           <tr>
-            {['Produto', 'Último dia', 'Mês atual', 'Mês anterior', 'Δ MTD', 'Período', 'Média/dia'].map((h, i) => (
-              <th key={i} className={th(i === 0 ? 'left' : 'right')}>{h}</th>
-            ))}
+            <th>Produto</th>
+            <th className="num">Último dia</th>
+            <th className="num">Mês atual</th>
+            <th className="num">Mês anterior</th>
+            <th className="num">Δ MTD</th>
+            <th className="num">Período</th>
+            <th className="num">Média/dia</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((p, i) => {
-            const delta = p.delta_pct_vs_mes_ant
-            const color = delta > 0.05 ? '#059669' : delta < -0.05 ? '#dc2626' : '#6b7280'
-            return (
-              <tr key={p.produto} style={rowStyle(i)}>
-                <td className="px-3 py-1.5 font-semibold text-gray-700">{p.produto}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.lotes_dia)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(p.lotes_mtd)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.lotes_mes_anterior)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color }}>{fmtDelta(delta)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.lotes_periodo)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.media_diaria)}</td>
-              </tr>
-            )
-          })}
+          {rows.map(p => (
+            <tr key={p.produto}>
+              <td className="font-semibold">{p.produto}</td>
+              <td className="num">{fmtNum(p.lotes_dia)}</td>
+              <td className="num font-medium">{fmtNum(p.lotes_mtd)}</td>
+              <td className="num muted">{fmtNum(p.lotes_mes_anterior)}</td>
+              <td className="num"><DeltaText pct={p.delta_pct_vs_mes_ant} /></td>
+              <td className="num">{fmtNum(p.lotes_periodo)}</td>
+              <td className="num muted">{fmtNum(p.media_diaria)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

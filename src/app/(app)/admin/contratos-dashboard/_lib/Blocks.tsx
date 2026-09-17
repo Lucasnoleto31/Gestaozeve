@@ -1,31 +1,16 @@
 'use client'
 
-// Containers e blocos compartilhados entre as sub-rotas do dashboard.
-// (Extraídos do antigo View.tsx monolítico — o resto daquele arquivo era código morto.)
+// Blocos compartilhados entre as sub-rotas do dashboard.
 
 import { useState } from 'react'
-import { Download, X } from 'lucide-react'
+import { Download } from 'lucide-react'
 import type { DiarioProdutoRow, DrilldownRow } from '../actions'
 import { WinVsWdoChart } from '../Charts'
-import { fmtNum, fmtDataPt } from './utils'
-
-export function Block({ title, subtitle, action, children }:
-  { title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode }
-) {
-  return (
-    <section className="rounded-2xl p-5"
-      style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-      <header className="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-          {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-        </div>
-        {action}
-      </header>
-      {children}
-    </section>
-  )
-}
+import { fmtNum, fmtDataPt } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { Panel } from '@/components/ui/Panel'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 
 // ===========================================================
 // WIN vs WDO diário com média móvel configurável
@@ -55,7 +40,7 @@ function MediaMovelInput({ value, onChange }: { value: number; onChange: (n: num
   }
 
   return (
-    <label className="flex items-center gap-1.5 text-xs text-gray-500 whitespace-nowrap">
+    <label className="flex items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted">
       <span>Média móvel</span>
       <input
         type="number" inputMode="numeric" min={MM_MIN} max={MM_MAX}
@@ -63,8 +48,7 @@ function MediaMovelInput({ value, onChange }: { value: number; onChange: (n: num
         onChange={e => setTxt(e.target.value)}
         onBlur={e => commit(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') commit((e.target as HTMLInputElement).value) }}
-        className="w-14 rounded-lg px-2 py-1 text-center font-semibold tabular-nums text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/30"
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        className="field-sm w-14 text-center font-semibold tabular-nums text-fg"
       />
       <span>pregões</span>
     </label>
@@ -74,105 +58,105 @@ function MediaMovelInput({ value, onChange }: { value: number; onChange: (n: num
 export function WinVsWdoBlock({ data, onClickDia }: { data: DiarioProdutoRow[]; onClickDia: (data: string) => void }) {
   const [mm, setMm] = useState(7)
   return (
-    <Block title="Volume diário — WIN vs WDO"
+    <Panel title="Volume diário — WIN vs WDO"
       subtitle={`Lotes operados por pregão. Linha pontilhada = média móvel de ${mm} pregões. Clique num ponto pra abrir o detalhe do dia.`}
       action={<MediaMovelInput value={mm} onChange={setMm} />}
     >
       <WinVsWdoChart data={data} onClickDia={onClickDia} mm={mm} />
-    </Block>
+    </Panel>
   )
 }
 
 // ===========================================================
-// Drill-down modal (com export PNG via canvas)
+// Drill-down do dia (com export PNG via canvas)
 // ===========================================================
+function Tile({ label, value, className }: { label: string; value: string; className?: string }) {
+  return (
+    <div className="rounded-[10px] border border-line bg-surface-2 p-3 text-center">
+      <p className="label">{label}</p>
+      <p className={cn('mt-1 text-2xl font-semibold tabular-nums', className)}>{value}</p>
+    </div>
+  )
+}
+
+function Lista({ titulo, rows, valor, tone }: {
+  titulo: string; rows: DrilldownRow[]; valor: (r: DrilldownRow) => string; tone: string
+}) {
+  return (
+    <div>
+      <p className={cn('label mb-2', tone)}>{titulo}</p>
+      <ul className="space-y-1.5">
+        {rows.length === 0 && <li className="text-sm text-fg-subtle">—</li>}
+        {rows.map(r => (
+          <li key={r.rank} className="flex items-center justify-between gap-3 text-sm">
+            <span className="truncate text-fg"><strong className="mr-1 text-fg-subtle">{r.rank}.</strong> {r.cliente_nome}</span>
+            <span className={cn('shrink-0 font-semibold tabular-nums', tone)}>{valor(r)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function DrilldownModal({ data, rows, onClose }: { data: string; rows: DrilldownRow[]; onClose: () => void }) {
   const totals = rows.find(r => r.tipo === 'totals')
   const top_op = rows.filter(r => r.tipo === 'top_girou').sort((a, b) => a.rank - b.rank)
   const top_ze = rows.filter(r => r.tipo === 'top_zerou').sort((a, b) => a.rank - b.rank)
+  const op = totals?.lotes_operados ?? 0
+  const ze = totals?.lotes_zerados ?? 0
+  const pctZ = op > 0 ? (ze / op) * 100 : 0
 
   function exportPng() {
     const c = document.createElement('canvas')
     c.width = 1200; c.height = 630
     const g = c.getContext('2d')!
-    // background gradiente
-    const grad = g.createLinearGradient(0, 0, 0, 630)
-    grad.addColorStop(0, '#0b1220'); grad.addColorStop(1, '#1e293b')
-    g.fillStyle = grad
+    g.fillStyle = '#0c1526'
     g.fillRect(0, 0, c.width, c.height)
     // marca + título
-    g.fillStyle = '#26E07F'
+    g.fillStyle = '#5b8def'
     g.fillRect(48, 48, 6, 36)
     g.font = '600 14px sans-serif'
-    g.fillStyle = '#94a3b8'
+    g.fillStyle = '#8d9bb5'
     g.fillText('ZeveAI · Lotes do dia', 64, 62)
     g.font = 'bold 40px sans-serif'
     g.fillStyle = '#ffffff'
     g.fillText(fmtDataPt(data), 64, 98)
     // totais
-    const op = totals?.lotes_operados ?? 0
-    const ze = totals?.lotes_zerados ?? 0
-    g.font = '600 13px sans-serif'
-    g.fillStyle = '#64748b'
-    g.fillText('LOTES OPERADOS', 64, 156)
-    g.font = 'bold 56px sans-serif'
-    g.fillStyle = '#ffffff'
-    g.fillText(fmtNum(op), 64, 210)
-    g.font = '600 13px sans-serif'
-    g.fillStyle = '#64748b'
-    g.fillText('LOTES ZERADOS', 480, 156)
-    g.font = 'bold 56px sans-serif'
-    g.fillStyle = '#ffffff'
-    g.fillText(fmtNum(ze), 480, 210)
-    g.font = '600 13px sans-serif'
-    g.fillStyle = '#64748b'
-    g.fillText('% ZERAMENTO', 880, 156)
-    g.font = 'bold 56px sans-serif'
-    g.fillStyle = '#ffffff'
-    const pctZ = op > 0 ? (ze / op) * 100 : 0
-    g.fillText(`${pctZ.toFixed(1)}%`, 880, 210)
-    // separador
-    g.fillStyle = '#1e293b'
+    const bloco = (label: string, valor: string, x: number) => {
+      g.font = '600 13px sans-serif'
+      g.fillStyle = '#8d9bb5'
+      g.fillText(label, x, 156)
+      g.font = 'bold 56px sans-serif'
+      g.fillStyle = '#ffffff'
+      g.fillText(valor, x, 210)
+    }
+    bloco('LOTES OPERADOS', fmtNum(op), 64)
+    bloco('LOTES ZERADOS', fmtNum(ze), 480)
+    bloco('% ZERAMENTO', `${pctZ.toFixed(1)}%`, 880)
+    g.fillStyle = 'rgba(255,255,255,0.12)'
     g.fillRect(64, 256, c.width - 128, 1)
-    // top 3 operou
-    g.font = 'bold 18px sans-serif'
-    g.fillStyle = '#26E07F'
-    g.fillText('TOP 3 · QUEM MAIS GIROU', 64, 296)
-    top_op.slice(0, 3).forEach((r, i) => {
-      const y = 332 + i * 52
-      g.font = 'bold 24px sans-serif'
-      g.fillStyle = '#94a3b8'
-      g.fillText(`${r.rank}`, 64, y)
-      g.font = 'bold 22px sans-serif'
-      g.fillStyle = '#ffffff'
-      g.fillText(r.cliente_nome.slice(0, 32), 100, y)
-      g.font = 'bold 22px sans-serif'
-      g.fillStyle = '#26E07F'
-      g.textAlign = 'right'
-      g.fillText(fmtNum(r.lotes_operados), 580, y)
-      g.textAlign = 'start'
-    })
-    // top 3 zerou
-    g.font = 'bold 18px sans-serif'
-    g.fillStyle = '#f87171'
-    g.fillText('TOP 3 · QUEM MAIS ZEROU', 640, 296)
-    top_ze.slice(0, 3).forEach((r, i) => {
-      const y = 332 + i * 52
-      g.font = 'bold 24px sans-serif'
-      g.fillStyle = '#94a3b8'
-      g.fillText(`${r.rank}`, 640, y)
-      g.font = 'bold 22px sans-serif'
-      g.fillStyle = '#ffffff'
-      g.fillText(r.cliente_nome.slice(0, 32), 676, y)
-      g.font = 'bold 22px sans-serif'
-      g.fillStyle = '#f87171'
-      g.textAlign = 'right'
-      g.fillText(fmtNum(r.lotes_zerados), 1136, y)
-      g.textAlign = 'start'
-    })
-    // footer
+    const lista = (titulo: string, cor: string, x: number, xValor: number, linhas: DrilldownRow[], valor: (r: DrilldownRow) => number) => {
+      g.font = 'bold 18px sans-serif'
+      g.fillStyle = cor
+      g.fillText(titulo, x, 296)
+      linhas.slice(0, 3).forEach((r, i) => {
+        const y = 332 + i * 52
+        g.font = 'bold 24px sans-serif'
+        g.fillStyle = '#8d9bb5'
+        g.fillText(`${r.rank}`, x, y)
+        g.font = 'bold 22px sans-serif'
+        g.fillStyle = '#ffffff'
+        g.fillText(r.cliente_nome.slice(0, 32), x + 36, y)
+        g.fillStyle = cor
+        g.textAlign = 'right'
+        g.fillText(fmtNum(valor(r)), xValor, y)
+        g.textAlign = 'start'
+      })
+    }
+    lista('TOP 3 · QUEM MAIS GIROU', '#3dd68c', 64, 580, top_op, r => r.lotes_operados)
+    lista('TOP 3 · QUEM MAIS ZEROU', '#f4706b', 640, 1136, top_ze, r => r.lotes_zerados)
     g.font = '500 12px sans-serif'
-    g.fillStyle = '#64748b'
+    g.fillStyle = '#8d9bb5'
     g.fillText(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 64, 590)
     c.toBlob(blob => {
       if (!blob) return
@@ -186,73 +170,21 @@ export function DrilldownModal({ data, rows, onClose }: { data: string; rows: Dr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(15,23,42,0.7)' }}>
-      <div className="rounded-2xl w-full max-w-3xl p-6"
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <header className="flex items-start justify-between gap-3 mb-4">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Detalhe do dia</p>
-            <h3 className="text-xl font-bold text-gray-900">{fmtDataPt(data)}</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={exportPng}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
-              <Download className="w-3.5 h-3.5" /> Compartilhar PNG
-            </button>
-            <button onClick={onClose}
-              className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </header>
-
-        <div className="grid grid-cols-3 gap-3 mb-5">
-          <div className="rounded-xl p-3 text-center" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Operados</p>
-            <p className="text-2xl font-bold text-blue-700 tabular-nums">{fmtNum(totals?.lotes_operados ?? 0)}</p>
-          </div>
-          <div className="rounded-xl p-3 text-center" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Zerados</p>
-            <p className="text-2xl font-bold text-red-700 tabular-nums">{fmtNum(totals?.lotes_zerados ?? 0)}</p>
-          </div>
-          <div className="rounded-xl p-3 text-center" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">% Zeramento</p>
-            <p className="text-2xl font-bold text-gray-900 tabular-nums">
-              {(totals?.lotes_operados ?? 0) > 0
-                ? `${(((totals?.lotes_zerados ?? 0) / (totals?.lotes_operados ?? 1)) * 100).toFixed(1)}%`
-                : '—'}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-semibold text-emerald-700 uppercase tracking-widest mb-2">Top 3 — quem mais girou</p>
-            <ul className="space-y-1.5">
-              {top_op.length === 0 && <li className="text-sm text-gray-400">—</li>}
-              {top_op.map(r => (
-                <li key={r.rank} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-gray-700"><strong>{r.rank}.</strong> {r.cliente_nome}</span>
-                  <span className="font-semibold text-emerald-700 tabular-nums">{fmtNum(r.lotes_operados)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-red-700 uppercase tracking-widest mb-2">Top 3 — quem mais zerou</p>
-            <ul className="space-y-1.5">
-              {top_ze.length === 0 && <li className="text-sm text-gray-400">—</li>}
-              {top_ze.map(r => (
-                <li key={r.rank} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-gray-700"><strong>{r.rank}.</strong> {r.cliente_nome}</span>
-                  <span className="font-semibold text-red-700 tabular-nums">{fmtNum(r.lotes_zerados)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+    <Modal open onClose={onClose} size="xl" title={fmtDataPt(data)} subtitle="Detalhe do pregão: totais e quem mais girou e zerou"
+      actions={
+        <Button size="sm" variant="secondary" onClick={exportPng}>
+          <Download className="h-3.5 w-3.5" /> Baixar PNG
+        </Button>
+      }>
+      <div className="mb-5 grid grid-cols-3 gap-3">
+        <Tile label="Operados" value={fmtNum(op)} className="text-accent" />
+        <Tile label="Zerados" value={fmtNum(ze)} className="text-danger" />
+        <Tile label="% zeramento" value={op > 0 ? `${pctZ.toFixed(1)}%` : '—'} className="text-fg" />
       </div>
-    </div>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <Lista titulo="Top 3 · quem mais girou" rows={top_op} valor={r => fmtNum(r.lotes_operados)} tone="text-success" />
+        <Lista titulo="Top 3 · quem mais zerou" rows={top_ze} valor={r => fmtNum(r.lotes_zerados)} tone="text-danger" />
+      </div>
+    </Modal>
   )
 }

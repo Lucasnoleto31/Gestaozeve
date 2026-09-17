@@ -2,19 +2,23 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import {
+  Activity, ArrowRight, Award, BarChart2, Building2, DollarSign, FileStack, Layers, Monitor,
+  Target, TrendingDown, Upload, Users,
+} from 'lucide-react'
 import { getProfile } from '@/lib/auth/getProfile'
-import { Header } from '@/components/layout/Header'
-import { HeroBanner, BannerKpi } from '@/components/layout/HeroBanner'
-import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
+import { PageBody, PageHeader } from '@/components/ui/PageHeader'
+import { Panel } from '@/components/ui/Panel'
+import { KpiCard, KpiRow, DeltaText } from '@/components/ui/Kpi'
+import { Alert } from '@/components/ui/Alert'
+import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
+import { MetaProgress, ProgressBar } from '@/components/ui/Progress'
+import { buttonClasses } from '@/components/ui/buttonStyles'
 import { EvolucaoMensalChart } from '@/app/(app)/admin/contratos-dashboard/Charts'
-import { CorretoraBadge } from '@/app/(app)/admin/contratos-dashboard/ChartsCorretora'
 import { getResumoContratos, type ResumoContratos } from '@/app/(app)/admin/contratos-dashboard/actions'
-import { fmtNum, fmtBRL, fmtBRL2, fmtDataPt, fmtDelta } from '@/app/(app)/admin/contratos-dashboard/_lib/utils'
-import { formatDateTime } from '@/lib/utils'
+import { fmtNum, fmtBRL, fmtBRL2, fmtDataPt, fmtDataHoraPt, labelMesLongo } from '@/lib/format'
 import { CORRETORA_COLOR, isCorretora } from '@/lib/corretoras'
-import { ArrowRight, BarChart2, Upload, Target, FileStack, Layers, Monitor, Users, Building2, Award } from 'lucide-react'
-
-// ── helpers ────────────────────────────────────────────────────────────────
+import { cn } from '@/lib/utils'
 
 function getSaudacao() {
   const h = (new Date().getUTCHours() - 3 + 24) % 24
@@ -23,46 +27,15 @@ function getSaudacao() {
   return 'Bom dia'
 }
 
-const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
-
-function labelMes(iso: string): string {
-  const m = parseInt(iso.slice(5, 7), 10)
-  return `${MESES[m - 1] ?? iso.slice(5, 7)} de ${iso.slice(0, 4)}`
-}
-
-const heroButton = 'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition-all'
-const heroButtonStyle = { background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)' }
-
-const th = (align: 'left' | 'right') =>
-  `px-3 py-2 font-semibold text-gray-500 ${align === 'left' ? 'text-left' : 'text-right'}`
-const rowStyle = (i: number) => ({
-  borderTop: '1px solid var(--border)',
-  background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)',
-})
-
 function Vazio({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-gray-400 py-6 text-center">{children}</p>
+  return <p className="px-5 py-8 text-center text-sm text-fg-subtle">{children}</p>
 }
 
-function CardTop({ icon: Icon, cor, titulo, sub, href, acao }: {
-  icon: React.ElementType; cor: string; titulo: string; sub?: string; href?: string; acao?: string
-}) {
+function LinkAcao({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-      <div className="flex items-center gap-2 min-w-0">
-        <Icon className="w-4 h-4 shrink-0" style={{ color: cor }} />
-        <div className="min-w-0">
-          <CardTitle>{titulo}</CardTitle>
-          {sub && <p className="text-xs text-gray-500 mt-0.5 truncate">{sub}</p>}
-        </div>
-      </div>
-      {href && (
-        <Link href={href} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 shrink-0">
-          {acao ?? 'Ver'} <ArrowRight className="w-3 h-3" />
-        </Link>
-      )}
-    </div>
+    <Link href={href} className="link inline-flex items-center gap-1 text-xs">
+      {children} <ArrowRight className="h-3 w-3" />
+    </Link>
   )
 }
 
@@ -75,19 +48,15 @@ export default async function DashboardPage() {
   const firstName = profile.nome.split(' ')[0]
   const saudacao = getSaudacao()
 
-  // Os painéis de contratos são só do admin (as RPCs do dashboard exigem esse perfil).
+  // Os painéis de lotes são só do admin (as RPCs do dashboard exigem esse perfil).
   if (profile.role !== 'admin') {
     return (
-      <div>
-        <Header title="Dashboard" />
-        <HeroBanner>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-2">Bem-vindo</p>
-          <h1 className="text-3xl font-bold text-white tracking-tight">{saudacao}, {firstName}</h1>
-          <p className="text-blue-200/60 mt-1 text-sm">
-            Os painéis de contratos são exclusivos do administrador. Fale com ele se precisar de acesso.
-          </p>
-        </HeroBanner>
-      </div>
+      <>
+        <PageHeader eyebrow="Visão geral" title={`${saudacao}, ${firstName}`} description="Bem-vindo ao ZeveAI." />
+        <PageBody>
+          <Alert tone="info">Os painéis de lotes são exclusivos do administrador. Fale com ele se precisar de acesso.</Alert>
+        </PageBody>
+      </>
     )
   }
 
@@ -96,191 +65,159 @@ export default async function DashboardPage() {
   const pctZeragem = k && k.volume_operados > 0 ? (k.volume_zerados / k.volume_operados) * 100 : null
 
   return (
-    <div>
-      <Header title="Dashboard" />
-
-      {/* ── Hero: resumo do mês ── */}
-      <HeroBanner>
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-2">
-              Resumo de contratos · {labelMes(r.mes.inicio)}
-            </p>
-            <h1 className="text-3xl font-bold text-white tracking-tight">{saudacao}, {firstName}</h1>
-            <p className="text-blue-200/60 mt-1 text-sm">
-              Lotes girados de {fmtDataPt(r.mes.inicio)} a {fmtDataPt(r.mes.fim)} nas três corretoras
-              {k?.dataset_max ? ` · dados até ${fmtDataPt(k.dataset_max)}` : ''}
-              {k?.ultimo_dia_data ? ` · último pregão (${fmtDataPt(k.ultimo_dia_data)}): ${fmtNum(k.ultimo_dia_lotes)} lotes` : ''}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/admin/contratos-dashboard" className={heroButton} style={heroButtonStyle}>
-              <BarChart2 className="w-3.5 h-3.5" /> Dashboard completo
+    <>
+      <PageHeader
+        eyebrow={`Visão geral · ${labelMesLongo(r.mes.inicio)}`}
+        title={`${saudacao}, ${firstName}`}
+        description={
+          <>
+            Lotes girados de {fmtDataPt(r.mes.inicio)} a {fmtDataPt(r.mes.fim)} nas três corretoras
+            {k?.dataset_max ? ` · dados até ${fmtDataPt(k.dataset_max)}` : ''}
+            {k?.ultimo_dia_data ? ` · último pregão (${fmtDataPt(k.ultimo_dia_data)}): ${fmtNum(k.ultimo_dia_lotes)} lotes` : ''}.
+          </>
+        }
+        actions={
+          <>
+            <Link href="/admin/contratos" className={buttonClasses('secondary')}>
+              <Upload className="h-4 w-4" /> Importar planilha
             </Link>
-            <Link href="/admin/contratos" className={heroButton} style={heroButtonStyle}>
-              <Upload className="w-3.5 h-3.5" /> Importar contratos
+            <Link href="/admin/contratos-dashboard" className={buttonClasses('primary')}>
+              <BarChart2 className="h-4 w-4" /> Painel de lotes
             </Link>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <BannerKpi label="Lotes operados no mês"
+      <PageBody>
+        {r.erros.length > 0 && (
+          <Alert tone="warning">Parte dos dados não carregou: {r.erros[0]}</Alert>
+        )}
+
+        <KpiRow cols={4}>
+          <KpiCard icon={Activity} tone="accent" label="Lotes operados no mês"
             value={k ? fmtNum(k.volume_operados) : '—'}
             sub={k ? `${k.num_dias_com_dado} pregões · ${fmtNum(k.media_diaria)} lotes/pregão` : 'sem dados no mês'} />
-          <BannerKpi label="Lotes zerados no mês"
+          <KpiCard icon={TrendingDown} tone="danger" label="Lotes zerados no mês"
             value={k ? fmtNum(k.volume_zerados) : '—'}
             sub={pctZeragem != null ? `${pctZeragem.toFixed(1)}% do operado` : undefined} />
-          <BannerKpi label="Clientes ativos"
-            value={k ? fmtNum(k.num_clientes_ativos) : '—'}
-            sub="contas que operaram no mês" />
-          <BannerKpi label="Receita estimada no mês"
+          <KpiCard icon={Users} tone="violet" label="Clientes ativos"
+            value={k ? fmtNum(k.num_clientes_ativos) : '—'} sub="contas que operaram no mês" />
+          <KpiCard icon={DollarSign} tone="success" label="Receita estimada no mês"
             value={r.receitaBL ? fmtBRL2(r.receitaBL.receita_liquida) : '—'}
             sub={r.receitaProj
               ? `projeção do mês ${fmtBRL(r.receitaProj.projecao_total)} · só WIN/WDO`
               : 'líquida · só WIN/WDO'} />
-        </div>
-      </HeroBanner>
-
-      {/* ── Conteúdo ── */}
-      <div className="p-6 space-y-6">
-        {r.erros.length > 0 && (
-          <div className="rounded-xl px-4 py-3 text-sm"
-            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
-            Parte dos dados não carregou: {r.erros[0]}
-          </div>
-        )}
+        </KpiRow>
 
         {/* Por corretora — Genial, XP e BTG lado a lado */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-blue-600" />
-              <div>
-                <CardTitle>Por corretora no mês</CardTitle>
-                <p className="text-xs text-gray-500 mt-0.5">Lotes, participação, clientes e receita líquida estimada pela tarifa de cada corretora.</p>
-              </div>
-            </div>
-            <Link href="/admin/contratos-dashboard" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
-              Comparar <ArrowRight className="w-3 h-3" />
-            </Link>
-          </CardHeader>
+        <Panel icon={Building2} title="Por corretora no mês"
+          subtitle="Lotes, participação, clientes e receita líquida estimada pela tarifa de cada corretora."
+          action={<LinkAcao href="/admin/contratos-dashboard">Comparar</LinkAcao>}>
           <CorretorasResumo corretoras={r.corretoras} />
-        </Card>
+        </Panel>
 
         {/* Linha 1: evolução mensal + top barras + meta */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle>Evolução mensal</CardTitle>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Lotes operados (azul) e zerados (vermelho) + clientes ativos (linha roxa). Últimos 12 meses · * = mês em andamento.
-                  </p>
-                </div>
-              </CardHeader>
+            <Panel title="Evolução mensal"
+              subtitle="Lotes operados e zerados por mês + clientes ativos (linha). Últimos 12 meses · * = mês em andamento.">
               <EvolucaoMensalChart data={r.evolucao} />
-            </Card>
+            </Panel>
           </div>
 
-          <div className="space-y-6">
-            <Card className="p-0 overflow-hidden">
-              <CardTop icon={Award} cor="#1764f4" titulo="Top 5 barras do mês" sub="Lotes operados vs mês anterior"
-                href="/admin/contratos-dashboard/barras" acao="Ranking" />
+          <div className="space-y-5">
+            <Panel flush icon={Award} title="Top 5 barras do mês" subtitle="Lotes operados vs mês anterior"
+              action={<LinkAcao href="/admin/contratos-dashboard/barras">Ranking</LinkAcao>}>
               <TopBarrasLista barras={r.topBarras} />
-            </Card>
+            </Panel>
             <MetaCard meta={r.meta} />
           </div>
         </div>
 
         {/* Linha 2: top clientes + produtos + plataformas (mês atual) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-0 overflow-hidden">
-            <CardTop icon={Users} cor="#a855f7" titulo="Top 10 clientes do mês" sub="Por lotes operados · % acumulado" />
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <Panel flush icon={Users} title="Top 10 clientes do mês" subtitle="Por lotes operados · % acumulado">
             {r.topClientes.length === 0 ? <Vazio>Sem operações no mês.</Vazio> : (
-              <table className="text-xs border-collapse w-full">
-                <thead style={{ background: 'var(--surface-2)' }}>
-                  <tr>
-                    <th className={th('left')}>#</th>
-                    <th className={th('left')}>Cliente</th>
-                    <th className={th('right')}>Lotes</th>
-                    <th className={th('right')}>% acum.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {r.topClientes.map((c, i) => (
-                    <tr key={`${c.cliente_nome}-${c.rank}`} style={rowStyle(i)}>
-                      <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{c.rank}</td>
-                      <td className="px-3 py-1.5">
-                        <p className="font-medium text-gray-700 truncate max-w-[180px]">{c.cliente_nome}</p>
-                        {c.assessor_nome && <p className="text-[10px] text-gray-400 truncate max-w-[180px]">{c.assessor_nome}</p>}
-                      </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(c.lotes_operados)}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{c.pct_acumulado.toFixed(1)}%</td>
+              <div className="overflow-x-auto">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th className="w-10">#</th>
+                      <th>Cliente</th>
+                      <th className="num">Lotes</th>
+                      <th className="num">% acum.</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {r.topClientes.map(c => (
+                      <tr key={`${c.cliente_nome}-${c.rank}`}>
+                        <td className="subtle font-semibold tabular-nums">{c.rank}</td>
+                        <td>
+                          <p className="max-w-[180px] truncate font-medium">{c.cliente_nome}</p>
+                          {c.assessor_nome && <p className="max-w-[180px] truncate text-[10.5px] text-fg-subtle">{c.assessor_nome}</p>}
+                        </td>
+                        <td className="num font-medium">{fmtNum(c.lotes_operados)}</td>
+                        <td className="num muted">{c.pct_acumulado.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </Card>
+          </Panel>
 
-          <Card className="p-0 overflow-hidden">
-            <CardTop icon={Layers} cor="#0891b2" titulo="Lotes por produto no mês" sub="Operados, participação e % de zeragem" />
+          <Panel flush icon={Layers} title="Lotes por produto no mês" subtitle="Operados, participação e % de zeragem">
             <ProdutosTable produtos={r.produtos} />
-          </Card>
+          </Panel>
 
-          <Card className="p-0 overflow-hidden">
-            <CardTop icon={Monitor} cor="#f59e0b" titulo="Lotes por plataforma no mês" sub="Plataforma informada na importação" />
+          <Panel flush icon={Monitor} title="Lotes por plataforma no mês" subtitle="Plataforma informada na importação">
             <PlataformasTable plataformas={r.plataformas} />
-          </Card>
+          </Panel>
         </div>
 
         <ImportacoesCard importacoes={r.importacoes} />
-      </div>
-    </div>
+      </PageBody>
+    </>
   )
 }
 
-// ── cards ──────────────────────────────────────────────────────────────────
+// ── blocos ─────────────────────────────────────────────────────────────────
 
 function CorretorasResumo({ corretoras }: { corretoras: ResumoContratos['corretoras'] }) {
   if (corretoras === null) {
     return (
-      <p className="text-sm text-gray-500">
-        Indisponível: rode o arquivo <code className="text-xs px-1 py-0.5 rounded bg-gray-100">supabase-s13-corretoras.sql</code> no
+      <p className="text-sm text-fg-muted">
+        Indisponível: rode o arquivo <code className="rounded bg-surface-3 px-1 py-0.5 text-xs">supabase-s13-corretoras.sql</code> no
         SQL Editor do Supabase para separar os lotes por corretora.
       </p>
     )
   }
   const totalOp = corretoras.reduce((s, c) => s + c.lotes_operados, 0)
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
       {corretoras.map(c => {
-        const color = isCorretora(c.corretora) ? CORRETORA_COLOR[c.corretora] : '#64748b'
+        const color = isCorretora(c.corretora) ? CORRETORA_COLOR[c.corretora] : 'var(--fg-subtle)'
         const share = totalOp > 0 ? (c.lotes_operados / totalOp) * 100 : 0
         const pctZe = c.lotes_operados > 0 ? (c.lotes_zerados / c.lotes_operados) * 100 : 0
         return (
-          <div key={c.corretora} className="rounded-xl p-4"
-            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: `4px solid ${color}` }}>
+          <div key={c.corretora} className="rounded-[10px] border border-line bg-surface-2 p-4" style={{ borderLeft: `3px solid ${color}` }}>
             <div className="flex items-center justify-between">
               <CorretoraBadge corretora={c.corretora} size="md" />
-              <span className="text-xs text-gray-500 tabular-nums">{share.toFixed(1)}% do mês</span>
+              <span className="text-xs tabular-nums text-fg-muted">{share.toFixed(1)}% do mês</span>
             </div>
-            <p className="text-2xl font-bold tabular-nums mt-2 text-gray-800">{fmtNum(c.lotes_operados)}</p>
-            <p className="text-xs text-gray-500">lotes operados</p>
-            <div className="w-full h-1.5 rounded-full overflow-hidden mt-2" style={{ background: 'rgba(148,163,184,0.2)' }}>
-              <div className="h-full" style={{ width: `${Math.min(100, share)}%`, background: color }} />
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-3 text-xs">
-              <span className="text-gray-500">Zerados</span>
-              <span className="text-right tabular-nums text-gray-700">{fmtNum(c.lotes_zerados)} <span className="text-gray-400">({pctZe.toFixed(1)}%)</span></span>
-              <span className="text-gray-500">Clientes</span>
-              <span className="text-right tabular-nums text-gray-700">{fmtNum(c.num_clientes)}</span>
-              <span className="text-gray-500">Pregões</span>
-              <span className="text-right tabular-nums text-gray-700">{fmtNum(c.num_dias)}</span>
-              <span className="text-gray-500">Receita líquida</span>
-              <span className="text-right tabular-nums font-semibold text-emerald-700">{fmtBRL2(c.receita_liquida)}</span>
-            </div>
+            <p className="mt-2 text-2xl font-semibold tabular-nums text-fg">{fmtNum(c.lotes_operados)}</p>
+            <p className="text-xs text-fg-muted">lotes operados</p>
+            <ProgressBar pct={share} color={color} className="mt-2" />
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+              <dt className="text-fg-muted">Zerados</dt>
+              <dd className="text-right tabular-nums text-fg">{fmtNum(c.lotes_zerados)} <span className="text-fg-subtle">({pctZe.toFixed(1)}%)</span></dd>
+              <dt className="text-fg-muted">Clientes</dt>
+              <dd className="text-right tabular-nums text-fg">{fmtNum(c.num_clientes)}</dd>
+              <dt className="text-fg-muted">Pregões</dt>
+              <dd className="text-right tabular-nums text-fg">{fmtNum(c.num_dias)}</dd>
+              <dt className="text-fg-muted">Receita líquida</dt>
+              <dd className="text-right font-semibold tabular-nums text-success">{fmtBRL2(c.receita_liquida)}</dd>
+            </dl>
           </div>
         )
       })}
@@ -292,107 +229,74 @@ function TopBarrasLista({ barras }: { barras: ResumoContratos['topBarras'] }) {
   if (barras.length === 0) return <Vazio>Sem operações no mês.</Vazio>
   const max = Math.max(...barras.map(b => b.lotes_operados), 1)
   return (
-    <div>
-      {barras.map((b, i) => {
-        const delta = b.delta_lotes_pct
-        const cor = delta == null ? '#9ca3af' : delta > 0.05 ? '#059669' : delta < -0.05 ? '#dc2626' : '#6b7280'
-        return (
-          <div key={`${b.corretora}|${b.barra_nome}`} className="px-5 py-2.5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs font-bold text-gray-400 tabular-nums w-4">{i + 1}</span>
-                <span className={`text-sm font-medium truncate ${b.barra_nome === 'Sem barra' ? 'text-gray-400 italic' : 'text-gray-900'}`}>{b.barra_nome}</span>
-                <CorretoraBadge corretora={b.corretora} />
-              </div>
-              <div className="text-right shrink-0">
-                <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtNum(b.lotes_operados)}</span>
-                {delta != null && <span className="ml-2 text-[11px] font-semibold tabular-nums" style={{ color: cor }}>{fmtDelta(delta)}</span>}
-              </div>
+    <ul>
+      {barras.map((b, i) => (
+        <li key={`${b.corretora}|${b.barra_nome}`} className="border-b border-line px-5 py-2.5 last:border-b-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="w-4 text-xs font-semibold tabular-nums text-fg-subtle">{i + 1}</span>
+              <span className={cn('truncate text-sm font-medium', b.barra_nome === 'Sem barra' ? 'italic text-fg-subtle' : 'text-fg')}>{b.barra_nome}</span>
+              <CorretoraBadge corretora={b.corretora} />
             </div>
-            <div className="w-full h-1 rounded-full overflow-hidden mt-1.5 ml-6" style={{ background: 'rgba(148,163,184,0.2)', width: 'calc(100% - 1.5rem)' }}>
-              <div className="h-full" style={{ width: `${(b.lotes_operados / max) * 100}%`, background: '#1764f4', opacity: 0.75 }} />
+            <div className="flex shrink-0 items-center gap-2 text-sm">
+              <span className="font-semibold tabular-nums text-fg">{fmtNum(b.lotes_operados)}</span>
+              <span className="text-[11px]"><DeltaText pct={b.delta_lotes_pct} /></span>
             </div>
           </div>
-        )
-      })}
-    </div>
+          <ProgressBar pct={(b.lotes_operados / max) * 100} className="ml-6 mt-1.5 h-1" />
+        </li>
+      ))}
+    </ul>
   )
 }
 
 function MetaCard({ meta }: { meta: ResumoContratos['meta'] }) {
   const temMeta = meta && (meta.meta_receita > 0 || meta.meta_lotes > 0)
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Target className="w-4 h-4 text-amber-500" />
-          <CardTitle>{meta ? `Meta ${meta.ano} · escritório` : 'Meta anual'}</CardTitle>
-        </div>
-        <Link href="/admin/metas" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
-          {temMeta ? 'Ajustar' : 'Cadastrar'} <ArrowRight className="w-3 h-3" />
-        </Link>
-      </CardHeader>
+    <Panel icon={Target} title={meta ? `Meta ${meta.ano} · escritório` : 'Meta anual'}
+      action={<LinkAcao href="/admin/metas">{temMeta ? 'Ajustar' : 'Cadastrar'}</LinkAcao>}>
       {!temMeta || !meta ? (
-        <p className="text-sm text-gray-400">Nenhuma meta cadastrada para o ano. As metas por corretora aparecem no dashboard completo.</p>
+        <p className="text-sm text-fg-subtle">Nenhuma meta cadastrada para o ano. As metas por corretora aparecem no painel de lotes.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {meta.meta_lotes > 0 && (
-            <MetaProgresso label="Lotes operados" pct={meta.pct_lotes}
+            <MetaProgress label="Lotes operados" pct={meta.pct_lotes}
               realizado={fmtNum(meta.realizado_lotes)} alvo={fmtNum(meta.meta_lotes) + ' lotes'} />
           )}
           {meta.meta_receita > 0 && (
-            <MetaProgresso label="Receita" pct={meta.pct_receita}
+            <MetaProgress label="Receita" pct={meta.pct_receita}
               realizado={fmtBRL(meta.realizado_receita)} alvo={fmtBRL(meta.meta_receita)} />
           )}
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-fg-muted">
             {meta.dias_corridos_restantes} dias úteis restantes
             {meta.meta_receita > 0 ? ` · ritmo necessário ${fmtBRL(meta.ritmo_receita_necessario)}/pregão` : ''}
           </p>
         </div>
       )}
-    </Card>
-  )
-}
-
-function MetaProgresso({ label, pct, realizado, alvo }: {
-  label: string; pct: number; realizado: string; alvo: string
-}) {
-  const color = pct >= 100 ? '#10b981' : pct >= 75 ? '#1764f4' : pct >= 50 ? '#f59e0b' : '#dc2626'
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1 text-sm">
-        <span className="font-medium text-gray-700">{label}</span>
-        <span className="tabular-nums font-semibold" style={{ color }}>{pct.toFixed(1)}%</span>
-      </div>
-      <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.2)' }}>
-        <div className="h-full" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
-      </div>
-      <p className="text-xs text-gray-500 mt-1 tabular-nums">{realizado} de {alvo}</p>
-    </div>
+    </Panel>
   )
 }
 
 function ImportacoesCard({ importacoes }: { importacoes: ResumoContratos['importacoes'] }) {
   return (
-    <Card className="p-0 overflow-hidden">
-      <CardTop icon={FileStack} cor="#1764f4" titulo="Últimas importações" href="/admin/contratos" acao="Ver todas" />
+    <Panel flush icon={FileStack} title="Últimas importações" action={<LinkAcao href="/admin/contratos">Ver todas</LinkAcao>}>
       {importacoes.length === 0 ? <Vazio>Nenhuma importação ainda.</Vazio> : (
-        <div className="grid grid-cols-1 md:grid-cols-5">
+        <div className="grid grid-cols-1 divide-y divide-line md:grid-cols-5 md:divide-x md:divide-y-0">
           {importacoes.map(imp => (
-            <div key={imp.id} className="px-5 py-3 min-w-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+            <div key={imp.id} className="min-w-0 px-5 py-3">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-gray-900 truncate">{imp.nome_arquivo || 'Sem nome'}</p>
+                <p className="truncate text-sm font-medium text-fg">{imp.nome_arquivo || 'Sem nome'}</p>
                 {imp.corretora && <CorretoraBadge corretora={imp.corretora} />}
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">{imp.created_at ? formatDateTime(imp.created_at) : '—'}</p>
-              <p className="text-xs text-gray-700 mt-0.5 tabular-nums">
+              <p className="mt-0.5 text-xs text-fg-muted">{fmtDataHoraPt(imp.created_at)}</p>
+              <p className="mt-0.5 text-xs tabular-nums text-fg">
                 <span className="font-semibold">{fmtNum(imp.total_lotes_operados)}</span> lotes op. · {fmtNum(imp.total_linhas)} linhas
               </p>
             </div>
           ))}
         </div>
       )}
-    </Card>
+    </Panel>
   )
 }
 
@@ -400,40 +304,42 @@ function ProdutosTable({ produtos }: { produtos: ResumoContratos['produtos'] }) 
   if (produtos.length === 0) return <Vazio>Sem operações no mês.</Vazio>
   const total = produtos.reduce((s, p) => s + p.lotes_operados, 0)
   return (
-    <table className="text-xs border-collapse w-full">
-      <thead style={{ background: 'var(--surface-2)' }}>
-        <tr>
-          <th className={th('left')}>Produto</th>
-          <th className={th('right')}>Lotes</th>
-          <th className={th('right')}>% total</th>
-          <th className={th('right')}>% zer.</th>
-          <th className={th('right')}>Clientes</th>
-        </tr>
-      </thead>
-      <tbody>
-        {produtos.map((p, i) => {
-          const pctTotal = total > 0 ? (p.lotes_operados / total) * 100 : 0
-          const pctZe = p.lotes_operados > 0 ? (p.lotes_zerados / p.lotes_operados) * 100 : 0
-          return (
-            <tr key={p.produto} style={rowStyle(i)}>
-              <td className="px-3 py-1.5 font-semibold text-gray-700">{p.produto}</td>
-              <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(p.lotes_operados)}</td>
-              <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{pctTotal.toFixed(1)}%</td>
-              <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
-              <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.num_clientes)}</td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Produto</th>
+            <th className="num">Lotes</th>
+            <th className="num">% total</th>
+            <th className="num">% zer.</th>
+            <th className="num">Clientes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {produtos.map(p => {
+            const pctTotal = total > 0 ? (p.lotes_operados / total) * 100 : 0
+            const pctZe = p.lotes_operados > 0 ? (p.lotes_zerados / p.lotes_operados) * 100 : 0
+            return (
+              <tr key={p.produto}>
+                <td className="font-semibold">{p.produto}</td>
+                <td className="num font-medium">{fmtNum(p.lotes_operados)}</td>
+                <td className="num muted">{pctTotal.toFixed(1)}%</td>
+                <td className="num">{pctZe.toFixed(1)}%</td>
+                <td className="num">{fmtNum(p.num_clientes)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
 function PlataformasTable({ plataformas }: { plataformas: ResumoContratos['plataformas'] }) {
   if (plataformas === null) {
     return (
-      <div className="px-5 py-6 text-sm text-gray-500">
-        Indisponível: rode o arquivo <code className="text-xs px-1 py-0.5 rounded bg-gray-100">supabase-s12-plataforma-excluir-cliente.sql</code> no
+      <div className="px-5 py-6 text-sm text-fg-muted">
+        Indisponível: rode o arquivo <code className="rounded bg-surface-3 px-1 py-0.5 text-xs">supabase-s12-plataforma-excluir-cliente.sql</code> no
         SQL Editor do Supabase para habilitar os lotes por plataforma.
       </div>
     )
@@ -441,31 +347,33 @@ function PlataformasTable({ plataformas }: { plataformas: ResumoContratos['plata
   if (plataformas.length === 0) return <Vazio>Sem operações no mês.</Vazio>
   const total = plataformas.reduce((s, p) => s + p.lotes_operados, 0)
   return (
-    <table className="text-xs border-collapse w-full">
-      <thead style={{ background: 'var(--surface-2)' }}>
-        <tr>
-          <th className={th('left')}>Plataforma</th>
-          <th className={th('right')}>Lotes</th>
-          <th className={th('right')}>% total</th>
-          <th className={th('right')}>% zer.</th>
-          <th className={th('right')}>Clientes</th>
-        </tr>
-      </thead>
-      <tbody>
-        {plataformas.map((p, i) => {
-          const pctTotal = total > 0 ? (p.lotes_operados / total) * 100 : 0
-          const pctZe = p.lotes_operados > 0 ? (p.lotes_zerados / p.lotes_operados) * 100 : 0
-          return (
-            <tr key={p.plataforma} style={rowStyle(i)}>
-              <td className="px-3 py-1.5 font-semibold text-gray-700">{p.plataforma}</td>
-              <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(p.lotes_operados)}</td>
-              <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{pctTotal.toFixed(1)}%</td>
-              <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
-              <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.num_clientes)}</td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Plataforma</th>
+            <th className="num">Lotes</th>
+            <th className="num">% total</th>
+            <th className="num">% zer.</th>
+            <th className="num">Clientes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {plataformas.map(p => {
+            const pctTotal = total > 0 ? (p.lotes_operados / total) * 100 : 0
+            const pctZe = p.lotes_operados > 0 ? (p.lotes_zerados / p.lotes_operados) * 100 : 0
+            return (
+              <tr key={p.plataforma}>
+                <td className="font-semibold">{p.plataforma}</td>
+                <td className="num font-medium">{fmtNum(p.lotes_operados)}</td>
+                <td className="num muted">{pctTotal.toFixed(1)}%</td>
+                <td className="num">{pctZe.toFixed(1)}%</td>
+                <td className="num">{fmtNum(p.num_clientes)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }

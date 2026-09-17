@@ -2,8 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/Button'
-import { Upload, Trash2, Activity, TrendingUp, AlertTriangle, X, Download } from 'lucide-react'
+import { Download, Trash2, Upload, X } from 'lucide-react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
@@ -11,7 +10,14 @@ import {
 import { ImportarContratosModal } from './ImportarContratosModal'
 import { deletarImportacaoContrato, exportarTodosContratos } from './actions'
 import { CORRETORAS, CORRETORA_LABEL, labelCorretora } from '@/lib/corretoras'
-import { CorretoraBadge } from '@/app/(app)/admin/contratos-dashboard/ChartsCorretora'
+import { fmtNum2, fmtDataPt, fmtDataHoraPt, labelMesCurto } from '@/lib/format'
+import { useChartColors } from '@/lib/theme'
+import { cn } from '@/lib/utils'
+import { PageBody, PageHeader } from '@/components/ui/PageHeader'
+import { Panel } from '@/components/ui/Panel'
+import { Button, IconButton } from '@/components/ui/Button'
+import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
+import { ChartTooltip } from '@/app/(app)/admin/contratos-dashboard/Charts'
 
 interface Resumo {
   total_operados: number
@@ -69,36 +75,16 @@ interface Props {
   importacoes: Importacao[]
 }
 
-const formatNum = (v: number) =>
-  Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
-
-const formatMonth = (mes: string) =>
-  new Date(Number(mes.split('-')[0]), Number(mes.split('-')[1]) - 1)
-    .toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'America/Sao_Paulo' })
-
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) {
-  if (active && payload?.length) {
-    return (
-      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs space-y-1">
-        <p className="text-gray-400 font-medium mb-1">{label}</p>
-        {payload.map((p) => (
-          <p key={p.name} style={{ color: p.color }}>{p.name}: {formatNum(p.value)}</p>
-        ))}
-      </div>
-    )
-  }
-  return null
-}
-
-const selectClass = "bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+const formatNum = (v: number) => fmtNum2(Number(v ?? 0))
 
 export function ContratosView({ resumo, porMes, porAssessor, porCliente, contratos, importacoes }: Props) {
   const router = useRouter()
+  const cores = useChartColors()
   const [modalOpen, setModalOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [exportando, setExportando] = useState(false)
 
-  // Filtros (afetam apenas a tabela)
+  // Filtros (afetam apenas a tabela de lançamentos)
   const [filtroCliente, setFiltroCliente] = useState('')
   const [filtroAssessor, setFiltroAssessor] = useState('')
   const [filtroAtivo, setFiltroAtivo] = useState('')
@@ -155,28 +141,20 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
 
   const chartMes = useMemo(
     () => porMes.map((r) => ({
-      label: formatMonth(r.mes),
-      operados: Number(r.operados),
-      zerados: Number(r.zerados),
+      label: labelMesCurto(`${r.mes}-01`),
+      Operados: Number(r.operados),
+      Zerados: Number(r.zerados),
     })),
     [porMes]
   )
 
   const chartAssessor = useMemo(
-    () => porAssessor.map((r) => ({
-      nome: r.nome,
-      operados: Number(r.operados),
-      zerados: Number(r.zerados),
-    })),
+    () => porAssessor.map((r) => ({ nome: r.nome, Operados: Number(r.operados), Zerados: Number(r.zerados) })),
     [porAssessor]
   )
 
   const chartCliente = useMemo(
-    () => porCliente.map((r) => ({
-      nome: r.nome,
-      operados: Number(r.operados),
-      zerados: Number(r.zerados),
-    })),
+    () => porCliente.map((r) => ({ nome: r.nome, Operados: Number(r.operados), Zerados: Number(r.zerados) })),
     [porCliente]
   )
 
@@ -191,7 +169,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
   }
 
   async function handleDeletar(id: string) {
-    if (!confirm('Desfazer esta importação? Todos os contratos do lote serão removidos.')) return
+    if (!confirm('Desfazer esta importação? Todos os lotes desse arquivo serão removidos.')) return
     setDeletingId(id)
     await deletarImportacaoContrato(id)
     router.refresh()
@@ -232,237 +210,212 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
     setExportando(false)
   }
 
+  const tickStyle = { fill: cores.axis, fontSize: 11 }
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={handleBaixarExcel} loading={exportando}>
-          <Download className="w-4 h-4" />
-          Baixar Excel
-        </Button>
-        <Button onClick={() => setModalOpen(true)}>
-          <Upload className="w-4 h-4" />
-          Importar Excel
-        </Button>
-      </div>
+    <>
+      <PageHeader
+        eyebrow="Lotes"
+        title="Importações"
+        description="Planilhas de lotes enviadas pelas corretoras. Cada arquivo entra em uma corretora e pode ser desfeito a qualquer momento."
+        stats={[
+          { label: 'Registros', value: fmtNum2(Number(resumo.num_contratos ?? 0)) },
+          { label: 'Importações', value: importacoes.length },
+          { label: 'Lotes operados', value: formatNum(totalOperados), sub: 'histórico completo' },
+          { label: 'Lotes zerados', value: formatNum(totalZerados), sub: `${pctZerado}% do operado` },
+        ]}
+        actions={
+          <>
+            <Button variant="secondary" onClick={handleBaixarExcel} loading={exportando}>
+              <Download className="h-4 w-4" /> Baixar Excel
+            </Button>
+            <Button onClick={() => setModalOpen(true)}>
+              <Upload className="h-4 w-4" /> Importar planilha
+            </Button>
+          </>
+        }
+      />
 
-      {/* Cards — totais globais da tabela */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-              <Activity className="w-4 h-4 text-blue-600" />
-            </div>
-            <span className="text-sm text-gray-500">Total Lotes Operados</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{formatNum(totalOperados)}</p>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4 text-red-500" />
-            </div>
-            <span className="text-sm text-gray-500">Total Lotes Zerados</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{formatNum(totalZerados)}</p>
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-amber-600" />
-            </div>
-            <span className="text-sm text-gray-500">% Zeramento</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{pctZerado}%</p>
-        </div>
-      </div>
-
-      {/* Gráficos — globais */}
-      {chartMes.length > 0 && (
-        <>
-          <div className="bg-white border border-gray-200 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Evolução Mensal</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={chartMes}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E8EEF8" />
-                <XAxis dataKey="label" tick={{ fill: '#6B7280', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#6B7280', fontSize: 11 }} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                <Line type="monotone" dataKey="operados" name="Operados" stroke="#1764F4" strokeWidth={2} dot={{ fill: '#1764F4', r: 3 }} activeDot={{ r: 5 }} />
-                <Line type="monotone" dataKey="zerados" name="Zerados" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444', r: 3 }} activeDot={{ r: 5 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white border border-gray-200 rounded-2xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Por Barra</h3>
-              <ResponsiveContainer width="100%" height={210}>
-                <BarChart data={chartAssessor} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8EEF8" />
-                  <XAxis type="number" tick={{ fill: '#6B7280', fontSize: 11 }} />
-                  <YAxis dataKey="nome" type="category" width={80} tick={{ fill: '#6B7280', fontSize: 10 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                  <Bar dataKey="operados" name="Operados" fill="#1764F4" radius={[0, 3, 3, 0]} stackId="a" />
-                  <Bar dataKey="zerados" name="Zerados" fill="#ef4444" radius={[0, 3, 3, 0]} stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-2xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Top 10 Clientes</h3>
-              <ResponsiveContainer width="100%" height={210}>
-                <BarChart data={chartCliente} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8EEF8" />
-                  <XAxis type="number" tick={{ fill: '#6B7280', fontSize: 11 }} />
-                  <YAxis dataKey="nome" type="category" width={120} tick={{ fill: '#6B7280', fontSize: 10 }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-                  <Bar dataKey="operados" name="Operados" fill="#1764F4" radius={[0, 3, 3, 0]} stackId="a" />
-                  <Bar dataKey="zerados" name="Zerados" fill="#ef4444" radius={[0, 3, 3, 0]} stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Tabela + filtros (filtros afetam só a tabela) */}
-      <div className="bg-white border border-gray-200 rounded-2xl">
-        <div className="px-4 py-3 border-b border-gray-200 flex flex-wrap items-center gap-3">
-          <h3 className="text-sm font-semibold text-gray-900">Lançamentos</h3>
-
-          <select value={filtroCorretora} onChange={(e) => setFiltroCorretora(e.target.value)} className={selectClass}>
-            <option value="">Todas corretoras</option>
-            {CORRETORAS.map((c) => <option key={c} value={c}>{CORRETORA_LABEL[c]}</option>)}
-          </select>
-          <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} className={selectClass}>
-            <option value="">Todos clientes</option>
-            {clientes.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select value={filtroAssessor} onChange={(e) => setFiltroAssessor(e.target.value)} className={selectClass}>
-            <option value="">Todas barras</option>
-            {assessores.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={filtroAtivo} onChange={(e) => setFiltroAtivo(e.target.value)} className={selectClass}>
-            <option value="">Todos ativos</option>
-            {ativos.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={filtroPlataforma} onChange={(e) => setFiltroPlataforma(e.target.value)} className={selectClass}>
-            <option value="">Todas plataformas</option>
-            {plataformas.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <input type="month" value={filtroPeriodoInicio} onChange={(e) => setFiltroPeriodoInicio(e.target.value)} className={selectClass} />
-          <input type="month" value={filtroPeriodoFim} onChange={(e) => setFiltroPeriodoFim(e.target.value)} className={selectClass} />
-
-          {temFiltro && (
-            <button onClick={limparFiltros} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-400">
-              <X className="w-3.5 h-3.5" /> Limpar
-            </button>
-          )}
-          <span className="ml-auto text-xs text-gray-500">
-            {contratosFiltrados.length} de {contratos.length} registros (últimos 1000)
-          </span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Data</th>
-                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Corretora</th>
-                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Nº Conta</th>
-                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">CPF/CNPJ</th>
-                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Cliente</th>
-                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Barra</th>
-                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Ativo</th>
-                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Plataforma</th>
-                <th className="px-4 py-3 text-right text-xs text-gray-500 font-medium">Lotes Operados</th>
-                <th className="px-4 py-3 text-right text-xs text-gray-500 font-medium">Lotes Zerados</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contratosFiltrados.slice(0, 100).map((c) => (
-                <tr key={c.id} className="border-t border-gray-200 hover:bg-gray-100">
-                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                    {c.data ? new Date(c.data + 'T12:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '-'}
-                  </td>
-                  <td className="px-4 py-3"><CorretoraBadge corretora={c.corretora} /></td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{c.numero_conta ?? '-'}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{c.cpf ?? c.cnpj ?? '-'}</td>
-                  <td className="px-4 py-3 text-gray-700 text-xs font-medium truncate max-w-[150px]">
-                    {c.cliente?.nome ?? c.cliente_nome ?? '-'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{c.assessor_nome ?? '-'}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{c.ativo ?? '-'}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{c.plataforma ?? '-'}</td>
-                  <td className="px-4 py-3 text-right text-blue-600 text-xs font-medium">
-                    {formatNum(c.lotes_operados)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs font-medium">
-                    <span className={c.lotes_zerados > 0 ? 'text-red-500' : 'text-gray-400'}>
-                      {formatNum(c.lotes_zerados)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {contratosFiltrados.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-sm text-gray-400">
-                    Nenhum contrato encontrado.
-                  </td>
-                </tr>
-              )}
-              {contratosFiltrados.length > 100 && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-3 text-center text-xs text-gray-400">
-                    Exibindo 100 de {contratosFiltrados.length}. Use os filtros para refinar.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Histórico de importações */}
-      {importacoes.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Histórico de Importações</h3>
-          <div className="space-y-1">
-            {importacoes.map((imp) => (
-              <div key={imp.id} className="flex items-center justify-between py-2.5 border-b border-gray-200 last:border-0">
-                <div>
-                  <p className="text-sm text-gray-700 flex items-center gap-2">{imp.nome_arquivo}<CorretoraBadge corretora={imp.corretora} /></p>
-                  <p className="text-xs text-gray-500">
-                    {imp.total_linhas} linhas ·{' '}
-                    <span className="text-blue-600">{formatNum(imp.total_lotes_operados)} operados</span>
-                    {' · '}
-                    <span className="text-red-500">{formatNum(imp.total_lotes_zerados)} zerados</span>
-                    {' · '}{new Date(imp.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDeletar(imp.id)}
-                  disabled={deletingId === imp.id}
-                  className="p-1.5 text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40"
-                  title="Desfazer importação"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+      <PageBody>
+        {/* Histórico de importações */}
+        <Panel flush title="Histórico de importações"
+          subtitle="Arquivos importados, da mais recente pra mais antiga. Desfazer remove todos os lotes do arquivo.">
+          {importacoes.length === 0
+            ? <p className="px-5 py-8 text-center text-sm text-fg-subtle">Nenhuma importação ainda. Clique em &quot;Importar planilha&quot; pra começar.</p>
+            : (
+              <div className="overflow-x-auto">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Arquivo</th>
+                      <th>Corretora</th>
+                      <th>Importado em</th>
+                      <th className="num">Linhas</th>
+                      <th className="num">Lotes operados</th>
+                      <th className="num">Lotes zerados</th>
+                      <th className="w-12" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importacoes.map((imp) => (
+                      <tr key={imp.id}>
+                        <td className="max-w-[320px] truncate font-medium">{imp.nome_arquivo || 'Sem nome'}</td>
+                        <td><CorretoraBadge corretora={imp.corretora} /></td>
+                        <td className="muted whitespace-nowrap">{fmtDataHoraPt(imp.created_at)}</td>
+                        <td className="num muted">{fmtNum2(imp.total_linhas)}</td>
+                        <td className="num font-semibold text-accent">{formatNum(imp.total_lotes_operados)}</td>
+                        <td className="num text-danger">{formatNum(imp.total_lotes_zerados)}</td>
+                        <td>
+                          <IconButton tone="danger" title="Desfazer importação" disabled={deletingId === imp.id}
+                            onClick={() => handleDeletar(imp.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </IconButton>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            )}
+        </Panel>
+
+        {/* Gráficos — histórico completo */}
+        {chartMes.length > 0 && (
+          <>
+            <Panel title="Evolução mensal" subtitle="Lotes operados e zerados por mês, histórico completo.">
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chartMes} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={cores.grid} vertical={false} />
+                  <XAxis dataKey="label" tick={tickStyle} axisLine={{ stroke: cores.grid }} tickLine={false} />
+                  <YAxis tick={tickStyle} axisLine={false} tickLine={false} width={48} />
+                  <Tooltip content={<ChartTooltip formatter={formatNum} />} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: cores.text }} iconType="plainline" />
+                  <Line type="monotone" dataKey="Operados" stroke={cores.operados} strokeWidth={2} dot={{ fill: cores.operados, r: 2.5, strokeWidth: 0 }} activeDot={{ r: 5 }} />
+                  <Line type="monotone" dataKey="Zerados" stroke={cores.zerados} strokeWidth={2} dot={{ fill: cores.zerados, r: 2.5, strokeWidth: 0 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </Panel>
+
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              <Panel title="Lotes por barra" subtitle="Operados e zerados, histórico completo.">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={chartAssessor} layout="vertical" margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={cores.grid} horizontal={false} />
+                    <XAxis type="number" tick={tickStyle} axisLine={false} tickLine={false} />
+                    <YAxis dataKey="nome" type="category" width={90} tick={{ ...tickStyle, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<ChartTooltip formatter={formatNum} />} cursor={{ fill: cores.grid }} />
+                    <Legend wrapperStyle={{ fontSize: 11, color: cores.text }} iconType="circle" />
+                    <Bar dataKey="Operados" fill={cores.operados} radius={[0, 3, 3, 0]} stackId="a" />
+                    <Bar dataKey="Zerados" fill={cores.zerados} radius={[0, 3, 3, 0]} stackId="a" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Panel>
+
+              <Panel title="Top 10 clientes" subtitle="Operados e zerados, histórico completo.">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={chartCliente} layout="vertical" margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={cores.grid} horizontal={false} />
+                    <XAxis type="number" tick={tickStyle} axisLine={false} tickLine={false} />
+                    <YAxis dataKey="nome" type="category" width={130} tick={{ ...tickStyle, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<ChartTooltip formatter={formatNum} />} cursor={{ fill: cores.grid }} />
+                    <Legend wrapperStyle={{ fontSize: 11, color: cores.text }} iconType="circle" />
+                    <Bar dataKey="Operados" fill={cores.operados} radius={[0, 3, 3, 0]} stackId="a" />
+                    <Bar dataKey="Zerados" fill={cores.zerados} radius={[0, 3, 3, 0]} stackId="a" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Panel>
+            </div>
+          </>
+        )}
+
+        {/* Lançamentos + filtros (filtros afetam só a tabela) */}
+        <Panel flush title="Lançamentos"
+          subtitle={`${contratosFiltrados.length} de ${contratos.length} registros (últimos 1000 importados). Filtros abaixo valem só para esta tabela.`}>
+          <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3">
+            <select value={filtroCorretora} onChange={(e) => setFiltroCorretora(e.target.value)} className={cn('field-sm', filtroCorretora && 'border-accent')}>
+              <option value="">Todas corretoras</option>
+              {CORRETORAS.map((c) => <option key={c} value={c}>{CORRETORA_LABEL[c]}</option>)}
+            </select>
+            <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} className={cn('field-sm max-w-[220px]', filtroCliente && 'border-accent')}>
+              <option value="">Todos clientes</option>
+              {clientes.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={filtroAssessor} onChange={(e) => setFiltroAssessor(e.target.value)} className={cn('field-sm max-w-[220px]', filtroAssessor && 'border-accent')}>
+              <option value="">Todas barras</option>
+              {assessores.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <select value={filtroAtivo} onChange={(e) => setFiltroAtivo(e.target.value)} className={cn('field-sm', filtroAtivo && 'border-accent')}>
+              <option value="">Todos ativos</option>
+              {ativos.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <select value={filtroPlataforma} onChange={(e) => setFiltroPlataforma(e.target.value)} className={cn('field-sm', filtroPlataforma && 'border-accent')}>
+              <option value="">Todas plataformas</option>
+              {plataformas.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <input type="month" value={filtroPeriodoInicio} onChange={(e) => setFiltroPeriodoInicio(e.target.value)} className={cn('field-sm', filtroPeriodoInicio && 'border-accent')} aria-label="Mês inicial" />
+            <span className="text-xs text-fg-subtle">até</span>
+            <input type="month" value={filtroPeriodoFim} onChange={(e) => setFiltroPeriodoFim(e.target.value)} className={cn('field-sm', filtroPeriodoFim && 'border-accent')} aria-label="Mês final" />
+
+            {temFiltro && (
+              <button type="button" onClick={limparFiltros} className="inline-flex items-center gap-1 text-xs font-medium text-fg-muted hover:text-fg">
+                <X className="h-3.5 w-3.5" /> Limpar
+              </button>
+            )}
           </div>
-        </div>
-      )}
+
+          <div className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Corretora</th>
+                  <th>Nº conta</th>
+                  <th>CPF/CNPJ</th>
+                  <th>Cliente</th>
+                  <th>Barra</th>
+                  <th>Ativo</th>
+                  <th>Plataforma</th>
+                  <th className="num">Lotes operados</th>
+                  <th className="num">Lotes zerados</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contratosFiltrados.slice(0, 100).map((c) => (
+                  <tr key={c.id}>
+                    <td className="muted whitespace-nowrap">{c.data ? fmtDataPt(c.data) : '-'}</td>
+                    <td><CorretoraBadge corretora={c.corretora} /></td>
+                    <td className="muted tabular-nums">{c.numero_conta ?? '-'}</td>
+                    <td className="muted tabular-nums">{c.cpf ?? c.cnpj ?? '-'}</td>
+                    <td className="max-w-[180px] truncate font-medium">{c.cliente?.nome ?? c.cliente_nome ?? '-'}</td>
+                    <td className="muted max-w-[180px] truncate">{c.assessor_nome ?? <span className="subtle italic">Sem barra</span>}</td>
+                    <td className="muted">{c.ativo ?? '-'}</td>
+                    <td className="muted">{c.plataforma ?? '-'}</td>
+                    <td className="num font-medium text-accent">{formatNum(c.lotes_operados)}</td>
+                    <td className={cn('num font-medium', c.lotes_zerados > 0 ? 'text-danger' : 'subtle')}>{formatNum(c.lotes_zerados)}</td>
+                  </tr>
+                ))}
+                {contratosFiltrados.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center text-sm text-fg-subtle">Nenhum lançamento encontrado.</td>
+                  </tr>
+                )}
+                {contratosFiltrados.length > 100 && (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-3 text-center text-xs text-fg-subtle">
+                      Exibindo 100 de {contratosFiltrados.length}. Use os filtros para refinar.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      </PageBody>
 
       <ImportarContratosModal
         open={modalOpen}
         onClose={() => { setModalOpen(false); router.refresh() }}
       />
-    </div>
+    </>
   )
 }

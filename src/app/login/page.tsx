@@ -1,9 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import { Building2, Layers, Loader2, Receipt, Trophy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { TrendingUp } from 'lucide-react'
-import Image from 'next/image'
+import { ThemeToggle } from '@/lib/theme'
+import { Field } from '@/components/ui/Input'
+import { Alert } from '@/components/ui/Alert'
+
+const DESTAQUES = [
+  { icon: Building2, titulo: 'Três corretoras, um painel', texto: 'Genial, XP e BTG lado a lado, com os lotes de cada uma separados na importação.' },
+  { icon: Trophy, titulo: 'Ranking de barras', texto: 'Quem está girando mais, variação contra o período anterior, clientes novos e churn.' },
+  { icon: Receipt, titulo: 'Receita estimada', texto: 'Tarifa por lote e zeragem de cada barra viram receita bruta e líquida, com meta anual.' },
+]
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -26,197 +34,100 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: '#F0F4FF' }}>
-
-      {/* ── Left panel — GIF background ── */}
-      <div className="hidden lg:flex lg:w-[58%] xl:w-[60%] flex-col relative overflow-hidden bg-black">
-
-        {/* GIF background */}
-        <Image
-          src="/login-bg.gif"
-          alt=""
-          fill
-          className="object-cover opacity-60"
-          priority
-          unoptimized
-        />
-
-        {/* Dark gradient overlay — top and bottom for text readability */}
+    <div className="grid min-h-screen bg-bg lg:grid-cols-[1.1fr_1fr]">
+      {/* ── Painel institucional ── */}
+      <aside className="relative hidden overflow-hidden bg-sb text-sb-fg lg:flex lg:flex-col">
         <div
-          className="absolute inset-0"
+          className="pointer-events-none absolute inset-0 opacity-[0.06]"
           style={{
-            background: 'linear-gradient(to bottom, rgba(8,8,16,0.75) 0%, rgba(8,8,16,0.15) 40%, rgba(8,8,16,0.15) 60%, rgba(8,8,16,0.85) 100%)',
+            backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
           }}
         />
-
-        {/* Blue vignette sides */}
         <div
-          className="absolute inset-0"
-          style={{
-            background: 'radial-gradient(ellipse 90% 80% at 50% 50%, transparent 50%, rgba(0,17,40,0.6) 100%)',
-          }}
+          className="pointer-events-none absolute inset-0"
+          style={{ background: 'radial-gradient(ellipse 70% 60% at 20% 100%, rgba(91,141,239,0.22) 0%, transparent 70%)' }}
         />
 
-        {/* Content */}
-        <div className="relative z-10 flex flex-col h-full px-14 py-12">
-
-          {/* Logo */}
+        <div className="relative z-10 flex h-full flex-col px-14 py-12">
           <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)' }}
-            >
-              <TrendingUp className="w-5 h-5 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sb-accent text-white">
+              <Layers className="h-5 w-5" />
             </div>
-            <span className="text-xl font-bold text-white tracking-tight">ZeveAI</span>
+            <div className="leading-tight">
+              <p className="text-lg font-semibold tracking-tight">ZeveAI</p>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-sb-muted">Controle de lotes</p>
+            </div>
           </div>
 
-          {/* Main copy — bottom aligned */}
-          <div className="mt-auto mb-16">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] mb-5" style={{ color: '#7CB9FF' }}>
-              Plataforma de assessoria
-            </p>
-            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight">
-              Seus trades contam<br />
-              <span style={{ color: '#7CB9FF' }}>uma história.</span><br />
-              Você já a leu?
+          <div className="mt-auto">
+            <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-sb-accent">Escritório de assessoria</p>
+            <h1 className="max-w-lg text-4xl font-semibold leading-[1.15] tracking-tight xl:text-[44px]">
+              Lotes, barras e receita das três corretoras em um só lugar.
             </h1>
-            <p className="text-base mt-5 max-w-md leading-relaxed" style={{ color: 'rgba(220,232,255,0.65)' }}>
-              Importe seus relatórios do Profit e descubra com clareza o que está funcionando e o que está te custando dinheiro.
-            </p>
+            <ul className="mt-10 space-y-5">
+              {DESTAQUES.map(d => (
+                <li key={d.titulo} className="flex gap-4">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-sb-line bg-sb-active text-sb-accent">
+                    <d.icon className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold">{d.titulo}</p>
+                    <p className="mt-0.5 max-w-md text-[13px] leading-relaxed text-sb-muted">{d.texto}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          {/* Bottom badge */}
-          <div
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full self-start"
-            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}
-          >
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-white/80 font-medium">Sistema disponível 24/7</span>
-          </div>
+          <p className="mt-12 text-xs text-sb-muted">© {new Date().getFullYear()} ZeveAI · Todos os direitos reservados</p>
         </div>
-      </div>
+      </aside>
 
-      {/* ── Right panel — login form ── */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+      {/* ── Formulário ── */}
+      <main className="relative flex flex-col items-center justify-center px-6 py-12">
+        <div className="absolute right-4 top-4"><ThemeToggle /></div>
 
-        {/* Mobile logo */}
-        <div className="flex items-center gap-2.5 mb-10 lg:hidden">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%)' }}
-          >
-            <TrendingUp className="w-4 h-4 text-white" />
+        <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white">
+            <Layers className="h-4 w-4" />
           </div>
-          <span className="text-lg font-bold text-slate-900">ZeveAI</span>
+          <span className="text-lg font-semibold tracking-tight text-fg">ZeveAI</span>
         </div>
 
-        <div className="w-full max-w-[400px] animate-fade-up">
-
-          {/* Heading */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Bem-vindo de volta</h2>
-            <p className="text-sm mt-1.5" style={{ color: 'var(--muted)' }}>
-              Acesse sua conta para continuar
-            </p>
+        <div className="panel w-full max-w-[400px] animate-fade-up p-8">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold tracking-tight text-fg">Entrar</h2>
+            <p className="mt-1 text-sm text-fg-muted">Acesse sua conta para continuar.</p>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                E-mail
-              </label>
-              <input
-                type="email"
-                placeholder="seu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                className="w-full rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-gray-400 focus:outline-none transition-all duration-150"
-                style={{
-                  background: '#FFFFFF',
-                  border: '1.5px solid var(--border)',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = 'var(--blue)'
-                  e.target.style.boxShadow = '0 0 0 3px rgba(23,100,244,0.10)'
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = 'var(--border)'
-                  e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'
-                }}
-              />
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Field label="E-mail" htmlFor="login-email">
+              <input id="login-email" type="email" placeholder="seu@email.com" value={email}
+                onChange={(e) => setEmail(e.target.value)} required autoComplete="email" className="w-full py-2.5" />
+            </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Senha
-              </label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-                className="w-full rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-gray-400 focus:outline-none transition-all duration-150"
-                style={{
-                  background: '#FFFFFF',
-                  border: '1.5px solid var(--border)',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = 'var(--blue)'
-                  e.target.style.boxShadow = '0 0 0 3px rgba(23,100,244,0.10)'
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = 'var(--border)'
-                  e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'
-                }}
-              />
-            </div>
+            <Field label="Senha" htmlFor="login-senha">
+              <input id="login-senha" type="password" placeholder="••••••••" value={password}
+                onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" className="w-full py-2.5" />
+            </Field>
 
-            {error && (
-              <div
-                className="rounded-xl px-4 py-3 animate-fade-in"
-                style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.18)' }}
-              >
-                <p className="text-xs text-red-500">{error}</p>
-              </div>
-            )}
+            {error && <Alert tone="danger">{error}</Alert>}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl py-3 text-sm font-semibold text-white transition-all duration-150 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed mt-1"
-              style={{
-                background: 'linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%)',
-                boxShadow: '0 4px 20px rgba(23,100,244,0.25)',
-              }}
-              onMouseEnter={(e) => !loading && ((e.currentTarget as HTMLElement).style.filter = 'brightness(1.08)')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.filter = '')}
+              className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-accent text-sm font-semibold text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? (
-                <span className="inline-flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Acessando...
-                </span>
-              ) : 'Entrar na plataforma'}
+              {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Acessando…</> : 'Entrar'}
             </button>
           </form>
-
-          {/* Footer */}
-          <p className="text-center text-xs mt-10 text-gray-400">
-            © {new Date().getFullYear()} ZeveAI · Todos os direitos reservados
-          </p>
         </div>
-      </div>
+
+        <p className="mt-8 text-center text-xs text-fg-subtle lg:hidden">
+          © {new Date().getFullYear()} ZeveAI · Todos os direitos reservados
+        </p>
+      </main>
     </div>
   )
 }

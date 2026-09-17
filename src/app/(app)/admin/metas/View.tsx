@@ -1,25 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import { Save, Plus, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, Save, Trash2, X } from 'lucide-react'
 import type { MetaRow } from './actions'
 import { ESCOPOS_META, CORRETORA_LABEL, type EscopoMeta } from '@/lib/corretoras'
-import { CorretoraBadge } from '@/app/(app)/admin/contratos-dashboard/ChartsCorretora'
+import { fmtBRL, fmtNum } from '@/lib/format'
+import { Panel } from '@/components/ui/Panel'
+import { Alert } from '@/components/ui/Alert'
+import { Badge } from '@/components/ui/Badge'
+import { Button, IconButton } from '@/components/ui/Button'
+import { Field } from '@/components/ui/Input'
+import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
 
 interface Actions {
   saveMeta: (m: MetaRow) => Promise<{ ok: true }>
   deleteMeta: (ano: number, corretora: EscopoMeta) => Promise<{ ok: true }>
 }
 
-const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
-const fmtNum = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 const chave = (m: { ano: number; corretora: EscopoMeta }) => `${m.ano}|${m.corretora}`
 
 function EscopoLabel({ escopo }: { escopo: EscopoMeta }) {
-  if (escopo === 'TOTAL') {
-    return <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-700">Escritório (total)</span>
-  }
-  return <CorretoraBadge corretora={escopo} />
+  if (escopo === 'TOTAL') return <Badge>Escritório (total)</Badge>
+  return <CorretoraBadge corretora={escopo} size="md" />
 }
 
 export function MetasView({ initial, actions }: { initial: MetaRow[]; actions: Actions }) {
@@ -85,116 +87,96 @@ export function MetasView({ initial, actions }: { initial: MetaRow[]; actions: A
   }
 
   return (
-    <div className="px-6 lg:px-8 py-6 space-y-4">
-      {erro && (
-        <div className="rounded-xl px-4 py-3 text-sm"
-          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
-          {erro}
-        </div>
+    <>
+      {erro && <Alert tone="danger">{erro}</Alert>}
+
+      <div className="flex items-center justify-end">
+        {!novo && (
+          <Button size="sm" onClick={() => setNovo({ ano: new Date().getFullYear(), corretora: 'TOTAL', meta_lotes: 0, meta_receita: 0, observacao: null, updated_at: '' })}>
+            <Plus className="h-4 w-4" /> Nova meta
+          </Button>
+        )}
+      </div>
+
+      {novo && (
+        <Panel title="Nova meta" subtitle="Escolha o ano e o escopo (escritório inteiro ou uma corretora).">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <Field label="Ano">
+              <input type="number" min={2000} max={2100} className="tabular-nums" value={novo.ano}
+                onChange={e => setNovo(s => s ? { ...s, ano: Number(e.target.value) } : s)} />
+            </Field>
+            <Field label="Escopo">
+              <select value={novo.corretora} onChange={e => setNovo(s => s ? { ...s, corretora: e.target.value as EscopoMeta } : s)}>
+                {ESCOPOS_META.map(e => <option key={e} value={e}>{CORRETORA_LABEL[e]}</option>)}
+              </select>
+            </Field>
+            <Field label="Meta de lotes">
+              <input type="number" step="1" className="text-right tabular-nums" value={novo.meta_lotes}
+                onChange={e => setNovo(s => s ? { ...s, meta_lotes: Number(e.target.value) } : s)} />
+            </Field>
+            <Field label="Meta de receita (R$)">
+              <input type="number" step="1" className="text-right tabular-nums" value={novo.meta_receita}
+                onChange={e => setNovo(s => s ? { ...s, meta_receita: Number(e.target.value) } : s)} />
+            </Field>
+            <Field label="Observação">
+              <input value={novo.observacao ?? ''} onChange={e => setNovo(s => s ? { ...s, observacao: e.target.value || null } : s)} />
+            </Field>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button size="sm" onClick={addNew} loading={saving === chave(novo)}>
+              {saving !== chave(novo) && <Save className="h-4 w-4" />} Salvar
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setNovo(null)}><X className="h-4 w-4" /> Cancelar</Button>
+          </div>
+        </Panel>
       )}
 
-      <div className="rounded-2xl p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Metas configuradas ({rows.length})</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">
-              Uma meta para o escritório inteiro e, se quiser, uma por corretora. O dashboard mostra o progresso de cada escopo.
-            </p>
-          </div>
-          {!novo && (
-            <button onClick={() => setNovo({ ano: new Date().getFullYear(), corretora: 'TOTAL', meta_lotes: 0, meta_receita: 0, observacao: null, updated_at: '' })}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
-              style={{ background: 'var(--blue)' }}>
-              <Plus className="w-3.5 h-3.5" /> Nova meta
-            </button>
-          )}
-        </div>
-
-        {novo && (
-          <div className="mb-3 p-3 rounded-xl" style={{ background: 'var(--surface)', border: '1px dashed var(--border)' }}>
-            <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 items-end">
-              <Field label="Ano">
-                <input type="number" min={2000} max={2100} className="w-24 px-2 py-1 rounded text-sm tabular-nums" style={inputStyle}
-                  value={novo.ano} onChange={e => setNovo(s => s ? { ...s, ano: Number(e.target.value) } : s)} />
-              </Field>
-              <Field label="Escopo">
-                <select className="w-full px-2 py-1 rounded text-sm" style={inputStyle}
-                  value={novo.corretora} onChange={e => setNovo(s => s ? { ...s, corretora: e.target.value as EscopoMeta } : s)}>
-                  {ESCOPOS_META.map(e => <option key={e} value={e}>{CORRETORA_LABEL[e]}</option>)}
-                </select>
-              </Field>
-              <Field label="Meta lotes">
-                <input type="number" step="1" className="w-32 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                  value={novo.meta_lotes} onChange={e => setNovo(s => s ? { ...s, meta_lotes: Number(e.target.value) } : s)} />
-              </Field>
-              <Field label="Meta receita (R$)">
-                <input type="number" step="1" className="w-36 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                  value={novo.meta_receita} onChange={e => setNovo(s => s ? { ...s, meta_receita: Number(e.target.value) } : s)} />
-              </Field>
-              <Field label="Observação">
-                <input className="w-full px-2 py-1 rounded text-sm" style={inputStyle}
-                  value={novo.observacao ?? ''} onChange={e => setNovo(s => s ? { ...s, observacao: e.target.value || null } : s)} />
-              </Field>
-              <div className="flex gap-2">
-                <button onClick={addNew} disabled={saving === chave(novo)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white">
-                  <Save className="w-3.5 h-3.5" /> Salvar
-                </button>
-                <button onClick={() => setNovo(null)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100">Cancelar</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-          <table className="text-xs border-collapse min-w-max w-full">
-            <thead style={{ background: 'var(--surface-2)' }}>
+      <Panel flush>
+        <div className="overflow-x-auto">
+          <table className="tbl">
+            <thead>
               <tr>
-                {['Ano', 'Escopo', 'Meta lotes', 'Meta receita', 'Observação', ''].map((h, i) => (
-                  <th key={i} className="px-3 py-2 font-semibold text-gray-500 border-r text-left"
-                    style={{ borderColor: 'var(--border)' }}>{h}</th>
-                ))}
+                <th>Ano</th>
+                <th>Escopo</th>
+                <th>Meta de lotes</th>
+                <th>Meta de receita</th>
+                <th>Observação</th>
+                <th className="w-28" />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">Sem metas. Clique em &quot;Nova meta&quot; pra adicionar.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-fg-subtle">Sem metas. Clique em &quot;Nova meta&quot; pra adicionar.</td></tr>
               )}
-              {rows.map((orig, idx) => {
+              {rows.map((orig) => {
                 const k = chave(orig)
                 const r = row(k)
                 const dirty = !!editing[k]
-                const bg = idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)'
                 return (
-                  <tr key={k} style={{ borderTop: '1px solid var(--border)', background: bg }}>
-                    <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{r.ano}</td>
-                    <td className="px-3 py-1.5"><EscopoLabel escopo={r.corretora} /></td>
-                    <td className="px-3 py-1.5">
-                      <input type="number" step="1" className="w-32 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                        value={r.meta_lotes} onChange={e => patch(k, 'meta_lotes', Number(e.target.value))} />
-                      <span className="ml-2 text-[10px] text-gray-400">{fmtNum(r.meta_lotes)} lotes</span>
+                  <tr key={k}>
+                    <td className="font-semibold tabular-nums">{r.ano}</td>
+                    <td><EscopoLabel escopo={r.corretora} /></td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <input type="number" step="1" className="field-sm w-32 text-right tabular-nums" value={r.meta_lotes}
+                          onChange={e => patch(k, 'meta_lotes', Number(e.target.value))} />
+                        <span className="subtle whitespace-nowrap text-[11px] tabular-nums">{fmtNum(r.meta_lotes)} lotes</span>
+                      </div>
                     </td>
-                    <td className="px-3 py-1.5">
-                      <input type="number" step="1" className="w-36 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                        value={r.meta_receita} onChange={e => patch(k, 'meta_receita', Number(e.target.value))} />
-                      <span className="ml-2 text-[10px] text-gray-400">{fmtBRL(r.meta_receita)}</span>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <input type="number" step="1" className="field-sm w-36 text-right tabular-nums" value={r.meta_receita}
+                          onChange={e => patch(k, 'meta_receita', Number(e.target.value))} />
+                        <span className="subtle whitespace-nowrap text-[11px] tabular-nums">{fmtBRL(r.meta_receita)}</span>
+                      </div>
                     </td>
-                    <td className="px-3 py-1.5">
-                      <input className="w-64 px-2 py-1 rounded text-sm" style={inputStyle}
-                        value={r.observacao ?? ''} onChange={e => patch(k, 'observacao', e.target.value || null)} />
-                    </td>
-                    <td className="px-3 py-1.5">
+                    <td><input className="field-sm w-64" value={r.observacao ?? ''} onChange={e => patch(k, 'observacao', e.target.value || null)} /></td>
+                    <td>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => save(k)} disabled={!dirty || saving === k}
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-white disabled:opacity-40"
-                          style={{ background: 'var(--blue)' }}>
-                          {saving === k ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                          {saving === k ? 'Salvando…' : 'Salvar'}
-                        </button>
-                        <button onClick={() => remove(orig)}
-                          className="p-1.5 rounded text-red-500 hover:bg-red-50">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        <Button size="xs" onClick={() => save(k)} disabled={!dirty} loading={saving === k}>
+                          {saving !== k && <Save className="h-3 w-3" />} Salvar
+                        </Button>
+                        <IconButton tone="danger" title="Remover meta" onClick={() => remove(orig)}><Trash2 className="h-3.5 w-3.5" /></IconButton>
                       </div>
                     </td>
                   </tr>
@@ -203,22 +185,7 @@ export function MetasView({ initial, actions }: { initial: MetaRow[]; actions: A
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
-  )
-}
-
-const inputStyle: React.CSSProperties = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  color: 'var(--ink)',
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-1">{label}</p>
-      {children}
-    </div>
+      </Panel>
+    </>
   )
 }

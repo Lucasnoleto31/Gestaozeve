@@ -1,8 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { Eye, EyeOff, Lock, Mail, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { User, Mail, Lock, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Panel } from '@/components/ui/Panel'
+import { Button } from '@/components/ui/Button'
+import { Field } from '@/components/ui/Input'
+import { Alert } from '@/components/ui/Alert'
 
 interface Props {
   profile: {
@@ -16,112 +20,32 @@ interface Props {
 
 type Status = { type: 'success' | 'error'; msg: string } | null
 
-function FormSection({ title, icon: Icon, children }: {
-  title: string
-  icon: React.ElementType
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{ background: '#FFFFFF', border: '1px solid var(--border-subtle)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}
-    >
-      <div
-        className="flex items-center gap-3 px-6 py-4"
-        style={{ borderBottom: '1px solid var(--border-subtle)' }}
-      >
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--blue-dim)' }}
-        >
-          <Icon className="w-4 h-4" style={{ color: 'var(--blue)' }} />
-        </div>
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-      </div>
-      <div className="px-6 py-5">{children}</div>
-    </div>
-  )
-}
-
 function StatusBanner({ status }: { status: Status }) {
   if (!status) return null
-  const isSuccess = status.type === 'success'
+  return <Alert tone={status.type === 'success' ? 'success' : 'danger'} className="animate-fade-in">{status.msg}</Alert>
+}
+
+// Fora dos componentes de seção: criar componentes durante o render reinicia o estado deles.
+function EyeToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
   return (
-    <div
-      className="flex items-center gap-2 rounded-xl px-4 py-3 text-xs font-medium animate-fade-in"
-      style={
-        isSuccess
-          ? { background: 'rgba(5,150,105,0.07)', border: '1px solid rgba(5,150,105,0.2)', color: '#065f46' }
-          : { background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.18)', color: '#991b1b' }
-      }
-    >
-      {isSuccess
-        ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-        : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}
-      {status.msg}
-    </div>
+    <button type="button" onClick={onToggle} className="text-fg-subtle hover:text-fg" aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}>
+      {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+    </button>
   )
 }
 
-function InputField({
-  label, type = 'text', value, onChange, placeholder, disabled, rightEl,
-}: {
-  label: string
-  type?: string
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
-  disabled?: boolean
-  rightEl?: React.ReactNode
+function SenhaField({ label, value, onChange, placeholder, show, onToggle, error }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder: string
+  show: boolean; onToggle: () => void; error?: string
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</label>
+    <Field label={label} error={error}>
       <div className="relative">
-        <input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          disabled={disabled}
-          className="w-full rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-gray-400 focus:outline-none transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            background: disabled ? 'var(--surface-3)' : '#FFFFFF',
-            border: '1.5px solid var(--border)',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            paddingRight: rightEl ? '2.75rem' : undefined,
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = 'var(--blue)'
-            e.target.style.boxShadow = '0 0 0 3px rgba(23,100,244,0.10)'
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = 'var(--border)'
-            e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'
-          }}
-        />
-        {rightEl && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">{rightEl}</div>
-        )}
+        <input type={show ? 'text' : 'password'} value={value} onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder} className="w-full pr-10" autoComplete="new-password" />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2"><EyeToggle show={show} onToggle={onToggle} /></div>
       </div>
-    </div>
-  )
-}
-
-function SaveButton({ loading, disabled }: { loading: boolean; disabled?: boolean }) {
-  return (
-    <button
-      type="submit"
-      disabled={loading || disabled}
-      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-      style={{
-        background: 'linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%)',
-        boxShadow: '0 4px 14px rgba(23,100,244,0.22)',
-      }}
-    >
-      {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-      {loading ? 'Salvando...' : 'Salvar alterações'}
-    </button>
+    </Field>
   )
 }
 
@@ -148,20 +72,17 @@ function NomeSection({ profileId, nomeInicial }: { profileId: string; nomeInicia
   }
 
   return (
-    <FormSection title="Informações pessoais" icon={User}>
+    <Panel icon={User} title="Informações pessoais">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <InputField
-          label="Nome completo"
-          value={nome}
-          onChange={setNome}
-          placeholder="Seu nome completo"
-        />
+        <Field label="Nome completo">
+          <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome completo" className="w-full" />
+        </Field>
         <StatusBanner status={status} />
         <div className="flex justify-end">
-          <SaveButton loading={loading} disabled={!nome.trim() || nome.trim() === nomeInicial} />
+          <Button type="submit" loading={loading} disabled={!nome.trim() || nome.trim() === nomeInicial}>Salvar alterações</Button>
         </div>
       </form>
-    </FormSection>
+    </Panel>
   )
 }
 
@@ -188,24 +109,17 @@ function EmailSection({ emailAtual }: { emailAtual: string }) {
   }
 
   return (
-    <FormSection title="Endereço de e-mail" icon={Mail}>
+    <Panel icon={Mail} title="Endereço de e-mail">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <InputField
-          label="E-mail"
-          type="email"
-          value={email}
-          onChange={setEmail}
-          placeholder="seu@email.com"
-        />
-        <p className="text-xs text-gray-400">
-          Um e-mail de confirmação será enviado para o novo endereço antes da alteração entrar em vigor.
-        </p>
+        <Field label="E-mail" hint="Um e-mail de confirmação será enviado para o novo endereço antes da alteração entrar em vigor.">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className="w-full" />
+        </Field>
         <StatusBanner status={status} />
         <div className="flex justify-end">
-          <SaveButton loading={loading} disabled={!email.trim() || email.trim() === emailAtual} />
+          <Button type="submit" loading={loading} disabled={!email.trim() || email.trim() === emailAtual}>Salvar alterações</Button>
         </div>
       </form>
-    </FormSection>
+    </Panel>
   )
 }
 
@@ -240,41 +154,20 @@ function SenhaSection() {
   }
 
   return (
-    <FormSection title="Segurança" icon={Lock}>
+    <Panel icon={Lock} title="Segurança">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <InputField
-          label="Nova senha"
-          type={showNova ? 'text' : 'password'}
-          value={nova}
-          onChange={setNova}
-          placeholder="Mínimo 8 caracteres"
-          rightEl={<EyeToggle show={showNova} onToggle={() => setShowNova(!showNova)} />}
-        />
-        {senhaFraca && (
-          <p className="text-xs text-red-500 -mt-2">A senha deve ter pelo menos 8 caracteres.</p>
-        )}
-
-        <InputField
-          label="Confirmar nova senha"
-          type={showConfirmar ? 'text' : 'password'}
-          value={confirmar}
-          onChange={setConfirmar}
-          placeholder="Repita a nova senha"
-          rightEl={<EyeToggle show={showConfirmar} onToggle={() => setShowConfirmar(!showConfirmar)} />}
-        />
-        {naoConfere && (
-          <p className="text-xs text-red-500 -mt-2">As senhas não coincidem.</p>
-        )}
-
+        <SenhaField label="Nova senha" value={nova} onChange={setNova} placeholder="Mínimo 8 caracteres"
+          show={showNova} onToggle={() => setShowNova(!showNova)}
+          error={senhaFraca ? 'A senha deve ter pelo menos 8 caracteres.' : undefined} />
+        <SenhaField label="Confirmar nova senha" value={confirmar} onChange={setConfirmar} placeholder="Repita a nova senha"
+          show={showConfirmar} onToggle={() => setShowConfirmar(!showConfirmar)}
+          error={naoConfere ? 'As senhas não coincidem.' : undefined} />
         <StatusBanner status={status} />
         <div className="flex justify-end">
-          <SaveButton
-            loading={loading}
-            disabled={!nova || !confirmar || nova !== confirmar || nova.length < 8}
-          />
+          <Button type="submit" loading={loading} disabled={!nova || !confirmar || nova !== confirmar || nova.length < 8}>Alterar senha</Button>
         </div>
       </form>
-    </FormSection>
+    </Panel>
   )
 }
 
@@ -287,14 +180,5 @@ export function PerfilForm({ profile }: Props) {
       <EmailSection emailAtual={profile.email} />
       <SenhaSection />
     </div>
-  )
-}
-
-// Fora do componente: criar componentes durante o render reinicia o estado deles a cada renderização.
-function EyeToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
-  return (
-    <button type="button" onClick={onToggle} className="text-gray-400 hover:text-gray-600 transition-colors">
-      {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-    </button>
   )
 }

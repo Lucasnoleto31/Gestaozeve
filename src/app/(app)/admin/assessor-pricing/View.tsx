@@ -1,10 +1,16 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Save, Plus, Trash2, RefreshCw, Layers, X } from 'lucide-react'
+import { Layers, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
 import type { PricingRow, SavePricingInput, ModeloZeragem, TierRow } from './actions'
 import { CORRETORAS, CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
-import { CorretoraBadge } from '@/app/(app)/admin/contratos-dashboard/ChartsCorretora'
+import { fmtBRL2 } from '@/lib/format'
+import { Panel } from '@/components/ui/Panel'
+import { Modal } from '@/components/ui/Modal'
+import { Alert } from '@/components/ui/Alert'
+import { Button, IconButton } from '@/components/ui/Button'
+import { Field } from '@/components/ui/Input'
+import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
 
 interface Actions {
   savePricing: (input: SavePricingInput) => Promise<{ ok: true; id: string }>
@@ -19,8 +25,6 @@ const MODELOS_ZERAGEM: { id: ModeloZeragem; label: string }[] = [
   { id: 'mesmo_operado', label: 'Igual ao lote operado' },
   { id: 'tiered', label: 'Escalonado por volume diário' },
 ]
-
-const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 })
 
 const NOVA_LINHA: Partial<PricingRow> = {
   corretora: 'GENIAL', barra_nome: '', numero: '',
@@ -130,174 +134,142 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
   }
 
   return (
-    <div className="px-6 lg:px-8 py-6 space-y-4">
-      {erro && (
-        <div className="rounded-xl px-4 py-3 text-sm"
-          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
-          {erro}
+    <>
+      {erro && <Alert tone="danger">{erro}</Alert>}
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1">
+          <button type="button" className="chip" data-active={filtro === ''} onClick={() => setFiltro('')}>
+            Todas <span className="opacity-70">({rows.length})</span>
+          </button>
+          {CORRETORAS.map(c => (
+            <button key={c} type="button" className="chip" data-active={filtro === c} onClick={() => setFiltro(c)}>
+              {CORRETORA_LABEL[c]} <span className="opacity-70">({rows.filter(r => r.corretora === c).length})</span>
+            </button>
+          ))}
         </div>
+        {!adding && (
+          <Button size="sm" onClick={() => { setNewRow({ ...NOVA_LINHA, corretora: filtro || 'GENIAL' }); setAdding(true) }}>
+            <Plus className="h-4 w-4" /> Nova tarifa
+          </Button>
+        )}
+      </div>
+
+      {adding && (
+        <Panel title="Nova tarifa" subtitle="A mesma barra pode ter tarifas diferentes na Genial, na XP e no BTG.">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Field label="Corretora">
+              <select value={newRow.corretora ?? 'GENIAL'}
+                onChange={e => setNewRow(s => ({ ...s, corretora: e.target.value as Corretora }))}>
+                {CORRETORAS.map(c => <option key={c} value={c}>{CORRETORA_LABEL[c]}</option>)}
+              </select>
+            </Field>
+            <Field label="Nome da barra" className="col-span-2">
+              <input value={newRow.barra_nome ?? ''} onChange={e => setNewRow(s => ({ ...s, barra_nome: e.target.value }))} placeholder="Como aparece na planilha" autoFocus />
+            </Field>
+            <Field label="Número">
+              <input className="tabular-nums" value={(newRow.numero as string) ?? ''} onChange={e => setNewRow(s => ({ ...s, numero: e.target.value }))} />
+            </Field>
+            <Field label="R$ por lote operado">
+              <input type="number" step="0.0001" className="tabular-nums" value={newRow.preco_lote_futuros ?? 0}
+                onChange={e => setNewRow(s => ({ ...s, preco_lote_futuros: Number(e.target.value) }))} />
+            </Field>
+            <Field label="Modelo de zeragem">
+              <select value={newRow.modelo_zeragem ?? 'tiered'}
+                onChange={e => setNewRow(s => ({ ...s, modelo_zeragem: e.target.value as ModeloZeragem }))}>
+                {MODELOS_ZERAGEM.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </Field>
+            <Field label="R$ por zeragem (se fixo)">
+              <input type="number" step="0.0001" className="tabular-nums" value={newRow.preco_zeragem ?? 0}
+                disabled={newRow.modelo_zeragem !== 'fixo'}
+                onChange={e => setNewRow(s => ({ ...s, preco_zeragem: Number(e.target.value) }))} />
+            </Field>
+            <Field label="% volume Bovespa">
+              <input type="number" step="0.001" className="tabular-nums" value={newRow.pct_volume_bovespa ?? 0}
+                onChange={e => setNewRow(s => ({ ...s, pct_volume_bovespa: Number(e.target.value) }))} />
+            </Field>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button size="sm" onClick={addNew}><Save className="h-4 w-4" /> Salvar</Button>
+            <Button size="sm" variant="secondary" onClick={() => setAdding(false)}><X className="h-4 w-4" /> Cancelar</Button>
+          </div>
+        </Panel>
       )}
 
-      <div className="rounded-2xl p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold mr-1">Tarifas ativas ({rows.length})</p>
-            <button onClick={() => setFiltro('')}
-              className="px-2.5 py-1 rounded-lg text-xs font-medium"
-              style={filtro === '' ? { background: 'var(--blue)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-              Todas
-            </button>
-            {CORRETORAS.map(c => (
-              <button key={c} onClick={() => setFiltro(c)}
-                className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                style={filtro === c ? { background: 'var(--blue)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-                {CORRETORA_LABEL[c]} ({rows.filter(r => r.corretora === c).length})
-              </button>
-            ))}
-          </div>
-          {!adding && (
-            <button onClick={() => { setNewRow({ ...NOVA_LINHA, corretora: filtro || 'GENIAL' }); setAdding(true) }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
-              style={{ background: 'var(--blue)' }}>
-              <Plus className="w-3.5 h-3.5" /> Nova barra
-            </button>
-          )}
-        </div>
-
-        {adding && (
-          <div className="mb-3 p-3 rounded-xl" style={{ background: 'var(--surface)', border: '1px dashed var(--border)' }}>
-            <div className="grid grid-cols-2 lg:grid-cols-8 gap-2 items-end">
-              <Field label="Corretora">
-                <select className="w-full px-2 py-1 rounded text-sm" style={inputStyle}
-                  value={newRow.corretora ?? 'GENIAL'}
-                  onChange={e => setNewRow(s => ({ ...s, corretora: e.target.value as Corretora }))}>
-                  {CORRETORAS.map(c => <option key={c} value={c}>{CORRETORA_LABEL[c]}</option>)}
-                </select>
-              </Field>
-              <Field label="Nome da barra" wide>
-                <input className="w-full px-2 py-1 rounded text-sm" style={inputStyle}
-                  value={newRow.barra_nome ?? ''} onChange={e => setNewRow(s => ({ ...s, barra_nome: e.target.value }))} />
-              </Field>
-              <Field label="Número">
-                <input className="w-full px-2 py-1 rounded text-sm tabular-nums" style={inputStyle}
-                  value={(newRow.numero as string) ?? ''} onChange={e => setNewRow(s => ({ ...s, numero: e.target.value }))} />
-              </Field>
-              <Field label="R$/lote operado">
-                <input type="number" step="0.0001" className="w-full px-2 py-1 rounded text-sm tabular-nums" style={inputStyle}
-                  value={newRow.preco_lote_futuros ?? 0} onChange={e => setNewRow(s => ({ ...s, preco_lote_futuros: Number(e.target.value) }))} />
-              </Field>
-              <Field label="Modelo zeragem">
-                <select className="w-full px-2 py-1 rounded text-sm" style={inputStyle}
-                  value={newRow.modelo_zeragem ?? 'tiered'}
-                  onChange={e => setNewRow(s => ({ ...s, modelo_zeragem: e.target.value as ModeloZeragem }))}>
-                  {MODELOS_ZERAGEM.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </Field>
-              <Field label="R$/zeragem (se fixo)">
-                <input type="number" step="0.0001" className="w-full px-2 py-1 rounded text-sm tabular-nums" style={inputStyle}
-                  value={newRow.preco_zeragem ?? 0} onChange={e => setNewRow(s => ({ ...s, preco_zeragem: Number(e.target.value) }))} />
-              </Field>
-              <Field label="% Vol Bovespa">
-                <input type="number" step="0.001" className="w-full px-2 py-1 rounded text-sm tabular-nums" style={inputStyle}
-                  value={newRow.pct_volume_bovespa ?? 0} onChange={e => setNewRow(s => ({ ...s, pct_volume_bovespa: Number(e.target.value) }))} />
-              </Field>
-              <div className="flex gap-2 col-span-2 lg:col-span-8">
-                <button onClick={addNew} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white">
-                  <Save className="w-3.5 h-3.5" /> Salvar
-                </button>
-                <button onClick={() => setAdding(false)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100">Cancelar</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-          <table className="text-xs border-collapse min-w-max w-full">
-            <thead style={{ background: 'var(--surface-2)' }}>
+      <Panel flush>
+        <div className="overflow-x-auto">
+          <table className="tbl">
+            <thead>
               <tr>
-                {['Corretora', 'Barra', 'Nº', 'R$/lote', 'Modelo zeragem', 'R$/zeragem', '% Vol Bovespa', 'Faixas', 'Observação', ''].map((h, i) => (
-                  <th key={i} className="px-3 py-2 font-semibold text-gray-500 border-r text-left"
-                    style={{ borderColor: 'var(--border)' }}>{h}</th>
-                ))}
+                <th>Corretora</th>
+                <th>Barra</th>
+                <th>Nº</th>
+                <th className="num">R$/lote</th>
+                <th>Modelo de zeragem</th>
+                <th className="num">R$/zeragem</th>
+                <th className="num">% Bovespa</th>
+                <th>Faixas</th>
+                <th>Observação</th>
+                <th className="w-28" />
               </tr>
             </thead>
             <tbody>
               {visiveis.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-6 text-center text-gray-400">
-                  {rows.length === 0 ? 'Sem tarifas cadastradas. Clique em "Nova barra" pra adicionar.' : 'Sem tarifas nesta corretora.'}
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-fg-subtle">
+                  {rows.length === 0 ? 'Sem tarifas cadastradas. Clique em "Nova tarifa" pra adicionar.' : 'Sem tarifas nesta corretora.'}
                 </td></tr>
               )}
-              {visiveis.map((orig, idx) => {
+              {visiveis.map((orig) => {
                 const r = row(orig.id)
                 const dirty = !!editing[orig.id]
-                const bg = idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)'
                 return (
-                  <tr key={orig.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
-                    <td className="px-3 py-1.5">
+                  <tr key={orig.id}>
+                    <td>
                       <div className="flex items-center gap-2">
                         <CorretoraBadge corretora={r.corretora} />
-                        <select className="px-1.5 py-1 rounded text-xs" style={inputStyle}
-                          value={r.corretora}
+                        <select className="field-sm" value={r.corretora}
                           onChange={e => patch(orig.id, 'corretora', e.target.value as Corretora)}>
                           {CORRETORAS.map(c => <option key={c} value={c}>{CORRETORA_LABEL[c]}</option>)}
                         </select>
                       </div>
                     </td>
-                    <td className="px-3 py-1.5">
-                      <input className="w-48 px-2 py-1 rounded text-sm" style={inputStyle}
-                        value={r.barra_nome} onChange={e => patch(orig.id, 'barra_nome', e.target.value)} />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <input className="w-20 px-2 py-1 rounded text-sm tabular-nums" style={inputStyle}
-                        value={r.numero ?? ''} onChange={e => patch(orig.id, 'numero', e.target.value)} />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <input type="number" step="0.0001" className="w-24 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                        value={r.preco_lote_futuros}
+                    <td><input className="field-sm w-52" value={r.barra_nome} onChange={e => patch(orig.id, 'barra_nome', e.target.value)} /></td>
+                    <td><input className="field-sm w-20 tabular-nums" value={r.numero ?? ''} onChange={e => patch(orig.id, 'numero', e.target.value)} /></td>
+                    <td>
+                      <input type="number" step="0.0001" className="field-sm w-24 text-right tabular-nums" value={r.preco_lote_futuros}
                         onChange={e => patch(orig.id, 'preco_lote_futuros', Number(e.target.value))} />
                     </td>
-                    <td className="px-3 py-1.5">
-                      <select className="px-2 py-1 rounded text-sm" style={inputStyle}
-                        value={r.modelo_zeragem}
+                    <td>
+                      <select className="field-sm" value={r.modelo_zeragem}
                         onChange={e => patch(orig.id, 'modelo_zeragem', e.target.value as ModeloZeragem)}>
                         {MODELOS_ZERAGEM.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                       </select>
                     </td>
-                    <td className="px-3 py-1.5">
-                      <input type="number" step="0.0001" className="w-24 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                        disabled={r.modelo_zeragem !== 'fixo'}
-                        value={r.preco_zeragem}
+                    <td>
+                      <input type="number" step="0.0001" className="field-sm w-24 text-right tabular-nums"
+                        disabled={r.modelo_zeragem !== 'fixo'} value={r.preco_zeragem}
                         onChange={e => patch(orig.id, 'preco_zeragem', Number(e.target.value))} />
                     </td>
-                    <td className="px-3 py-1.5">
-                      <input type="number" step="0.001" className="w-20 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                        value={r.pct_volume_bovespa}
+                    <td>
+                      <input type="number" step="0.001" className="field-sm w-20 text-right tabular-nums" value={r.pct_volume_bovespa}
                         onChange={e => patch(orig.id, 'pct_volume_bovespa', Number(e.target.value))} />
                     </td>
-                    <td className="px-3 py-1.5">
-                      <button disabled={r.modelo_zeragem !== 'tiered'}
-                        onClick={() => setTierModalFor(r)}
-                        className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium disabled:opacity-30 disabled:cursor-not-allowed"
-                        style={{ background: 'rgba(59,130,246,0.1)', color: '#1d4ed8' }}>
-                        <Layers className="w-3 h-3" /> Editar faixas
-                      </button>
+                    <td>
+                      <Button size="xs" variant="secondary" disabled={r.modelo_zeragem !== 'tiered'} onClick={() => setTierModalFor(r)}>
+                        <Layers className="h-3 w-3" /> Faixas
+                      </Button>
                     </td>
-                    <td className="px-3 py-1.5">
-                      <input className="w-64 px-2 py-1 rounded text-sm" style={inputStyle}
-                        value={r.observacao ?? ''} onChange={e => patch(orig.id, 'observacao', e.target.value)} />
-                    </td>
-                    <td className="px-3 py-1.5">
+                    <td><input className="field-sm w-56" value={r.observacao ?? ''} onChange={e => patch(orig.id, 'observacao', e.target.value)} /></td>
+                    <td>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => save(orig.id)} disabled={!dirty || saving === orig.id}
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-white disabled:opacity-40"
-                          style={{ background: 'var(--blue)' }}>
-                          {saving === orig.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                          {saving === orig.id ? 'Salvando…' : 'Salvar'}
-                        </button>
-                        <button onClick={() => remove(orig.id)} disabled={deleting === orig.id}
-                          className="p-1.5 rounded text-red-500 hover:bg-red-50 disabled:opacity-40">
-                          {deleting === orig.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                        </button>
+                        <Button size="xs" onClick={() => save(orig.id)} disabled={!dirty} loading={saving === orig.id}>
+                          {saving !== orig.id && <Save className="h-3 w-3" />} Salvar
+                        </Button>
+                        <IconButton tone="danger" title="Remover tarifa" onClick={() => remove(orig.id)} disabled={deleting === orig.id}>
+                          {deleting === orig.id ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        </IconButton>
                       </div>
                     </td>
                   </tr>
@@ -306,16 +278,11 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
             </tbody>
           </table>
         </div>
-
-        <p className="text-[11px] text-gray-400 mt-3">
-          As tarifas alimentam o cálculo de receita do dashboard e são casadas por <strong>corretora + nome da barra</strong>:
-          a mesma barra pode ter tarifas diferentes na Genial, na XP e no BTG. Faixas escalonadas (modelo &quot;tiered&quot;)
-          são aplicadas por <strong>volume diário de zeragem por cliente</strong>. Bovespa ainda não vira
-          receita até integrarmos volume financeiro por cliente.
+        <p className="border-t border-line px-5 py-3 text-[11px] leading-relaxed text-fg-subtle">
+          Faixas escalonadas (modelo &quot;escalonado&quot;) são aplicadas por <strong>volume diário de zeragem por cliente</strong>.
+          Bovespa ainda não vira receita até integrarmos volume financeiro por cliente. Exemplo de tarifa por lote: {fmtBRL2(0.25)}/lote.
         </p>
-      </div>
-
-      <p className="text-[11px] text-gray-500">Exemplo de tarifa por lote: <strong>{fmtBRL(0.25)}</strong>/lote.</p>
+      </Panel>
 
       {tierModalFor && (
         <TiersModal
@@ -325,7 +292,7 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
           onClose={() => setTierModalFor(null)}
         />
       )}
-    </div>
+    </>
   )
 }
 
@@ -397,107 +364,63 @@ function TiersModal({ pricing, listTiers, saveTiers, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(15,23,42,0.7)' }}>
-      <div className="rounded-2xl w-full max-w-2xl p-6"
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <header className="flex items-start justify-between gap-3 mb-4">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Faixas de zeragem</p>
-            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              {pricing.barra_nome} <CorretoraBadge corretora={pricing.corretora} size="md" />
-            </h3>
-            <p className="text-xs text-gray-500 mt-0.5">A faixa é aplicada por volume zerado <strong>diário, por cliente</strong>.</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100">
-            <X className="w-4 h-4" />
-          </button>
-        </header>
+    <Modal open onClose={onClose} size="lg"
+      title={<span className="inline-flex items-center gap-2">Faixas de zeragem · {pricing.barra_nome} <CorretoraBadge corretora={pricing.corretora} size="md" /></span>}
+      subtitle="A faixa é aplicada por volume zerado diário, por cliente."
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button size="sm" onClick={persist} loading={saving} disabled={loading || !tiers}>
+            {!saving && <Save className="h-3.5 w-3.5" />} Salvar faixas
+          </Button>
+        </>
+      }>
+      {erro && <Alert tone="danger" className="mb-3">{erro}</Alert>}
 
-        {erro && (
-          <div className="mb-3 rounded-xl px-3 py-2 text-xs"
-            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
-            {erro}
-          </div>
-        )}
-
-        {loading || !tiers ? (
-          <p className="text-sm text-gray-400 py-8 text-center">Carregando faixas…</p>
-        ) : (
-          <>
-            <div className="overflow-x-auto rounded-xl border mb-3" style={{ borderColor: 'var(--border)' }}>
-              <table className="text-xs border-collapse w-full">
-                <thead style={{ background: 'var(--surface-2)' }}>
-                  <tr>
-                    {['Volume mín.', 'Volume máx. (vazio = ∞)', 'R$/zeragem', ''].map((h, i) => (
-                      <th key={i} className="px-3 py-2 font-semibold text-gray-500 border-r text-left"
-                        style={{ borderColor: 'var(--border)' }}>{h}</th>
-                    ))}
+      {loading || !tiers ? (
+        <p className="py-8 text-center text-sm text-fg-subtle">Carregando faixas…</p>
+      ) : (
+        <>
+          <div className="tbl-wrap mb-3">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Volume mín.</th>
+                  <th>Volume máx. (vazio = ∞)</th>
+                  <th>R$/zeragem</th>
+                  <th className="w-12" />
+                </tr>
+              </thead>
+              <tbody>
+                {tiers.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-fg-subtle">Sem faixas. Clique em &quot;Adicionar faixa&quot;.</td></tr>
+                )}
+                {tiers.map((t, i) => (
+                  <tr key={i}>
+                    <td>
+                      <input type="number" min={0} className="field-sm w-24 text-right tabular-nums"
+                        value={t.volume_min} onChange={e => update(i, 'volume_min', Number(e.target.value))} />
+                    </td>
+                    <td>
+                      <input type="number" min={0} className="field-sm w-24 text-right tabular-nums"
+                        value={t.volume_max ?? ''}
+                        onChange={e => update(i, 'volume_max', e.target.value === '' ? null : Number(e.target.value))} />
+                    </td>
+                    <td>
+                      <input type="number" step="0.01" className="field-sm w-24 text-right tabular-nums"
+                        value={t.preco_zeragem} onChange={e => update(i, 'preco_zeragem', Number(e.target.value))} />
+                    </td>
+                    <td>
+                      <IconButton tone="danger" title="Remover faixa" onClick={() => removeLine(i)}><Trash2 className="h-3.5 w-3.5" /></IconButton>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {tiers.length === 0 && (
-                    <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">Sem faixas. Clique em &quot;Adicionar faixa&quot;.</td></tr>
-                  )}
-                  {tiers.map((t, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
-                      <td className="px-3 py-1.5">
-                        <input type="number" min={0} className="w-24 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                          value={t.volume_min} onChange={e => update(i, 'volume_min', Number(e.target.value))} />
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <input type="number" min={0} className="w-24 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                          value={t.volume_max ?? ''}
-                          onChange={e => update(i, 'volume_max', e.target.value === '' ? null : Number(e.target.value))} />
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <input type="number" step="0.01" className="w-24 px-2 py-1 rounded text-sm tabular-nums text-right" style={inputStyle}
-                          value={t.preco_zeragem} onChange={e => update(i, 'preco_zeragem', Number(e.target.value))} />
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <button onClick={() => removeLine(i)} className="p-1.5 rounded text-red-500 hover:bg-red-50">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <button onClick={addLine}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ background: 'var(--surface-2)', color: 'var(--ink)', border: '1px solid var(--border)' }}>
-                <Plus className="w-3.5 h-3.5" /> Adicionar faixa
-              </button>
-              <div className="flex gap-2">
-                <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100">Cancelar</button>
-                <button onClick={persist} disabled={saving}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50">
-                  {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  {saving ? 'Salvando…' : 'Salvar faixas'}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const inputStyle: React.CSSProperties = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  color: 'var(--ink)',
-}
-
-function Field({ label, wide, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
-  return (
-    <div className={wide ? 'col-span-2 lg:col-span-2' : ''}>
-      <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-1">{label}</p>
-      {children}
-    </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Button size="sm" variant="secondary" onClick={addLine}><Plus className="h-3.5 w-3.5" /> Adicionar faixa</Button>
+        </>
+      )}
+    </Modal>
   )
 }

@@ -1,12 +1,10 @@
 export const dynamic = 'force-dynamic'
 
+import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getProfile } from '@/lib/auth/getProfile'
-import { Header } from '@/components/layout/Header'
-import { HeroBanner } from '@/components/layout/HeroBanner'
-import { Card } from '@/components/ui/Card'
-import { redirect } from 'next/navigation'
-import { Building2 } from 'lucide-react'
+import { PageBody, PageHeader } from '@/components/ui/PageHeader'
+import { CORRETORAS, CORRETORA_LABEL } from '@/lib/corretoras'
 import { BarrasClient } from './BarrasClient'
 
 export default async function BarrasPage() {
@@ -30,33 +28,26 @@ export default async function BarrasPage() {
     supabase.from('influenciadores').select('id, nome, codigo').order('nome'),
   ])
 
-  return (
-    <div>
-      <Header title="Barras das Corretoras" />
-      <HeroBanner>
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.15)' }}>
-            <Building2 className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300 mb-1">Configuração</p>
-            <h1 className="text-2xl font-bold text-white">Barras das Corretoras</h1>
-            <p className="text-sm text-blue-100/60 mt-0.5">
-              Cada barra pertence a uma corretora (Genial, XP ou BTG). Mapeie o nome como aparece no Excel para o assessor responsável.
-            </p>
-          </div>
-        </div>
-      </HeroBanner>
+  const lista = (barras ?? []).map(b => ({ ...b, corretora: String(b.corretora ?? 'GENIAL') }))
 
-      <div className="p-6 max-w-5xl">
-        <Card>
-          <BarrasClient
-            barras={(barras ?? []).map(b => ({ ...b, corretora: String(b.corretora ?? 'GENIAL') }))}
-            assessores={assessores ?? []}
-            influenciadores={influenciadores ?? []}
-          />
-        </Card>
-      </div>
-    </div>
+  return (
+    <>
+      <PageHeader
+        eyebrow="Cadastros"
+        title="Barras"
+        description="Cada barra pertence a uma corretora (Genial, XP ou BTG). O nome deve ser exatamente como aparece na planilha: é assim que os lotes são ligados ao assessor responsável."
+        stats={[
+          { label: 'Barras', value: lista.length },
+          ...CORRETORAS.map(c => ({ label: CORRETORA_LABEL[c], value: lista.filter(b => b.corretora === c).length })),
+        ]}
+      />
+      <PageBody>
+        <BarrasClient
+          barras={lista}
+          assessores={assessores ?? []}
+          influenciadores={influenciadores ?? []}
+        />
+      </PageBody>
+    </>
   )
 }

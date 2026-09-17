@@ -1,11 +1,9 @@
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/getProfile'
-import { Header } from '@/components/layout/Header'
-import { HeroBanner } from '@/components/layout/HeroBanner'
-import { redirect } from 'next/navigation'
 import { ContratosView } from './ContratosView'
 
 type ContratosResumo = { total_operados: number; total_zerados: number; num_contratos: number }
@@ -45,47 +43,13 @@ export default async function ContratosPage() {
   const res = (resumo as ContratosResumo | null) ?? { total_operados: 0, total_zerados: 0, num_contratos: 0 }
 
   return (
-    <div>
-      <Header title="Contratos" />
-
-      <HeroBanner>
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-2">
-              Administração
-            </p>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Contratos</h1>
-            <p className="text-blue-200/60 mt-1 text-sm">
-              Histórico e importação de contratos da plataforma
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div
-              className="rounded-xl px-4 py-3 text-center"
-              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
-            >
-              <p className="text-xs text-blue-200/70 uppercase tracking-wide mb-1">Registros</p>
-              <p className="text-2xl font-bold text-white">{Number(res.num_contratos ?? 0).toLocaleString('pt-BR')}</p>
-            </div>
-            <div
-              className="rounded-xl px-4 py-3 text-center"
-              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
-            >
-              <p className="text-xs text-blue-200/70 uppercase tracking-wide mb-1">Importações</p>
-              <p className="text-2xl font-bold text-white">{importacoes?.length ?? 0}</p>
-            </div>
-          </div>
-        </div>
-      </HeroBanner>
-
-      <ContratosView
-        resumo={res}
-        porMes={(porMes as PorMesRow[] | null) ?? []}
-        porAssessor={(porAssessor as PorNomeRow[] | null) ?? []}
-        porCliente={(porCliente as PorNomeRow[] | null) ?? []}
-        contratos={contratos ?? []}
-        importacoes={importacoes ?? []}
-      />
-    </div>
+    <ContratosView
+      resumo={res}
+      porMes={(porMes as PorMesRow[] | null) ?? []}
+      porAssessor={(porAssessor as PorNomeRow[] | null) ?? []}
+      porCliente={(porCliente as PorNomeRow[] | null) ?? []}
+      contratos={contratos ?? []}
+      importacoes={importacoes ?? []}
+    />
   )
 }

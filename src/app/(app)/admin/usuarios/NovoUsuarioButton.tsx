@@ -2,9 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Plus, X } from 'lucide-react'
+import { Input, Select } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
+import { Alert } from '@/components/ui/Alert'
 
 export function NovoUsuarioButton() {
   const router = useRouter()
@@ -46,53 +48,28 @@ export function NovoUsuarioButton() {
   return (
     <>
       <Button onClick={() => setOpen(true)}>
-        <Plus className="w-4 h-4" />
-        Novo Usuário
+        <Plus className="h-4 w-4" /> Novo usuário
       </Button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative bg-white border border-gray-200 rounded-2xl p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-gray-900">Novo Usuário</h2>
-              <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-900">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <Input label="Nome completo" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required />
-              <Input label="E-mail" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-              <Input label="Senha" type="password" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} required minLength={6} />
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-400">Função</label>
-                <select
-                  value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value })}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="vendedor">Vendedor</option>
-                  <option value="influenciador">Influenciador</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-
-              {error && (
-                <div className="bg-red-900/30 border border-red-700/50 rounded-lg px-3 py-2">
-                  <p className="text-sm text-red-400">{error}</p>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-2">
-                <Button type="button" variant="secondary" className="flex-1" onClick={() => setOpen(false)}>Cancelar</Button>
-                <Button type="submit" className="flex-1" loading={loading}>Criar</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <Modal open={open} onClose={() => setOpen(false)} title="Novo usuário" subtitle="O usuário recebe acesso imediato com a senha definida aqui."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button type="submit" form="form-novo-usuario" loading={loading}>Criar usuário</Button>
+          </>
+        }>
+        <form id="form-novo-usuario" onSubmit={handleSubmit} className="space-y-4">
+          <Input id="novo-nome" label="Nome completo" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} required autoFocus />
+          <Input id="novo-email" label="E-mail" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          <Input id="novo-senha" label="Senha" type="password" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} required minLength={6} hint="Mínimo de 6 caracteres." />
+          <Select id="novo-role" label="Função" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+            <option value="vendedor">Assessor</option>
+            <option value="influenciador">Influenciador</option>
+            <option value="admin">Administrador</option>
+          </Select>
+          {error && <Alert tone="danger">{error}</Alert>}
+        </form>
+      </Modal>
     </>
   )
 }

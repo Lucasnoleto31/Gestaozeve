@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Button } from '@/components/ui/Button'
-import { X, Upload, CheckCircle, AlertCircle, AlertTriangle, FileSpreadsheet, Loader2 } from 'lucide-react'
+import { Upload, CheckCircle2, FileSpreadsheet, Loader2 } from 'lucide-react'
 import { importarContratos, checarImportacao, type ContratoRow, type ChecagemImportacao } from './actions'
 import { CORRETORAS, CORRETORA_COLOR, CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
+import { fmtNum } from '@/lib/format'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { Alert } from '@/components/ui/Alert'
 
 interface Props {
   open: boolean
@@ -117,19 +120,17 @@ function sugerirCorretora(nome: string): Corretora | null {
   return null
 }
 
-const fmtNum = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
-
 function CorretoraPicker({ value, onChange, disabled }: { value: Corretora; onChange: (c: Corretora) => void; disabled?: boolean }) {
   return (
-    <div className="flex gap-2">
+    <div className="grid grid-cols-3 gap-2">
       {CORRETORAS.map((c) => {
         const active = c === value
         return (
           <button key={c} type="button" disabled={disabled} onClick={() => onChange(c)}
-            className="flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50"
-            style={active
-              ? { background: CORRETORA_COLOR[c], borderColor: CORRETORA_COLOR[c], color: '#fff' }
-              : { background: '#fff', borderColor: '#e5e7eb', color: '#374151' }}>
+            className="chip h-9 justify-center text-sm font-semibold"
+            data-active={active}
+            style={active ? { background: CORRETORA_COLOR[c], borderColor: CORRETORA_COLOR[c], color: '#fff' } : undefined}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: active ? '#fff' : CORRETORA_COLOR[c] }} />
             {CORRETORA_LABEL[c]}
           </button>
         )
@@ -245,88 +246,70 @@ export function ImportarContratosModal({ open, onClose }: Props) {
     onClose()
   }
 
-  if (!open) return null
-
   const totalOperados = preview?.reduce((s, r) => s + (r.lotes_operados || 0), 0) ?? 0
   const totalZerados = preview?.reduce((s, r) => s + (r.lotes_zerados || 0), 0) ?? 0
   const semData = preview?.filter(r => !r.data).length ?? 0
   const temAvisos = !!checagem && (checagem.desconhecidas.length > 0 || checagem.parecemPlataforma.length > 0 || checagem.semBarra.linhas > 0)
 
+  const footer = resultado
+    ? <Button onClick={handleClose}>Fechar</Button>
+    : preview
+      ? (
+        <>
+          <Button variant="secondary" onClick={() => setPreview(null)} disabled={loading}>Voltar</Button>
+          <Button loading={loading} onClick={handleImportar}>Importar na {CORRETORA_LABEL[corretora]}</Button>
+        </>
+      )
+      : <Button variant="secondary" onClick={handleClose}>Cancelar</Button>
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-white border border-gray-200 rounded-2xl p-6 w-full max-w-xl max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-gray-900">Importar Contratos</h2>
-          <button onClick={handleClose} className="text-gray-500 hover:text-gray-900">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {resultado ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
-              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-              <p className="text-sm text-emerald-800">
-                {resultado.ok} linha(s) importada(s) com sucesso para a {CORRETORA_LABEL[corretora]}.
-              </p>
+    <Modal open={open} onClose={handleClose} size="lg" title="Importar planilha de lotes"
+      subtitle={preview ? 'Passo 2 de 2 · confira e confirme' : 'Passo 1 de 2 · corretora e arquivo'} footer={footer}>
+      {resultado ? (
+        <Alert tone="success" title={`${resultado.ok} linha(s) importada(s) na ${CORRETORA_LABEL[corretora]}.`}>
+          Os painéis já refletem os novos lotes.
+        </Alert>
+      ) : preview ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-line bg-surface-2 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <FileSpreadsheet className="h-4 w-4 shrink-0 text-accent" />
+              <p className="truncate text-sm font-medium text-fg">{nomeArquivo}</p>
             </div>
-            <Button className="w-full" onClick={handleClose}>Fechar</Button>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
+              <span>{preview.length} linhas{semData > 0 ? ` · ${semData} sem data` : ''}</span>
+              <span>Operados <strong className="font-semibold text-accent">{fmtNum(totalOperados)}</strong></span>
+              <span>Zerados <strong className="font-semibold text-danger">{fmtNum(totalZerados)}</strong></span>
+            </div>
           </div>
-        ) : preview ? (
-          <div className="space-y-4">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <FileSpreadsheet className="w-4 h-4 text-blue-500" />
-                <p className="text-sm font-medium text-gray-900 truncate">{nomeArquivo}</p>
-              </div>
-              <p className="text-sm text-gray-500">{preview.length} linhas detectadas{semData > 0 ? ` · ${semData} sem data` : ''}</p>
-              <div className="flex gap-4 mt-1">
-                <p className="text-sm text-gray-500">
-                  Lotes operados:{' '}
-                  <span className="text-blue-600 font-medium">{fmtNum(totalOperados)}</span>
-                </p>
-                <p className="text-sm text-gray-500">
-                  Lotes zerados:{' '}
-                  <span className="text-red-500 font-medium">{fmtNum(totalZerados)}</span>
-                </p>
-              </div>
-            </div>
 
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Corretora deste arquivo</p>
-              <CorretoraPicker value={corretora} onChange={setCorretora} disabled={loading} />
-              <p className="text-[11px] text-gray-400 mt-1">Todas as linhas entram como {CORRETORA_LABEL[corretora]}. Um arquivo por corretora.</p>
-            </div>
+          <div>
+            <p className="label mb-1.5">Corretora deste arquivo</p>
+            <CorretoraPicker value={corretora} onChange={setCorretora} disabled={loading} />
+            <p className="mt-1 text-[11px] text-fg-subtle">Todas as linhas entram como {CORRETORA_LABEL[corretora]}. Um arquivo por corretora.</p>
+          </div>
 
-            {/* Checagem de barras */}
-            {checando ? (
-              <p className="text-xs text-gray-400 inline-flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Conferindo barras…</p>
-            ) : checagem && (
-              temAvisos ? (
-                <div className="rounded-xl px-4 py-3 space-y-2 text-xs"
-                  style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)' }}>
-                  <p className="font-semibold text-amber-800 inline-flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Confira antes de importar
-                  </p>
+          {/* Checagem de barras */}
+          {checando ? (
+            <p className="inline-flex items-center gap-2 text-xs text-fg-subtle"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Conferindo barras…</p>
+          ) : checagem && (
+            temAvisos ? (
+              <Alert tone="warning" title="Confira antes de importar">
+                <div className="space-y-1.5 text-xs">
                   {checagem.semBarra.linhas > 0 && (
-                    <p className="text-amber-900">
-                      <strong>{checagem.semBarra.linhas} linha(s)</strong> sem assessor ({fmtNum(checagem.semBarra.lotes)} lotes) vão entrar como <em>Sem barra</em>.
-                    </p>
+                    <p><strong>{checagem.semBarra.linhas} linha(s)</strong> sem assessor ({fmtNum(checagem.semBarra.lotes)} lotes) vão entrar como <em>Sem barra</em>.</p>
                   )}
                   {checagem.parecemPlataforma.length > 0 && (
-                    <p className="text-amber-900">
-                      Nome de plataforma na coluna de assessor: <strong>{checagem.parecemPlataforma.join(', ')}</strong>. Essas linhas entram como <em>Sem barra</em>.
-                    </p>
+                    <p>Nome de plataforma na coluna de assessor: <strong>{checagem.parecemPlataforma.join(', ')}</strong>. Essas linhas entram como <em>Sem barra</em>.</p>
                   )}
                   {checagem.desconhecidas.length > 0 && (
-                    <div className="text-amber-900">
+                    <div>
                       <p>Barras que não existem no cadastro da {CORRETORA_LABEL[corretora]} (entram assim mesmo, sem tarifa e sem assessor):</p>
                       <ul className="mt-1 space-y-0.5">
                         {checagem.desconhecidas.slice(0, 8).map(b => (
                           <li key={b.nome} className="flex justify-between gap-3">
-                            <span className="font-medium truncate">{b.nome}</span>
-                            <span className="tabular-nums text-amber-700 shrink-0">{b.linhas} linhas · {fmtNum(b.lotes)} lotes</span>
+                            <span className="truncate font-medium">{b.nome}</span>
+                            <span className="shrink-0 tabular-nums">{b.linhas} linhas · {fmtNum(b.lotes)} lotes</span>
                           </li>
                         ))}
                         {checagem.desconhecidas.length > 8 && <li>+{checagem.desconhecidas.length - 8} outras</li>}
@@ -334,100 +317,75 @@ export function ImportarContratosModal({ open, onClose }: Props) {
                     </div>
                   )}
                 </div>
-              ) : (
-                <p className="text-xs text-emerald-700 inline-flex items-center gap-1.5">
-                  <CheckCircle className="w-3.5 h-3.5" /> Todas as barras do arquivo existem no cadastro da {CORRETORA_LABEL[corretora]}.
-                </p>
-              )
-            )}
+              </Alert>
+            ) : (
+              <p className="inline-flex items-center gap-1.5 text-xs text-success">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Todas as barras do arquivo existem no cadastro da {CORRETORA_LABEL[corretora]}.
+              </p>
+            )
+          )}
 
-            <div className="overflow-x-auto rounded-xl border border-gray-200 max-h-48">
-              <table className="text-xs w-full">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-gray-500 font-medium">Data</th>
-                    <th className="px-3 py-2 text-left text-gray-500 font-medium">Cliente</th>
-                    <th className="px-3 py-2 text-left text-gray-500 font-medium">Assessor</th>
-                    <th className="px-3 py-2 text-right text-gray-500 font-medium">Operados</th>
-                    <th className="px-3 py-2 text-right text-gray-500 font-medium">Zerados</th>
+          <div className="tbl-wrap max-h-52">
+            <table className="tbl tbl-dense">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Cliente</th>
+                  <th>Assessor</th>
+                  <th className="num">Operados</th>
+                  <th className="num">Zerados</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.slice(0, 6).map((row, i) => (
+                  <tr key={i}>
+                    <td className="muted whitespace-nowrap">{row.data || <span className="text-danger">sem data</span>}</td>
+                    <td className="max-w-[160px] truncate">{row.cliente_nome}</td>
+                    <td className="muted max-w-[160px] truncate">{row.assessor_nome || <span className="subtle italic">sem barra</span>}</td>
+                    <td className="num text-accent">{row.lotes_operados}</td>
+                    <td className="num text-danger">{row.lotes_zerados}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {preview.slice(0, 6).map((row, i) => (
-                    <tr key={i} className="border-t border-gray-200">
-                      <td className="px-3 py-2 text-gray-500">{row.data || <span className="text-red-500">sem data</span>}</td>
-                      <td className="px-3 py-2 text-gray-500 truncate max-w-[130px]">{row.cliente_nome}</td>
-                      <td className="px-3 py-2 text-gray-500">{row.assessor_nome || <span className="text-gray-300 italic">sem barra</span>}</td>
-                      <td className="px-3 py-2 text-blue-600 text-right">{row.lotes_operados}</td>
-                      <td className="px-3 py-2 text-red-500 text-right">{row.lotes_zerados}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {preview.length > 6 && (
-                <p className="text-xs text-gray-400 text-center py-2">+{preview.length - 6} linhas...</p>
-              )}
-            </div>
-
-            {erro && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-600">{erro}</p>
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setPreview(null)}>Voltar</Button>
-              <Button className="flex-1" loading={loading} onClick={handleImportar}>
-                Importar na {CORRETORA_LABEL[corretora]}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Corretora do arquivo</p>
-              <CorretoraPicker value={corretora} onChange={setCorretora} disabled={loading} />
-            </div>
-
-            <p className="text-sm text-gray-500">
-              Suba o arquivo Excel com os contratos do período de <strong>uma</strong> corretora. Antes de gravar, o sistema
-              confere se as barras existem no cadastro, corrige acentos quebrados e avisa sobre linhas sem assessor.
-            </p>
-
-            <div
-              onClick={() => inputRef.current?.click()}
-              className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-blue-600 transition-colors"
-            >
-              <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">Clique para selecionar o arquivo</p>
-              <p className="text-xs text-gray-400 mt-1">Formato: .xlsx</p>
-            </div>
-
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={handleFile}
-            />
-
-            {loading && (
-              <div className="text-center py-2">
-                <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-1" />
-                <p className="text-xs text-gray-500">Lendo arquivo...</p>
-              </div>
-            )}
-
-            {erro && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-600">{erro}</p>
-              </div>
+                ))}
+              </tbody>
+            </table>
+            {preview.length > 6 && (
+              <p className="py-2 text-center text-xs text-fg-subtle">+{preview.length - 6} linhas…</p>
             )}
           </div>
-        )}
-      </div>
-    </div>
+
+          {erro && <Alert tone="danger">{erro}</Alert>}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <p className="label mb-1.5">Corretora do arquivo</p>
+            <CorretoraPicker value={corretora} onChange={setCorretora} disabled={loading} />
+          </div>
+
+          <p className="text-sm text-fg-muted">
+            Suba o Excel com os lotes de <strong className="font-semibold text-fg">uma</strong> corretora. Antes de gravar, o sistema
+            confere se as barras existem no cadastro, corrige acentos quebrados e avisa sobre linhas sem assessor.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex w-full flex-col items-center justify-center rounded-[10px] border-2 border-dashed border-line-strong bg-surface-2 px-6 py-9 text-center hover:border-accent hover:bg-accent-soft"
+          >
+            <Upload className="mb-2 h-7 w-7 text-fg-subtle" />
+            <span className="text-sm font-medium text-fg">Clique para selecionar o arquivo</span>
+            <span className="mt-1 text-xs text-fg-subtle">Formato: .xlsx</span>
+          </button>
+
+          <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} />
+
+          {loading && (
+            <p className="inline-flex items-center gap-2 text-xs text-fg-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Lendo arquivo…</p>
+          )}
+
+          {erro && <Alert tone="danger">{erro}</Alert>}
+        </div>
+      )}
+    </Modal>
   )
 }

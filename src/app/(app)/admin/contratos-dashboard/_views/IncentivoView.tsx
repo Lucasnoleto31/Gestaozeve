@@ -1,16 +1,21 @@
 'use client'
 
 import { useEffect, useMemo } from 'react'
-import { Gift, TrendingUp, Users, Target, Layers } from 'lucide-react'
+import { Gift, Target, TrendingUp, Users } from 'lucide-react'
 import {
   Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { useShell } from '../_lib/Shell'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { Block } from '../_lib/Blocks'
-import { KpiCard, KpiRow } from '../_lib/Kpi'
-import { fmtNum, fmtBRL } from '../_lib/utils'
+import { ChartTooltip } from '../Charts'
+import { fmtNum, fmtBRL, labelMesAno } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { useChartColors } from '@/lib/theme'
+import { Panel } from '@/components/ui/Panel'
+import { KpiCard, KpiRow } from '@/components/ui/Kpi'
+import { Alert } from '@/components/ui/Alert'
+import { Empty } from '@/components/ui/Skeleton'
 import type { IncentivoMensalRow } from '../actions'
 
 // Faixas do programa de incentivo (pontos → R$ por cliente que atingiu a faixa)
@@ -33,13 +38,6 @@ const PONTUACAO: { produto: string; mult: number }[] = [
   { produto: 'SOL', mult: 3 }, { produto: 'WDO', mult: 2 }, { produto: 'WIN', mult: 1 },
   { produto: 'WSP', mult: 1 },
 ]
-
-const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-
-function labelMesAno(iso: string): string {
-  const m = parseInt(iso.slice(5, 7), 10)
-  return `${MESES_ABREV[m - 1] ?? iso.slice(5, 7)}/${iso.slice(0, 4)}`
-}
 
 // Pivota as linhas (mes, faixa) em matrizes por faixa × mês
 function pivotIncentivo(rows: IncentivoMensalRow[]) {
@@ -64,6 +62,7 @@ export function IncentivoView() {
   const d = useDashboardData(periodo, barra, excluir, corretora, {
     kpis: true, incentivo: true, incentivoClientes: true,
   })
+  const cores = useChartColors()
 
   const shell = useShell()
   useEffect(() => { shell.setIsLoading(d.isPending) }, [d.isPending, shell])
@@ -87,16 +86,13 @@ export function IncentivoView() {
     Incentivo: totalMes.get(m) ?? 0,
   }))
 
-  return (
-    <div className="space-y-5">
-      {d.erro && (
-        <div className="rounded-xl px-4 py-3 text-sm"
-          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
-          {d.erro}
-        </div>
-      )}
+  const vazio = (msg = 'Sem dados.') => <Empty loading={d.isPending}>{msg}</Empty>
 
-      <p className="text-xs text-gray-500">
+  return (
+    <>
+      {d.erro && <Alert tone="danger">{d.erro}</Alert>}
+
+      <p className="max-w-4xl text-xs text-fg-muted">
         Pontos do cliente no mês = lotes girados × multiplicador do produto. O incentivo é pago por cliente
         conforme a maior faixa de pontos atingida no mês. Esta aba usa o histórico completo (não segue os filtros de período e corretora) e considera só os lotes da GENIAL, que é a corretora do programa.
         As contas do FABRICIO DA SILVA GONCALVES são somadas e pontuam como um cliente único.
@@ -104,90 +100,79 @@ export function IncentivoView() {
 
       {/* KPIs */}
       <KpiRow>
-        <KpiCard icon={Gift} label={ultimoMes ? `Incentivo ${labelMesAno(ultimoMes)}` : 'Incentivo do mês'}
-          value={ultimoMes ? fmtBRL(totalMes.get(ultimoMes) ?? 0) : '—'}
-          sub="mês em andamento (parcial)" accent="#10b981" />
-        <KpiCard icon={TrendingUp} label={mesAnterior ? `Incentivo ${labelMesAno(mesAnterior)}` : 'Mês anterior'}
-          value={mesAnterior ? fmtBRL(totalMes.get(mesAnterior) ?? 0) : '—'}
-          sub="mês fechado" accent="#1764f4" />
-        <KpiCard icon={Target} label={`Acumulado ${anoAtual ?? 'ano'}`}
-          value={anoAtual ? fmtBRL(acumuladoAno) : '—'}
-          sub={`histórico completo: ${fmtBRL(acumuladoTotal)}`} accent="#a855f7" />
-        <KpiCard icon={Users} label="Clientes pontuando"
+        <KpiCard icon={Gift} tone="success" label={ultimoMes ? `Incentivo ${labelMesAno(ultimoMes)}` : 'Incentivo do mês'}
+          value={ultimoMes ? fmtBRL(totalMes.get(ultimoMes) ?? 0) : '—'} sub="mês em andamento (parcial)" />
+        <KpiCard icon={TrendingUp} tone="accent" label={mesAnterior ? `Incentivo ${labelMesAno(mesAnterior)}` : 'Mês anterior'}
+          value={mesAnterior ? fmtBRL(totalMes.get(mesAnterior) ?? 0) : '—'} sub="mês fechado" />
+        <KpiCard icon={Target} tone="violet" label={`Acumulado ${anoAtual ?? 'ano'}`}
+          value={anoAtual ? fmtBRL(acumuladoAno) : '—'} sub={`histórico completo: ${fmtBRL(acumuladoTotal)}`} />
+        <KpiCard icon={Users} tone="info" label="Clientes pontuando"
           value={ultimoMes
             ? fmtNum((totalClientesMes.get(ultimoMes) ?? 0) - (piv.clientes.get(0)?.get(ultimoMes) ?? 0))
             : '—'}
-          sub={ultimoMes ? `de ${fmtNum(totalClientesMes.get(ultimoMes) ?? 0)} ativos no mês` : undefined}
-          accent="#0891b2" />
+          sub={ultimoMes ? `de ${fmtNum(totalClientesMes.get(ultimoMes) ?? 0)} ativos no mês` : undefined} />
       </KpiRow>
 
       {/* Gráfico do incentivo mês a mês */}
-      <Block title="Incentivo direto por mês" subtitle="Soma do incentivo de todas as faixas. * = mês em andamento.">
+      <Panel title="Incentivo direto por mês" subtitle="Soma do incentivo de todas as faixas. * = mês em andamento.">
         {chartData.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
+          ? vazio()
           : (
             <ResponsiveContainer width="100%" height={260}>
               <ComposedChart data={chartData} margin={{ top: 10, right: 16, bottom: 0, left: 8 }}>
-                <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
-                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(v: number) => fmtNum(v)} />
-                <Tooltip formatter={(v) => fmtBRL(Number(v))}
-                  contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(148,163,184,0.2)',
-                                  borderRadius: 12, color: '#e2e8f0', fontSize: 12 }} />
-                <Bar dataKey="Incentivo" fill="#10b981" radius={[4, 4, 0, 0]} animationDuration={400} />
+                <CartesianGrid stroke={cores.grid} strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: cores.axis }} axisLine={{ stroke: cores.grid }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: cores.axis }} tickFormatter={(v: number) => fmtNum(v)} axisLine={false} tickLine={false} width={56} />
+                <Tooltip content={<ChartTooltip formatter={(v) => fmtBRL(v)} />} cursor={{ fill: cores.grid }} />
+                <Bar dataKey="Incentivo" fill={cores.incentivo} radius={[3, 3, 0, 0]} animationDuration={400} />
               </ComposedChart>
             </ResponsiveContainer>
           )}
-      </Block>
+      </Panel>
 
       {/* Matriz: incentivo R$ por faixa × mês */}
-      <Block title="Incentivo por faixa de pontos (R$)"
+      <Panel flush title="Incentivo por faixa de pontos (R$)"
         subtitle="Valor da faixa × nº de clientes que atingiram a faixa no mês. Última coluna = mês em andamento.">
-        {meses.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
-          : <MatrizIncentivo piv={piv} modo="valor" />}
-      </Block>
+        {meses.length === 0 ? <div className="p-5">{vazio()}</div> : <MatrizIncentivo piv={piv} modo="valor" />}
+      </Panel>
 
       {/* Matriz: clientes por faixa × mês */}
-      <Block title="Clientes por faixa de pontuação"
+      <Panel flush title="Clientes por faixa de pontuação"
         subtitle="Cada cliente conta na maior faixa que atingiu no mês. “Resto” = ativos com até 1.000 pontos.">
-        {meses.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
-          : <MatrizIncentivo piv={piv} modo="clientes" />}
-      </Block>
+        {meses.length === 0 ? <div className="p-5">{vazio()}</div> : <MatrizIncentivo piv={piv} modo="clientes" />}
+      </Panel>
 
       {/* Clientes do mês em andamento */}
-      <Block title={ultimoMes ? `Pontuação dos clientes — ${labelMesAno(ultimoMes)}` : 'Pontuação dos clientes'}
+      <Panel flush title={ultimoMes ? `Pontuação dos clientes — ${labelMesAno(ultimoMes)}` : 'Pontuação dos clientes'}
         subtitle="Quem está pontuando agora e quanto falta pra próxima faixa — bom pra saber quem vale a pena estimular a girar mais.">
         {d.incentivoCli.length === 0
-          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
+          ? <div className="p-5">{vazio()}</div>
           : (
-            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-              <table className="text-xs border-collapse min-w-max w-full">
-                <thead style={{ background: 'var(--surface-2)' }}>
+            <div className="overflow-x-auto">
+              <table className="tbl">
+                <thead>
                   <tr>
-                    {['#', 'Conta', 'Cliente', 'Lotes', 'Pontos', 'Faixa atual', 'Incentivo', 'Próxima faixa'].map((h, i) => (
-                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 2 ? 'text-left' : 'text-right'}`}>{h}</th>
-                    ))}
+                    <th className="w-10">#</th>
+                    <th>Conta</th>
+                    <th>Cliente</th>
+                    <th className="num">Lotes</th>
+                    <th className="num">Pontos</th>
+                    <th className="num">Faixa atual</th>
+                    <th className="num">Incentivo</th>
+                    <th className="num">Próxima faixa</th>
                   </tr>
                 </thead>
                 <tbody>
                   {d.incentivoCli.slice(0, 50).map((c, i) => (
-                    <tr key={c.conta}
-                      style={{ borderTop: '1px solid var(--border)',
-                               background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
-                      <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{i + 1}</td>
-                      <td className="px-3 py-1.5 text-gray-500 tabular-nums">{c.conta}</td>
-                      <td className="px-3 py-1.5 font-medium text-gray-700">{c.cliente_nome}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(c.lotes_operados)}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{fmtNum(c.pontos)}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">
-                        {c.faixa_min > 0 ? `> ${fmtNum(c.faixa_min)}` : 'Resto'}
-                      </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-emerald-700">
-                        {c.valor_incentivo > 0 ? fmtBRL(c.valor_incentivo) : '—'}
-                      </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">
+                    <tr key={c.conta}>
+                      <td className="subtle font-semibold tabular-nums">{i + 1}</td>
+                      <td className="muted tabular-nums">{c.conta}</td>
+                      <td className="font-medium">{c.cliente_nome}</td>
+                      <td className="num muted">{fmtNum(c.lotes_operados)}</td>
+                      <td className="num font-semibold">{fmtNum(c.pontos)}</td>
+                      <td className="num muted">{c.faixa_min > 0 ? `> ${fmtNum(c.faixa_min)}` : 'Resto'}</td>
+                      <td className="num font-semibold text-success">{c.valor_incentivo > 0 ? fmtBRL(c.valor_incentivo) : '—'}</td>
+                      <td className="num muted">
                         {c.proxima_faixa != null && c.pontos_faltantes != null
                           ? `faltam ${fmtNum(c.pontos_faltantes)} p/ > ${fmtNum(c.proxima_faixa)}`
                           : 'faixa máxima'}
@@ -198,26 +183,19 @@ export function IncentivoView() {
               </table>
             </div>
           )}
-      </Block>
+      </Panel>
 
       {/* Tabela de pontuação por produto */}
-      <Block title="Tabela de pontuação" subtitle="Multiplicador aplicado a cada lote girado do produto.">
+      <Panel title="Tabela de pontuação" subtitle="Multiplicador aplicado a cada lote girado do produto.">
         <div className="flex flex-wrap gap-2">
           {PONTUACAO.map(p => (
-            <span key={p.produto} className="px-3 py-1.5 rounded-lg text-xs font-semibold tabular-nums"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--ink)' }}>
-              {p.produto} <span className="text-gray-400">·</span> {p.mult}×
+            <span key={p.produto} className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs font-semibold tabular-nums text-fg">
+              {p.produto} <span className="text-fg-subtle">·</span> {p.mult}×
             </span>
           ))}
         </div>
-      </Block>
-
-      {d.isPending && (
-        <div className="text-xs text-gray-400 flex items-center gap-2 justify-end">
-          <Layers className="w-3 h-3 animate-pulse" /> atualizando…
-        </div>
-      )}
-    </div>
+      </Panel>
+    </>
   )
 }
 
@@ -238,52 +216,33 @@ function MatrizIncentivo({ piv, modo }: {
     : FAIXAS
 
   return (
-    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
-      <table className="text-xs border-collapse min-w-max w-full">
-        <thead style={{ background: 'var(--surface-2)' }}>
+    <div className="overflow-x-auto">
+      <table className="tbl">
+        <thead>
           <tr>
-            <th className="px-3 py-2 font-semibold text-gray-500 text-left sticky left-0 z-10"
-              style={{ background: 'var(--surface-2)' }}>Faixa</th>
-            {modo === 'valor' && <th className="px-3 py-2 font-semibold text-gray-500 text-right">Valor (R$)</th>}
-            {meses.map(m => (
-              <th key={m} className="px-3 py-2 font-semibold text-gray-500 text-right whitespace-nowrap">
-                {labelMesAno(m)}
-              </th>
-            ))}
+            <th className="sticky-col">Faixa</th>
+            {modo === 'valor' && <th className="num">Valor (R$)</th>}
+            {meses.map(m => <th key={m} className="num">{labelMesAno(m)}</th>)}
           </tr>
         </thead>
         <tbody>
-          {linhas.map((f, i) => (
-            <tr key={f.min}
-              style={{ borderTop: '1px solid var(--border)',
-                       background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
-              <td className="px-3 py-1.5 font-medium text-gray-700 whitespace-nowrap sticky left-0 z-10"
-                style={{ background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
-                {f.label}
-              </td>
-              {modo === 'valor' && (
-                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtBRL(f.valor)}</td>
-              )}
+          {linhas.map(f => (
+            <tr key={f.min}>
+              <td className="sticky-col whitespace-nowrap font-medium">{f.label}</td>
+              {modo === 'valor' && <td className="num muted">{fmtBRL(f.valor)}</td>}
               {meses.map(m => {
                 const v = fonte.get(f.min)?.get(m) ?? 0
                 return (
-                  <td key={m} className={`px-3 py-1.5 text-right tabular-nums ${v > 0 ? 'font-medium text-gray-700' : 'text-gray-300'}`}>
-                    {fmt(v)}
-                  </td>
+                  <td key={m} className={cn('num', v > 0 ? 'font-medium' : 'subtle')}>{fmt(v)}</td>
                 )
               })}
             </tr>
           ))}
-          {/* Linha de total */}
-          <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
-            <td className="px-3 py-2 font-bold text-gray-800 sticky left-0 z-10"
-              style={{ background: 'var(--surface-2)' }}>
-              {modo === 'valor' ? 'Incentivo direto' : 'Total de clientes'}
-            </td>
+          <tr className="total">
+            <td className="sticky-col">{modo === 'valor' ? 'Incentivo direto' : 'Total de clientes'}</td>
             {modo === 'valor' && <td />}
             {meses.map(m => (
-              <td key={m} className="px-3 py-2 text-right tabular-nums font-bold"
-                style={{ color: modo === 'valor' ? '#059669' : 'var(--ink)' }}>
+              <td key={m} className={cn('num', modo === 'valor' && 'text-success')}>
                 {modo === 'valor' ? fmtBRL(totalMes.get(m) ?? 0) : fmtNum(totalClientesMes.get(m) ?? 0)}
               </td>
             ))}

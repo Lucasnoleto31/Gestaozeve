@@ -15,7 +15,9 @@ import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
 import { MetaProgress, ProgressBar } from '@/components/ui/Progress'
 import { buttonClasses } from '@/components/ui/buttonStyles'
 import { EvolucaoMensalChart } from '@/app/(app)/admin/contratos-dashboard/Charts'
-import { getResumoContratos, type ResumoContratos } from '@/app/(app)/admin/contratos-dashboard/actions'
+import { getAvisos, getResumoContratos, type Aviso, type ResumoContratos } from '@/app/(app)/admin/contratos-dashboard/actions'
+import { AssessorHome } from './AssessorHome'
+import { AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import { fmtNum, fmtBRL, fmtBRL2, fmtDataPt, fmtDataHoraPt, labelMesLongo } from '@/lib/format'
 import { CORRETORA_COLOR, isCorretora } from '@/lib/corretoras'
 import { cn } from '@/lib/utils'
@@ -48,19 +50,25 @@ export default async function DashboardPage() {
   const firstName = profile.nome.split(' ')[0]
   const saudacao = getSaudacao()
 
-  // Os painéis de lotes são só do admin (as RPCs do dashboard exigem esse perfil).
+  // Assessor: só as barras ligadas ao usuário. Outros perfis: aviso.
+  if (profile.role === 'vendedor') {
+    return <AssessorHome saudacao={saudacao} nome={firstName} />
+  }
   if (profile.role !== 'admin') {
     return (
       <>
         <PageHeader eyebrow="Visão geral" title={`${saudacao}, ${firstName}`} description="Bem-vindo ao ZeveAI." />
         <PageBody>
-          <Alert tone="info">Os painéis de lotes são exclusivos do administrador. Fale com ele se precisar de acesso.</Alert>
+          <Alert tone="info">Os painéis de lotes são exclusivos do administrador e dos assessores. Fale com o administrador se precisar de acesso.</Alert>
         </PageBody>
       </>
     )
   }
 
-  const r = await getResumoContratos()
+  const [r, avisos] = await Promise.all([
+    getResumoContratos(),
+    getAvisos().catch(() => [] as Aviso[]),
+  ])
   const k = r.kpis
   const pctZeragem = k && k.volume_operados > 0 ? (k.volume_zerados / k.volume_operados) * 100 : null
 
@@ -92,6 +100,8 @@ export default async function DashboardPage() {
         {r.erros.length > 0 && (
           <Alert tone="warning">Parte dos dados não carregou: {r.erros[0]}</Alert>
         )}
+
+        {avisos.length > 0 && <AvisosPanel avisos={avisos} />}
 
         <KpiRow cols={4}>
           <KpiCard icon={Activity} tone="accent" label="Lotes operados no mês"
@@ -182,6 +192,34 @@ export default async function DashboardPage() {
 }
 
 // ── blocos ─────────────────────────────────────────────────────────────────
+
+const AVISO_ICON = { danger: AlertCircle, warning: AlertTriangle, info: Info } as const
+const AVISO_CLASS = { danger: 'bg-danger-soft text-danger', warning: 'bg-warning-soft text-warning', info: 'bg-accent-soft text-accent' } as const
+
+function AvisosPanel({ avisos }: { avisos: Aviso[] }) {
+  return (
+    <Panel flush title="Avisos"
+      subtitle="Calculados agora a partir dos lotes: dias sem planilha, barras em queda, clientes grandes que pararam e barras sem tarifa.">
+      <ul className="divide-y divide-line">
+        {avisos.map((a, i) => {
+          const Icon = AVISO_ICON[a.tone]
+          return (
+            <li key={i} className="flex items-start gap-3 px-5 py-3">
+              <span className={cn('mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md', AVISO_CLASS[a.tone])}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-fg">{a.titulo}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">{a.detalhe}</p>
+              </div>
+              {a.href && <LinkAcao href={a.href}>Ver</LinkAcao>}
+            </li>
+          )
+        })}
+      </ul>
+    </Panel>
+  )
+}
 
 function CorretorasResumo({ corretoras }: { corretoras: ResumoContratos['corretoras'] }) {
   if (corretoras === null) {

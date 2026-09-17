@@ -2,6 +2,11 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/getProfile'
+import { hojeBrasil, fmtDate, resolvePeriodo, periodoAnterior, rangeDoMes, mesAnteriorDe } from '@/lib/periodo'
+import { normalizarBarra } from '@/lib/texto'
+import { mapClienteMovimento, type ClienteMovimentoRow } from '@/lib/movimento'
+import { fmtDataPt, fmtDelta, fmtNum } from '@/lib/format'
+import { labelCorretora } from '@/lib/corretoras'
 
 type Db = Awaited<ReturnType<typeof createClient>>
 
@@ -117,6 +122,7 @@ export type DrilldownRow = {
 export type ReceitaTotal = {
   receita_operados: number
   receita_zeragem: number
+  receita_outros: number   // produtos fora de WIN/WDO com tarifa por produto (supabase-s16)
   receita_total: number
   num_barras: number
   num_barras_sem_pricing: number
@@ -133,6 +139,7 @@ export type ReceitaPorAssessor = {
   lotes_zerados: number
   receita_operados: number
   receita_zeragem: number
+  receita_outros: number   // produtos fora de WIN/WDO com tarifa por produto (supabase-s16)
   receita_total: number
   pct_repasse: number      // fração da receita que fica com o escritório (supabase-s14)
   receita_liquida: number  // receita_total × pct_repasse
@@ -259,53 +266,7 @@ export type ImportacaoResumo = {
 // -----------------------------------------------------------
 // Datas: "hoje" no fuso America/Sao_Paulo (o servidor roda em UTC)
 // -----------------------------------------------------------
-function hojeBrasil(): Date {
-  const iso = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date()) // 'YYYY-MM-DD'
-  return new Date(iso + 'T12:00:00') // meio-dia evita drift de DST ao somar/subtrair dias
-}
-
-function fmtDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function resolvePeriodo(p: Periodo): DateRange {
-  const today = hojeBrasil()
-
-  if (p.startsWith('custom:')) {
-    const [, inicio, fim] = p.split(':')
-    const re = /^\d{4}-\d{2}-\d{2}$/
-    if (re.test(inicio) && re.test(fim)) {
-      return inicio <= fim ? { inicio, fim } : { inicio: fim, fim: inicio }
-    }
-    p = '30d'
-  }
-
-  const rolling = (dias: number) => {
-    const i = new Date(today); i.setDate(i.getDate() - (dias - 1))
-    return { inicio: fmtDate(i), fim: fmtDate(today) }
-  }
-
-  if (p === '30d') return rolling(30)
-  if (p === '60d') return rolling(60)
-  if (p === '90d') return rolling(90)
-  if (p === 'ano') return { inicio: `${today.getFullYear()}-01-01`, fim: fmtDate(today) }
-  return { inicio: '2000-01-01', fim: fmtDate(today) }
-}
-
-// Período imediatamente anterior, com a mesma duração (pra variações).
-// 'tudo' não tem período anterior que faça sentido.
-function periodoAnterior(p: Periodo): DateRange | null {
-  if (p === 'tudo') return null
-  const { inicio, fim } = resolvePeriodo(p)
-  const ini = new Date(inicio + 'T12:00:00')
-  const f = new Date(fim + 'T12:00:00')
-  const dur = Math.round((f.getTime() - ini.getTime()) / 86400000)
-  const fimAnt = new Date(ini); fimAnt.setDate(fimAnt.getDate() - 1)
-  const iniAnt = new Date(fimAnt); iniAnt.setDate(iniAnt.getDate() - dur)
-  return { inicio: fmtDate(iniAnt), fim: fmtDate(fimAnt) }
-}
+// Datas/períodos: src/lib/periodo.ts (compartilhado com a visão do assessor)
 
 // -----------------------------------------------------------
 // Auth + helpers
@@ -497,6 +458,7 @@ async function fetchReceitaPorAssessor(supabase: Db, range: DateRange, corretora
     lotes_zerados: num(r.lotes_zerados),
     receita_operados: num(r.receita_operados),
     receita_zeragem: num(r.receita_zeragem),
+    receita_outros: num(r.receita_outros),   // 0 antes do supabase-s16
     receita_total: num(r.receita_total),
     // Antes do supabase-s14 essas colunas não existem: assume 50% de repasse
     pct_repasse: r.pct_repasse != null ? num(r.pct_repasse) : 0.5,
@@ -721,6 +683,7 @@ function totalizarReceita(rows: ReceitaPorAssessor[]): ReceitaTotal {
   return {
     receita_operados: soma(r => r.receita_operados),
     receita_zeragem: soma(r => r.receita_zeragem),
+    receita_outros: soma(r => r.receita_outros),
     receita_total: soma(r => r.receita_total),
     num_barras: rows.length,
     num_barras_sem_pricing: rows.filter(r => r.preco_lote_futuros === 0 && r.modelo_zeragem === 'b2b').length,
@@ -839,6 +802,7 @@ export type DataFlags = {
   evolucaoCorretora?: boolean
   evolucaoBarras?: boolean
   curvaAbc?: boolean
+  movimento?: boolean          // quem parou / chegou / voltou (supabase-s16)
 }
 
 export type DashboardBundle = {
@@ -865,6 +829,7 @@ export type DashboardBundle = {
   evolucaoCorretora: EvolucaoCorretoraRow[]
   evolucaoBarras: EvolucaoBarraRow[]
   abc: CurvaAbcRow[]
+  movimento: ClienteMovimentoRow[]
   erros: string[]        // mensagens das RPCs que falharam (as demais chegam normalmente)
 }
 
@@ -906,7 +871,7 @@ export async function getDashboardBundle(
     metas, receitaPorAssTodas, ranking, receitaProj, kpis, kpisAnterior,
     corretoras, evolucao, evolucaoCorretora, evolucaoBarras,
     produtos, produtosDetalhados, topClientes, diario,
-    plataformas, retencao, abc, incentivo, incentivoCli,
+    plataformas, retencao, abc, incentivo, incentivoCli, movimento,
   ] = await Promise.all([
     safe(querMetas,           () => fetchMetasAnuais(supabase, corretora),                                  [] as MetaAnual[]),
     safe(querReceita,         () => fetchReceitaPorAssessor(supabase, range, corretora, barra, excluir),    [] as ReceitaPorAssessor[]),
@@ -927,6 +892,7 @@ export async function getDashboardBundle(
     safe(flags.curvaAbc,      () => fetchCurvaAbc(supabase, range, barra, excluir, corretora),              []),
     safe(flags.incentivo,     () => fetchIncentivoMensal(supabase),                                         []),
     safe(flags.incentivoClientes, () => fetchIncentivoClientes(supabase, null),                             []),
+    safe(flags.movimento,     () => fetchMovimento(supabase, range, rangeAnterior, corretora, barra, excluir), [] as ClienteMovimentoRow[]),
   ])
 
   const bundle: DashboardBundle = {
@@ -940,7 +906,7 @@ export async function getDashboardBundle(
     meta: flags.meta ? (metas.find(m => m.corretora === escopo) ?? null) : null,
     metasCorretoras: flags.metasCorretoras ? metas.filter(m => m.corretora !== 'TOTAL') : [],
     ranking, plataformas, retencao, incentivo, incentivoCli,
-    corretoras, evolucaoCorretora, evolucaoBarras, abc,
+    corretoras, evolucaoCorretora, evolucaoBarras, abc, movimento,
     erros,
   }
   // Só guarda cargas completas: um erro passageiro não pode ficar 10 min no cache.
@@ -1017,4 +983,223 @@ export async function getResumoContratos(): Promise<ResumoContratos> {
   }
   if (erros.length === 0) gravarCache(chave, resumo)
   return resumo
+}
+
+// -----------------------------------------------------------
+// S16 — movimento de clientes, cobertura de pregões, fechamento, avisos
+// -----------------------------------------------------------
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+async function fetchMovimento(
+  supabase: Db, range: DateRange, anterior: DateRange,
+  corretora: string | null, barra: string | null, excluir: string | null,
+): Promise<ClienteMovimentoRow[]> {
+  const { data, error } = await supabase.rpc('dashboard_clientes_movimento', {
+    p_inicio: range.inicio, p_fim: range.fim,
+    p_inicio_anterior: anterior.inicio, p_fim_anterior: anterior.fim,
+    ...filtroCorretora(corretora), ...filtroBarra(barra), ...exclusao(excluir),
+  })
+  if (error) {
+    if (error.code === 'PGRST202') return []   // supabase-s16 ainda não aplicado
+    throw new Error(error.message)
+  }
+  return mapClienteMovimento(data)
+}
+
+export type CoberturaRow = { dia: string; corretora: string; linhas: number; lotes_operados: number }
+
+async function fetchCobertura(supabase: Db, dias: number): Promise<CoberturaRow[] | null> {
+  const { data, error } = await supabase.rpc('dashboard_cobertura_pregoes', { p_dias: dias })
+  if (error) {
+    if (error.code === 'PGRST202') return null
+    throw new Error(error.message)
+  }
+  return ((data ?? []) as Record<string, unknown>[]).map(r => ({
+    dia: String(r.dia), corretora: String(r.corretora), linhas: num(r.linhas), lotes_operados: num(r.lotes_operados),
+  }))
+}
+
+// Dias úteis dos últimos N dias, por corretora, com quantidade de lotes
+// importados. null = RPC indisponível (supabase-s16 não aplicado).
+export async function getCobertura(dias = 60): Promise<CoberturaRow[] | null> {
+  const supabase = await adminOnly()
+  const versao = await versaoDados(supabase)
+  const chave = `cobertura|${versao}|${fmtDate(hojeBrasil())}|${dias}`
+  const hit = lerCache<CoberturaRow[]>(chave)
+  if (hit) return hit
+  const rows = await fetchCobertura(supabase, dias)
+  if (rows) gravarCache(chave, rows)
+  return rows
+}
+
+export type FechamentoRow = {
+  corretora: string
+  barra_nome: string
+  numero: string | null
+  lotes_operados: number
+  lotes_zerados: number
+  clientes: number
+  receita_operados: number
+  receita_zeragem: number
+  receita_outros: number
+  receita_total: number
+  pct_repasse: number        // fração que fica com o escritório
+  repasse_assessor: number   // receita_total − receita_liquida
+  receita_liquida: number    // fica com o escritório
+}
+
+export type Fechamento = {
+  mes: string          // 'YYYY-MM'
+  range: DateRange
+  rows: FechamentoRow[]
+  total: FechamentoRow
+  erros: string[]
+}
+
+// Fechamento de um mês calendário por barra (segue só a corretora).
+export async function getFechamento(mes: string, corretora: string | null): Promise<Fechamento> {
+  const supabase = await adminOnly()
+  if (!/^\d{4}-\d{2}$/.test(mes)) throw new Error('Mês inválido')
+  const range = rangeDoMes(mes)
+  const anterior = rangeDoMes(mesAnteriorDe(mes))
+
+  const versao = await versaoDados(supabase)
+  const chave = `fechamento|${versao}|${mes}|${corretora ?? ''}|${range.fim}`
+  const hit = lerCache<Fechamento>(chave)
+  if (hit) return hit
+
+  const erros: string[] = []
+  const fila = criarFila(MAX_RPC_SIMULTANEAS)
+  const safe = <T>(call: () => Promise<T>, fallback: T): Promise<T> =>
+    fila(call).catch((e: Error) => { erros.push(e?.message ?? 'Falha ao carregar dados'); return fallback })
+
+  const [receita, ranking] = await Promise.all([
+    safe(() => fetchReceitaPorAssessor(supabase, range, corretora, null, null), [] as ReceitaPorAssessor[]),
+    safe(() => fetchRankingBarras(supabase, range, anterior, corretora, null), [] as BarraRankingRow[]),
+  ])
+
+  const clientesPor = new Map(ranking.map(r => [`${r.corretora}|${normalizarBarra(r.barra_nome)}`, r.clientes_ativos]))
+  const rows: FechamentoRow[] = receita.map(r => ({
+    corretora: r.corretora,
+    barra_nome: r.barra_nome,
+    numero: r.numero,
+    lotes_operados: r.lotes_operados,
+    lotes_zerados: r.lotes_zerados,
+    clientes: clientesPor.get(`${r.corretora}|${normalizarBarra(r.barra_nome)}`) ?? 0,
+    receita_operados: r.receita_operados,
+    receita_zeragem: r.receita_zeragem,
+    receita_outros: r.receita_outros,
+    receita_total: r.receita_total,
+    pct_repasse: r.pct_repasse,
+    repasse_assessor: round2(r.receita_total - r.receita_liquida),
+    receita_liquida: r.receita_liquida,
+  })).sort((a, b) => b.receita_total - a.receita_total || b.lotes_operados - a.lotes_operados)
+
+  const soma = (f: (r: FechamentoRow) => number) => round2(rows.reduce((acc, r) => acc + f(r), 0))
+  const totalReceita = soma(r => r.receita_total)
+  const totalLiquida = soma(r => r.receita_liquida)
+  const total: FechamentoRow = {
+    corretora: corretora ?? 'TOTAL', barra_nome: 'Total', numero: null,
+    lotes_operados: soma(r => r.lotes_operados), lotes_zerados: soma(r => r.lotes_zerados),
+    clientes: soma(r => r.clientes),
+    receita_operados: soma(r => r.receita_operados), receita_zeragem: soma(r => r.receita_zeragem),
+    receita_outros: soma(r => r.receita_outros), receita_total: totalReceita,
+    pct_repasse: totalReceita > 0 ? round2(totalLiquida / totalReceita) : 0,
+    repasse_assessor: soma(r => r.repasse_assessor), receita_liquida: totalLiquida,
+  }
+
+  const fechamento: Fechamento = { mes, range, rows, total, erros }
+  if (erros.length === 0) gravarCache(chave, fechamento)
+  return fechamento
+}
+
+export type Aviso = { tone: 'danger' | 'warning' | 'info'; titulo: string; detalhe: string; href?: string }
+
+// Avisos da página inicial, calculados na hora a partir das mesmas consultas
+// do painel (sem cron nem e-mail). Cada fonte falha em silêncio.
+export async function getAvisos(): Promise<Aviso[]> {
+  const supabase = await adminOnly()
+  const hoje = hojeBrasil()
+  const versao = await versaoDados(supabase)
+  const chave = `avisos|${versao}|${fmtDate(hoje)}`
+  const hit = lerCache<Aviso[]>(chave)
+  if (hit) return hit
+
+  const range = resolvePeriodo('30d')
+  const anterior = periodoAnterior('30d') ?? range
+  const fila = criarFila(MAX_RPC_SIMULTANEAS)
+  const quieto = <T>(call: () => Promise<T>, fallback: T): Promise<T> => fila(call).catch(() => fallback)
+
+  const [cobertura, ranking, movimento, barras, pricing] = await Promise.all([
+    quieto(() => fetchCobertura(supabase, 14), null as CoberturaRow[] | null),
+    quieto(() => fetchRankingBarras(supabase, range, anterior, null, null), [] as BarraRankingRow[]),
+    quieto(() => fetchMovimento(supabase, range, anterior, null, null, null), [] as ClienteMovimentoRow[]),
+    quieto(() => fetchBarrasLista(supabase), [] as BarraLista[]),
+    quieto(async () => {
+      const { data } = await supabase.from('assessor_pricing').select('corretora, barra_nome').eq('ativo', true)
+      return (data ?? []) as { corretora: string; barra_nome: string }[]
+    }, [] as { corretora: string; barra_nome: string }[]),
+  ])
+
+  const avisos: Aviso[] = []
+
+  // 1. Dias úteis sem lotes (até anteontem: a corretora manda a planilha em D+1)
+  if (cobertura) {
+    const limite = new Date(hoje); limite.setDate(limite.getDate() - 2)
+    const lim = fmtDate(limite)
+    const porCorretora = new Map<string, string[]>()
+    for (const c of cobertura) {
+      if (c.linhas === 0 && c.dia <= lim) porCorretora.set(c.corretora, [...(porCorretora.get(c.corretora) ?? []), c.dia])
+    }
+    for (const [corr, dias] of porCorretora) {
+      avisos.push({
+        tone: 'warning',
+        titulo: `${labelCorretora(corr)}: ${dias.length} dia(s) útil(eis) sem lotes nos últimos 14 dias`,
+        detalhe: `${dias.slice(-6).map(d => fmtDataPt(d)).join(', ')}${dias.length > 6 ? ' …' : ''}. Confira se faltou planilha (ou se foi feriado).`,
+        href: '/admin/contratos',
+      })
+    }
+  }
+
+  // 2. Barras em queda forte (30 dias vs 30 anteriores)
+  const quedas = ranking
+    .filter(r => r.lotes_anterior != null && r.lotes_anterior >= 500 && r.delta_lotes_pct != null && r.delta_lotes_pct <= -25)
+    .sort((a, b) => (a.delta_lotes_pct ?? 0) - (b.delta_lotes_pct ?? 0))
+    .slice(0, 5)
+  for (const r of quedas) {
+    avisos.push({
+      tone: 'warning',
+      titulo: `${r.barra_nome} caiu ${fmtDelta(r.delta_lotes_pct ?? 0)} nos últimos 30 dias`,
+      detalhe: `${fmtNum(r.lotes_anterior ?? 0)} → ${fmtNum(r.lotes_operados)} lotes · ${labelCorretora(r.corretora)}`,
+      href: '/admin/contratos-dashboard/barras',
+    })
+  }
+
+  // 3. Clientes grandes que pararam de operar
+  const pararam = movimento
+    .filter(m => m.tipo === 'parou' && m.lotes_anterior >= 1000)
+    .sort((a, b) => b.lotes_anterior - a.lotes_anterior)
+  if (pararam.length > 0) {
+    avisos.push({
+      tone: 'danger',
+      titulo: `${pararam.length} cliente(s) com 1.000+ lotes pararam de operar`,
+      detalhe: `${pararam.slice(0, 4).map(m => `${m.cliente_nome} (${fmtNum(m.lotes_anterior)} lotes · ${m.barra_nome})`).join(' · ')}${pararam.length > 4 ? ' …' : ''}`,
+      href: '/admin/contratos-dashboard/clientes',
+    })
+  }
+
+  // 4. Barras com lotes e sem tarifa: geram volume mas não receita
+  const comTarifa = new Set(pricing.map(p => `${String(p.corretora).toUpperCase()}|${normalizarBarra(p.barra_nome)}`))
+  const semTarifa = barras.filter(b => b.lotes_operados > 0 && !comTarifa.has(`${b.corretora}|${normalizarBarra(b.barra_nome)}`))
+  if (semTarifa.length > 0) {
+    avisos.push({
+      tone: 'info',
+      titulo: `${semTarifa.length} barra(s) com lotes e sem tarifa cadastrada`,
+      detalhe: `${semTarifa.slice(0, 5).map(b => `${b.barra_nome} (${labelCorretora(b.corretora)})`).join(' · ')}${semTarifa.length > 5 ? ' …' : ''}. Sem tarifa, os lotes não viram receita.`,
+      href: '/admin/assessor-pricing',
+    })
+  }
+
+  gravarCache(chave, avisos)
+  return avisos
 }

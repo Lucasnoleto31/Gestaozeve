@@ -23,7 +23,7 @@ const VAZIO: Data = {
   receitaTotal: null, receitaPorAss: [], receitaProj: null, receitaBL: null,
   meta: null, metasCorretoras: [],
   ranking: [], plataformas: [], retencao: [], incentivo: [], incentivoCli: [],
-  corretoras: [], evolucaoCorretora: [], evolucaoBarras: [], abc: [],
+  corretoras: [], evolucaoCorretora: [], evolucaoBarras: [], abc: [], movimento: [],
 }
 
 export function useDashboardData(

@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Layers, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
-import type { PricingRow, SavePricingInput, ModeloZeragem, TierRow } from './actions'
+import { Layers, Package, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
+import type { PricingRow, SavePricingInput, ModeloZeragem, TierRow, ProdutoPreco, BarraSemTarifa } from './actions'
 import { CORRETORAS, CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
-import { fmtBRL2 } from '@/lib/format'
+import { PRODUTOS_OUTROS } from '@/lib/produtos'
+import { fmtBRL2, fmtNum } from '@/lib/format'
 import { Panel } from '@/components/ui/Panel'
 import { Modal } from '@/components/ui/Modal'
 import { Alert } from '@/components/ui/Alert'
@@ -17,6 +18,8 @@ interface Actions {
   deletePricing: (id: string) => Promise<{ ok: true }>
   listTiers: (pricingId: string) => Promise<TierRow[]>
   saveTiers: (pricingId: string, tiers: TierRow[]) => Promise<{ ok: true }>
+  listPrecosProduto: (pricingId: string) => Promise<{ precos: ProdutoPreco[]; disponivel: boolean }>
+  savePrecosProduto: (pricingId: string, precos: ProdutoPreco[]) => Promise<{ ok: true }>
 }
 
 const MODELOS_ZERAGEM: { id: ModeloZeragem; label: string }[] = [
@@ -37,7 +40,9 @@ const ordenar = (arr: PricingRow[]) =>
     CORRETORAS.indexOf(a.corretora) - CORRETORAS.indexOf(b.corretora)
     || a.barra_nome.localeCompare(b.barra_nome))
 
-export function PricingView({ initial, actions }: { initial: PricingRow[]; actions: Actions }) {
+const chaveBarra = (corretora: string, nome: string) => `${corretora}|${nome.trim().toUpperCase()}`
+
+export function PricingView({ initial, sugestoes, actions }: { initial: PricingRow[]; sugestoes: BarraSemTarifa[]; actions: Actions }) {
   const [rows, setRows] = useState<PricingRow[]>(() => ordenar(initial))
   const [editing, setEditing] = useState<Record<string, Partial<PricingRow>>>({})
   const [saving, setSaving] = useState<string | null>(null)
@@ -46,10 +51,13 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
   const [adding, setAdding] = useState(false)
   const [filtro, setFiltro] = useState<Corretora | ''>('')
   const [tierModalFor, setTierModalFor] = useState<PricingRow | null>(null)
+  const [produtoModalFor, setProdutoModalFor] = useState<PricingRow | null>(null)
   const [newRow, setNewRow] = useState<Partial<PricingRow>>(NOVA_LINHA)
   const [, startTransition] = useTransition()
 
   const visiveis = filtro ? rows.filter(r => r.corretora === filtro) : rows
+  // Sugestões que ainda não viraram tarifa nesta sessão
+  const pendentes = sugestoes.filter(s => !rows.some(r => chaveBarra(r.corretora, r.barra_nome) === chaveBarra(s.corretora, s.barra_nome)))
 
   function patch(id: string, key: keyof PricingRow, value: PricingRow[keyof PricingRow]) {
     setEditing(s => ({ ...s, [id]: { ...s[id], [key]: value } }))
@@ -58,6 +66,12 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
   function row(id: string): PricingRow {
     const original = rows.find(r => r.id === id)!
     return { ...original, ...editing[id] }
+  }
+
+  function iniciarNova(base: Partial<PricingRow>) {
+    setNewRow({ ...NOVA_LINHA, ...base })
+    setAdding(true)
+    setErro(null)
   }
 
   async function save(id: string) {
@@ -137,6 +151,39 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
     <>
       {erro && <Alert tone="danger">{erro}</Alert>}
 
+      {/* Barras que geram lotes mas não têm tarifa */}
+      {pendentes.length > 0 && (
+        <Panel flush title="Barras com lotes e sem tarifa"
+          subtitle="Estas barras aparecem nos lotes importados mas não têm tarifa: geram volume e nenhuma receita no painel. Clique em criar para preencher a tarifa já com o nome certo.">
+          <div className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Barra</th>
+                  <th>Corretora</th>
+                  <th className="num">Lotes no histórico</th>
+                  <th className="w-32" />
+                </tr>
+              </thead>
+              <tbody>
+                {pendentes.map(s => (
+                  <tr key={chaveBarra(s.corretora, s.barra_nome)}>
+                    <td className="font-medium">{s.barra_nome}</td>
+                    <td><CorretoraBadge corretora={s.corretora} /></td>
+                    <td className="num">{fmtNum(s.lotes_operados)}</td>
+                    <td>
+                      <Button size="xs" onClick={() => iniciarNova({ corretora: s.corretora, barra_nome: s.barra_nome })}>
+                        <Plus className="h-3 w-3" /> Criar tarifa
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1">
@@ -150,14 +197,14 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
           ))}
         </div>
         {!adding && (
-          <Button size="sm" onClick={() => { setNewRow({ ...NOVA_LINHA, corretora: filtro || 'GENIAL' }); setAdding(true) }}>
+          <Button size="sm" onClick={() => iniciarNova({ corretora: filtro || 'GENIAL' })}>
             <Plus className="h-4 w-4" /> Nova tarifa
           </Button>
         )}
       </div>
 
       {adding && (
-        <Panel title="Nova tarifa" subtitle="A mesma barra pode ter tarifas diferentes na Genial, na XP e no BTG.">
+        <Panel title="Nova tarifa" subtitle="A mesma barra pode ter tarifas diferentes na Genial, na XP e no BTG. Depois de salvar, cadastre a tarifa dos outros produtos em “Produtos”.">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Field label="Corretora">
               <select value={newRow.corretora ?? 'GENIAL'}
@@ -171,7 +218,7 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
             <Field label="Número">
               <input className="tabular-nums" value={(newRow.numero as string) ?? ''} onChange={e => setNewRow(s => ({ ...s, numero: e.target.value }))} />
             </Field>
-            <Field label="R$ por lote operado">
+            <Field label="R$ por lote operado (WIN/WDO)">
               <input type="number" step="0.0001" className="tabular-nums" value={newRow.preco_lote_futuros ?? 0}
                 onChange={e => setNewRow(s => ({ ...s, preco_lote_futuros: Number(e.target.value) }))} />
             </Field>
@@ -211,13 +258,14 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
                 <th className="num">R$/zeragem</th>
                 <th className="num">% Bovespa</th>
                 <th>Faixas</th>
+                <th>Produtos</th>
                 <th>Observação</th>
                 <th className="w-28" />
               </tr>
             </thead>
             <tbody>
               {visiveis.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-10 text-center text-sm text-fg-subtle">
+                <tr><td colSpan={11} className="px-4 py-10 text-center text-sm text-fg-subtle">
                   {rows.length === 0 ? 'Sem tarifas cadastradas. Clique em "Nova tarifa" pra adicionar.' : 'Sem tarifas nesta corretora.'}
                 </td></tr>
               )}
@@ -261,6 +309,11 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
                         <Layers className="h-3 w-3" /> Faixas
                       </Button>
                     </td>
+                    <td>
+                      <Button size="xs" variant="secondary" onClick={() => setProdutoModalFor(r)}>
+                        <Package className="h-3 w-3" /> Produtos
+                      </Button>
+                    </td>
                     <td><input className="field-sm w-56" value={r.observacao ?? ''} onChange={e => patch(orig.id, 'observacao', e.target.value)} /></td>
                     <td>
                       <div className="flex items-center gap-1">
@@ -279,7 +332,8 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
           </table>
         </div>
         <p className="border-t border-line px-5 py-3 text-[11px] leading-relaxed text-fg-subtle">
-          Faixas escalonadas (modelo &quot;escalonado&quot;) são aplicadas por <strong>volume diário de zeragem por cliente</strong>.
+          R$/lote vale para WIN e WDO. Em &quot;Produtos&quot; você cadastra o preço por lote de IND, DOL, BIT e outros, que passam a gerar receita.
+          Faixas escalonadas são aplicadas por <strong>volume diário de zeragem por cliente</strong>.
           Bovespa ainda não vira receita até integrarmos volume financeiro por cliente. Exemplo de tarifa por lote: {fmtBRL2(0.25)}/lote.
         </p>
       </Panel>
@@ -292,7 +346,93 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
           onClose={() => setTierModalFor(null)}
         />
       )}
+
+      {produtoModalFor && (
+        <ProdutosModal
+          pricing={produtoModalFor}
+          listPrecos={actions.listPrecosProduto}
+          savePrecos={actions.savePrecosProduto}
+          onClose={() => setProdutoModalFor(null)}
+        />
+      )}
     </>
+  )
+}
+
+// ===========================================================
+// Modal de tarifa por produto (fora de WIN/WDO)
+// ===========================================================
+function ProdutosModal({ pricing, listPrecos, savePrecos, onClose }: {
+  pricing: PricingRow
+  listPrecos: (pricingId: string) => Promise<{ precos: ProdutoPreco[]; disponivel: boolean }>
+  savePrecos: (pricingId: string, precos: ProdutoPreco[]) => Promise<{ ok: true }>
+  onClose: () => void
+}) {
+  const [precos, setPrecos] = useState<Record<string, number>>({})
+  const [disponivel, setDisponivel] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [erro, setErro] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    listPrecos(pricing.id)
+      .then(r => {
+        if (cancelled) return
+        setDisponivel(r.disponivel)
+        setPrecos(Object.fromEntries(r.precos.map(p => [p.produto, p.preco_lote])))
+      })
+      .catch(err => { if (!cancelled) setErro((err as Error).message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [pricing.id, listPrecos])
+
+  async function persist() {
+    setSaving(true); setErro(null)
+    try {
+      await savePrecos(pricing.id, Object.entries(precos).map(([produto, preco_lote]) => ({ produto, preco_lote })))
+      onClose()
+    } catch (err) {
+      setErro((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} size="md"
+      title={<span className="inline-flex items-center gap-2">Tarifa por produto · {pricing.barra_nome} <CorretoraBadge corretora={pricing.corretora} size="md" /></span>}
+      subtitle="R$ por lote operado de cada produto fora de WIN/WDO. Deixe 0 para o produto não gerar receita."
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button size="sm" onClick={persist} loading={saving} disabled={loading || !disponivel}>
+            {!saving && <Save className="h-3.5 w-3.5" />} Salvar
+          </Button>
+        </>
+      }>
+      {erro && <Alert tone="danger" className="mb-3">{erro}</Alert>}
+      {loading ? (
+        <p className="py-8 text-center text-sm text-fg-subtle">Carregando…</p>
+      ) : !disponivel ? (
+        <Alert tone="info">A tarifa por produto precisa do <strong>supabase-s16-controle.sql</strong> aplicado no SQL Editor do Supabase.</Alert>
+      ) : (
+        <div className="space-y-2">
+          {PRODUTOS_OUTROS.map(p => (
+            <div key={p.id} className="flex items-center justify-between gap-3">
+              <span className="text-sm text-fg">{p.label}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-fg-subtle">R$</span>
+                <input type="number" step="0.0001" min={0} className="field-sm w-28 text-right tabular-nums"
+                  value={precos[p.id] ?? 0}
+                  onChange={e => setPrecos(s => ({ ...s, [p.id]: Number(e.target.value) }))} />
+                <span className="text-xs text-fg-subtle">/lote</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   )
 }
 

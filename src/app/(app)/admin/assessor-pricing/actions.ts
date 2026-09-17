@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/getProfile'
 import { isCorretora, type Corretora } from '@/lib/corretoras'
+import { normalizarBarra } from '@/lib/texto'
 
 export type ModeloZeragem = 'b2b' | 'fixo' | 'mesmo_operado' | 'tiered'
 
@@ -154,4 +155,66 @@ export async function saveTiers(pricingId: string, tiers: TierRow[]): Promise<{ 
   if (error) throw new Error(error.message)
   revalidatePath('/admin/assessor-pricing')
   return { ok: true }
+}
+
+// -----------------------------------------------------------
+// Tarifa por produto fora de WIN/WDO (supabase-s16)
+// -----------------------------------------------------------
+export type ProdutoPreco = { produto: string; preco_lote: number }
+
+// [] também quando a tabela ainda não existe; `disponivel` diz se o S16 foi aplicado
+export async function listPrecosProduto(pricingId: string): Promise<{ precos: ProdutoPreco[]; disponivel: boolean }> {
+  const supabase = await adminOnly()
+  const { data, error } = await supabase
+    .from('assessor_pricing_produto')
+    .select('produto, preco_lote')
+    .eq('pricing_id', pricingId)
+    .order('produto', { ascending: true })
+  if (error) return { precos: [], disponivel: false }
+  return {
+    disponivel: true,
+    precos: ((data ?? []) as Record<string, unknown>[]).map(r => ({
+      produto: String(r.produto ?? ''), preco_lote: Number(r.preco_lote ?? 0),
+    })),
+  }
+}
+
+// Substitui o conjunto de tarifas por produto da barra (delete + insert)
+export async function savePrecosProduto(pricingId: string, precos: ProdutoPreco[]): Promise<{ ok: true }> {
+  const supabase = await adminOnly()
+  const { error: delErr } = await supabase.from('assessor_pricing_produto').delete().eq('pricing_id', pricingId)
+  if (delErr) throw new Error(delErr.message)
+  const validos = precos
+    .map(p => ({ pricing_id: pricingId, produto: p.produto.trim().toUpperCase(), preco_lote: Number(p.preco_lote) || 0 }))
+    .filter(p => p.produto && p.preco_lote > 0)
+  if (validos.length > 0) {
+    const { error } = await supabase.from('assessor_pricing_produto').insert(validos)
+    if (error) throw new Error(error.message)
+  }
+  revalidatePath('/admin/assessor-pricing')
+  return { ok: true }
+}
+
+// -----------------------------------------------------------
+// Barras que geram lotes mas não têm tarifa cadastrada
+// -----------------------------------------------------------
+export type BarraSemTarifa = { corretora: Corretora; barra_nome: string; lotes_operados: number }
+
+export async function listBarrasSemTarifa(): Promise<BarraSemTarifa[]> {
+  const supabase = await adminOnly()
+  const [{ data: barras, error }, { data: pricing }] = await Promise.all([
+    supabase.rpc('dashboard_barras_lista'),
+    supabase.from('assessor_pricing').select('corretora, barra_nome').eq('ativo', true),
+  ])
+  if (error) return []   // supabase-s15 não aplicado
+  const comTarifa = new Set(((pricing ?? []) as { corretora: string; barra_nome: string }[])
+    .map(p => `${String(p.corretora).toUpperCase()}|${normalizarBarra(p.barra_nome)}`))
+  return ((barras ?? []) as Record<string, unknown>[])
+    .map(r => ({
+      corretora: (isCorretora(r.corretora) ? r.corretora : 'GENIAL') as Corretora,
+      barra_nome: String(r.barra_nome ?? ''),
+      lotes_operados: Number(r.lotes_operados ?? 0),
+    }))
+    .filter(b => b.barra_nome && b.lotes_operados > 0 && !comTarifa.has(`${b.corretora}|${normalizarBarra(b.barra_nome)}`))
+    .sort((a, b) => b.lotes_operados - a.lotes_operados)
 }

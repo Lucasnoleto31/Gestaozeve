@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import {
-  Activity, Building2, ChevronRight, DollarSign, Gift, Home, LayoutDashboard,
-  Layers, Receipt, Target, Trophy, Upload, Users, X,
+  Activity, Building2, ChevronRight, DollarSign, FileSpreadsheet, Gift, Home, KeyRound,
+  LayoutDashboard, Layers, Receipt, Target, Trophy, Upload, Users, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Role } from '@/types'
@@ -29,8 +29,10 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Painel', href: '/admin/contratos-dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Ranking de barras', href: '/admin/contratos-dashboard/barras', icon: Trophy },
+      { label: 'Clientes', href: '/admin/contratos-dashboard/clientes', icon: Users },
       { label: 'Operacional', href: '/admin/contratos-dashboard/operacional', icon: Activity },
       { label: 'Receita', href: '/admin/contratos-dashboard/receita', icon: DollarSign },
+      { label: 'Fechamento mensal', href: '/admin/contratos-dashboard/fechamento', icon: FileSpreadsheet },
       { label: 'Incentivo Genial', href: '/admin/contratos-dashboard/incentivo', icon: Gift },
       { label: 'Importações', href: '/admin/contratos', icon: Upload },
     ],
@@ -47,7 +49,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Sistema',
     roles: ['admin'],
-    items: [{ label: 'Usuários', href: '/admin/usuarios', icon: Users }],
+    items: [{ label: 'Usuários', href: '/admin/usuarios', icon: KeyRound }],
   },
 ]
 

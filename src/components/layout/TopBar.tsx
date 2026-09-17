@@ -9,6 +9,8 @@ import { ThemeToggle } from '@/lib/theme'
 // Breadcrumb derivado da rota (prefixos mais longos primeiro).
 const ROTAS: { prefix: string; section: string; label: string }[] = [
   { prefix: '/admin/contratos-dashboard/barras', section: 'Lotes', label: 'Ranking de barras' },
+  { prefix: '/admin/contratos-dashboard/clientes', section: 'Lotes', label: 'Clientes' },
+  { prefix: '/admin/contratos-dashboard/fechamento', section: 'Lotes', label: 'Fechamento mensal' },
   { prefix: '/admin/contratos-dashboard/operacional', section: 'Lotes', label: 'Operacional' },
   { prefix: '/admin/contratos-dashboard/receita', section: 'Lotes', label: 'Receita' },
   { prefix: '/admin/contratos-dashboard/incentivo', section: 'Lotes', label: 'Incentivo Genial' },

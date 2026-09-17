@@ -71,7 +71,7 @@ export function ReceitaView() {
 
       <p className="max-w-4xl text-xs text-fg-muted">
         {d.range.inicio && <>Período <strong className="font-medium text-fg">{fmtDataPt(d.range.inicio)} a {fmtDataPt(d.range.fim)}</strong>. </>}
-        Receita estimada = tarifa cadastrada × lotes WIN/WDO, com a tarifa da corretora de cada barra; segue corretora, barra e exclusão de cliente.
+        Receita estimada = tarifa cadastrada × lotes WIN/WDO (mais a tarifa por produto para IND, DOL, BIT etc., quando cadastrada), com a tarifa da corretora de cada barra; segue corretora, barra e exclusão de cliente.
         Projeção do mês e ritmo da meta valem para o {escopoLabel} inteiro.
         {semTarifa > 0 && <> <strong className="font-medium text-warning">{semTarifa} barra(s) sem tarifa</strong> geram lotes mas não receita.</>}
       </p>
@@ -79,7 +79,9 @@ export function ReceitaView() {
       <KpiRow>
         <KpiCard icon={DollarSign} label="Receita bruta" tone="accent" loading={d.loading && !d.receitaBL}
           value={d.receitaBL ? fmtBRL2(d.receitaBL.receita_bruta) : '—'}
-          sub={d.receitaTotal ? `operados ${fmtBRL(d.receitaTotal.receita_operados)} · zeragem ${fmtBRL(d.receitaTotal.receita_zeragem)}` : 'operados + zeragem'} />
+          sub={d.receitaTotal
+            ? `operados ${fmtBRL(d.receitaTotal.receita_operados)} · zeragem ${fmtBRL(d.receitaTotal.receita_zeragem)}${d.receitaTotal.receita_outros > 0 ? ` · outros ${fmtBRL(d.receitaTotal.receita_outros)}` : ''}`
+            : 'operados + zeragem + outros produtos'} />
         <KpiCard icon={DollarSign} label="Receita líquida" tone="success" loading={d.loading && !d.receitaBL}
           value={d.receitaBL ? fmtBRL2(d.receitaBL.receita_liquida) : '—'}
           sub={d.receitaBL ? `retenção média de ${d.receitaBL.pct_repasse_medio.toFixed(0)}%` : undefined} />
@@ -110,6 +112,7 @@ export function ReceitaView() {
                     <th className="num">Lotes ze.</th>
                     <th className="num">Rec. operados</th>
                     <th className="num">Rec. zeragem</th>
+                    <th className="num">Rec. outros</th>
                     <th className="num">Receita</th>
                     <th className="num">Líquida</th>
                   </tr>
@@ -135,6 +138,7 @@ export function ReceitaView() {
                       <td className="num muted">{fmtNum(r.lotes_zerados)}</td>
                       <td className="num">{fmtBRL2(r.receita_operados)}</td>
                       <td className="num">{fmtBRL2(r.receita_zeragem)}</td>
+                      <td className="num muted">{r.receita_outros > 0 ? fmtBRL2(r.receita_outros) : '—'}</td>
                       <td className="num font-semibold text-success">{fmtBRL2(r.receita_total)}</td>
                       <td className="num muted">{fmtBRL2(r.receita_liquida)}</td>
                     </tr>

@@ -8,14 +8,16 @@ import {
   ResponsiveContainer, Legend,
 } from 'recharts'
 import { ImportarContratosModal } from './ImportarContratosModal'
-import { deletarImportacaoContrato, exportarTodosContratos } from './actions'
+import { deletarImportacaoContrato, exportarTodosContratos, type LogImportacao } from './actions'
+import type { CoberturaRow } from '@/app/(app)/admin/contratos-dashboard/actions'
 import { CORRETORAS, CORRETORA_LABEL, labelCorretora } from '@/lib/corretoras'
-import { fmtNum2, fmtDataPt, fmtDataHoraPt, labelMesCurto } from '@/lib/format'
+import { fmtNum, fmtNum2, fmtDataPt, fmtDataHoraPt, labelMesCurto } from '@/lib/format'
 import { useChartColors } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Panel } from '@/components/ui/Panel'
 import { Button, IconButton } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
 import { ChartTooltip } from '@/app/(app)/admin/contratos-dashboard/Charts'
 
@@ -64,6 +66,7 @@ interface Importacao {
   total_lotes_operados: number
   total_lotes_zerados: number
   created_at: string
+  autor?: { nome: string } | { nome: string }[] | null
 }
 
 interface Props {
@@ -73,11 +76,18 @@ interface Props {
   porCliente: PorNomeRow[]
   contratos: Contrato[]
   importacoes: Importacao[]
+  cobertura: CoberturaRow[] | null
+  log: LogImportacao[]
+  hoje: string
 }
 
 const formatNum = (v: number) => fmtNum2(Number(v ?? 0))
+const nomeAutor = (imp: Importacao) => {
+  const a = Array.isArray(imp.autor) ? imp.autor[0] : imp.autor
+  return a?.nome ?? null
+}
 
-export function ContratosView({ resumo, porMes, porAssessor, porCliente, contratos, importacoes }: Props) {
+export function ContratosView({ resumo, porMes, porAssessor, porCliente, contratos, importacoes, cobertura, log, hoje }: Props) {
   const router = useRouter()
   const cores = useChartColors()
   const [modalOpen, setModalOpen] = useState(false)
@@ -171,8 +181,12 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
   async function handleDeletar(id: string) {
     if (!confirm('Desfazer esta importação? Todos os lotes desse arquivo serão removidos.')) return
     setDeletingId(id)
-    await deletarImportacaoContrato(id)
-    router.refresh()
+    try {
+      await deletarImportacaoContrato(id)
+      router.refresh()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao desfazer.')
+    }
     setDeletingId(null)
   }
 
@@ -202,8 +216,8 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Contratos')
 
-      const hoje = new Date().toISOString().split('T')[0]
-      XLSX.writeFile(wb, `contratos-${hoje}.xlsx`)
+      const hojeIso = new Date().toISOString().split('T')[0]
+      XLSX.writeFile(wb, `contratos-${hojeIso}.xlsx`)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erro ao gerar Excel.')
     }
@@ -217,7 +231,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
       <PageHeader
         eyebrow="Lotes"
         title="Importações"
-        description="Planilhas de lotes enviadas pelas corretoras. Cada arquivo entra em uma corretora e pode ser desfeito a qualquer momento."
+        description="Planilhas de lotes enviadas pelas corretoras. Cada arquivo entra em uma corretora, passa por checagem de duplicidade e pode ser desfeito a qualquer momento."
         stats={[
           { label: 'Registros', value: fmtNum2(Number(resumo.num_contratos ?? 0)) },
           { label: 'Importações', value: importacoes.length },
@@ -237,9 +251,15 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
       />
 
       <PageBody>
+        {/* Cobertura de pregões */}
+        <Panel title="Cobertura dos últimos 60 dias úteis"
+          subtitle="Um quadrado por dia útil e corretora: verde tem lotes importados, vermelho não tem. Os dois últimos dias ficam cinza porque a corretora manda a planilha depois.">
+          <Cobertura rows={cobertura} hoje={hoje} />
+        </Panel>
+
         {/* Histórico de importações */}
         <Panel flush title="Histórico de importações"
-          subtitle="Arquivos importados, da mais recente pra mais antiga. Desfazer remove todos os lotes do arquivo.">
+          subtitle="Arquivos importados, do mais recente pro mais antigo. Desfazer remove todos os lotes do arquivo.">
           {importacoes.length === 0
             ? <p className="px-5 py-8 text-center text-sm text-fg-subtle">Nenhuma importação ainda. Clique em &quot;Importar planilha&quot; pra começar.</p>
             : (
@@ -250,6 +270,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
                       <th>Arquivo</th>
                       <th>Corretora</th>
                       <th>Importado em</th>
+                      <th>Por</th>
                       <th className="num">Linhas</th>
                       <th className="num">Lotes operados</th>
                       <th className="num">Lotes zerados</th>
@@ -262,6 +283,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
                         <td className="max-w-[320px] truncate font-medium">{imp.nome_arquivo || 'Sem nome'}</td>
                         <td><CorretoraBadge corretora={imp.corretora} /></td>
                         <td className="muted whitespace-nowrap">{fmtDataHoraPt(imp.created_at)}</td>
+                        <td className="muted">{nomeAutor(imp) ?? <span className="subtle">—</span>}</td>
                         <td className="num muted">{fmtNum2(imp.total_linhas)}</td>
                         <td className="num font-semibold text-accent">{formatNum(imp.total_lotes_operados)}</td>
                         <td className="num text-danger">{formatNum(imp.total_lotes_zerados)}</td>
@@ -410,6 +432,43 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
             </table>
           </div>
         </Panel>
+
+        {/* Log de ações */}
+        <Panel flush title="Quem importou e quem desfez"
+          subtitle="Registro das últimas 30 ações de importação.">
+          {log.length === 0
+            ? <p className="px-5 py-6 text-center text-sm text-fg-subtle">Sem registros ainda (o log começa com o supabase-s16).</p>
+            : (
+              <div className="overflow-x-auto">
+                <table className="tbl tbl-dense">
+                  <thead>
+                    <tr>
+                      <th>Quando</th>
+                      <th>Ação</th>
+                      <th>Arquivo</th>
+                      <th>Corretora</th>
+                      <th>Usuário</th>
+                      <th className="num">Linhas</th>
+                      <th className="num">Lotes operados</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {log.map(l => (
+                      <tr key={l.id}>
+                        <td className="muted whitespace-nowrap">{fmtDataHoraPt(l.created_at)}</td>
+                        <td><Badge variant={l.acao === 'desfez' ? 'danger' : 'success'}>{l.acao === 'desfez' ? 'Desfez' : 'Importou'}</Badge></td>
+                        <td className="max-w-[320px] truncate font-medium">{l.nome_arquivo}</td>
+                        <td><CorretoraBadge corretora={l.corretora} /></td>
+                        <td className="muted">{l.usuario_nome ?? '—'}</td>
+                        <td className="num muted">{fmtNum(l.total_linhas)}</td>
+                        <td className="num">{fmtNum(l.total_lotes_operados)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </Panel>
       </PageBody>
 
       <ImportarContratosModal
@@ -417,5 +476,51 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
         onClose={() => { setModalOpen(false); router.refresh() }}
       />
     </>
+  )
+}
+
+// ── Cobertura de pregões ───────────────────────────────────────────────────
+
+function Cobertura({ rows, hoje }: { rows: CoberturaRow[] | null; hoje: string }) {
+  if (rows === null) {
+    return <p className="text-sm text-fg-muted">Indisponível: rode o <code className="rounded bg-surface-3 px-1 py-0.5 text-xs">supabase-s16-controle.sql</code> no SQL Editor do Supabase.</p>
+  }
+  if (rows.length === 0) return <p className="text-sm text-fg-subtle">Sem dias úteis no intervalo.</p>
+
+  // Dois últimos dias úteis ainda podem estar a caminho (a corretora manda em D+1)
+  const dias = Array.from(new Set(rows.map(r => r.dia))).sort()
+  const pendentes = new Set(dias.slice(-2))
+  const porCorretora = new Map<string, CoberturaRow[]>()
+  for (const r of rows) porCorretora.set(r.corretora, [...(porCorretora.get(r.corretora) ?? []), r])
+
+  return (
+    <div className="space-y-4">
+      {Array.from(porCorretora.entries()).map(([corretora, lista]) => {
+        const ordenada = [...lista].sort((a, b) => a.dia.localeCompare(b.dia))
+        const faltando = ordenada.filter(r => r.linhas === 0 && !pendentes.has(r.dia) && r.dia <= hoje)
+        return (
+          <div key={corretora}>
+            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <CorretoraBadge corretora={corretora} size="md" />
+              <span className="text-xs text-fg-muted">
+                {faltando.length === 0
+                  ? <span className="text-success">Todos os dias úteis têm lotes.</span>
+                  : <><strong className="font-semibold text-danger">{faltando.length} dia(s) sem lotes:</strong> {faltando.slice(-8).map(r => fmtDataPt(r.dia)).join(', ')}{faltando.length > 8 ? ' …' : ''}</>}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-[3px]">
+              {ordenada.map(r => {
+                const pendente = pendentes.has(r.dia)
+                const cls = r.linhas > 0 ? 'bg-success' : pendente ? 'bg-surface-3' : 'bg-danger'
+                return (
+                  <span key={r.dia} title={`${fmtDataPt(r.dia)} · ${r.linhas > 0 ? `${fmtNum(r.lotes_operados)} lotes em ${fmtNum(r.linhas)} linhas` : pendente ? 'ainda pode chegar' : 'sem lotes'}`}
+                    className={cn('h-4 w-4 rounded-[3px]', cls, r.linhas > 0 && 'opacity-80')} />
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }

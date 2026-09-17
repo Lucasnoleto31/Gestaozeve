@@ -7,10 +7,12 @@ import { Header } from '@/components/layout/Header'
 import { HeroBanner, BannerKpi } from '@/components/layout/HeroBanner'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { EvolucaoMensalChart } from '@/app/(app)/admin/contratos-dashboard/Charts'
+import { CorretoraBadge } from '@/app/(app)/admin/contratos-dashboard/ChartsCorretora'
 import { getResumoContratos, type ResumoContratos } from '@/app/(app)/admin/contratos-dashboard/actions'
 import { fmtNum, fmtBRL, fmtBRL2, fmtDataPt } from '@/app/(app)/admin/contratos-dashboard/_lib/utils'
 import { formatDateTime } from '@/lib/utils'
-import { ArrowRight, BarChart2, Upload, Target, FileStack, Layers, Monitor, Users } from 'lucide-react'
+import { CORRETORA_COLOR, isCorretora } from '@/lib/corretoras'
+import { ArrowRight, BarChart2, Upload, Target, FileStack, Layers, Monitor, Users, Building2 } from 'lucide-react'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -85,7 +87,7 @@ export default async function DashboardPage() {
             </p>
             <h1 className="text-3xl font-bold text-white tracking-tight">{saudacao}, {firstName}</h1>
             <p className="text-blue-200/60 mt-1 text-sm">
-              Lotes girados de {fmtDataPt(r.mes.inicio)} a {fmtDataPt(r.mes.fim)}
+              Lotes girados de {fmtDataPt(r.mes.inicio)} a {fmtDataPt(r.mes.fim)} nas três corretoras
               {k?.dataset_max ? ` · dados até ${fmtDataPt(k.dataset_max)}` : ''}
               {k?.ultimo_dia_data ? ` · último pregão (${fmtDataPt(k.ultimo_dia_data)}): ${fmtNum(k.ultimo_dia_lotes)} lotes` : ''}
             </p>
@@ -126,6 +128,23 @@ export default async function DashboardPage() {
             Parte dos dados não carregou: {r.erros[0]}
           </div>
         )}
+
+        {/* Por corretora — Genial, XP e BTG lado a lado */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <div>
+                <CardTitle>Por corretora no mês</CardTitle>
+                <p className="text-xs text-gray-500 mt-0.5">Lotes, participação, clientes e receita líquida estimada pela tarifa de cada corretora.</p>
+              </div>
+            </div>
+            <Link href="/admin/contratos-dashboard" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+              Comparar <ArrowRight className="w-3 h-3" />
+            </Link>
+          </CardHeader>
+          <CorretorasResumo corretoras={r.corretoras} />
+        </Card>
 
         {/* Linha 1: evolução mensal + meta + importações */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -215,6 +234,51 @@ export default async function DashboardPage() {
 
 // ── cards ──────────────────────────────────────────────────────────────────
 
+function CorretorasResumo({ corretoras }: { corretoras: ResumoContratos['corretoras'] }) {
+  if (corretoras === null) {
+    return (
+      <p className="text-sm text-gray-500">
+        Indisponível: rode o arquivo <code className="text-xs px-1 py-0.5 rounded bg-gray-100">supabase-s13-corretoras.sql</code> no
+        SQL Editor do Supabase para separar os lotes por corretora.
+      </p>
+    )
+  }
+  const totalOp = corretoras.reduce((s, c) => s + c.lotes_operados, 0)
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {corretoras.map(c => {
+        const color = isCorretora(c.corretora) ? CORRETORA_COLOR[c.corretora] : '#64748b'
+        const share = totalOp > 0 ? (c.lotes_operados / totalOp) * 100 : 0
+        const pctZe = c.lotes_operados > 0 ? (c.lotes_zerados / c.lotes_operados) * 100 : 0
+        return (
+          <div key={c.corretora} className="rounded-xl p-4"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderLeft: `4px solid ${color}` }}>
+            <div className="flex items-center justify-between">
+              <CorretoraBadge corretora={c.corretora} size="md" />
+              <span className="text-xs text-gray-500 tabular-nums">{share.toFixed(1)}% do mês</span>
+            </div>
+            <p className="text-2xl font-bold tabular-nums mt-2 text-gray-800">{fmtNum(c.lotes_operados)}</p>
+            <p className="text-xs text-gray-500">lotes operados</p>
+            <div className="w-full h-1.5 rounded-full overflow-hidden mt-2" style={{ background: 'rgba(148,163,184,0.2)' }}>
+              <div className="h-full" style={{ width: `${Math.min(100, share)}%`, background: color }} />
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-3 text-xs">
+              <span className="text-gray-500">Zerados</span>
+              <span className="text-right tabular-nums text-gray-700">{fmtNum(c.lotes_zerados)} <span className="text-gray-400">({pctZe.toFixed(1)}%)</span></span>
+              <span className="text-gray-500">Clientes</span>
+              <span className="text-right tabular-nums text-gray-700">{fmtNum(c.num_clientes)}</span>
+              <span className="text-gray-500">Pregões</span>
+              <span className="text-right tabular-nums text-gray-700">{fmtNum(c.num_dias)}</span>
+              <span className="text-gray-500">Receita líquida</span>
+              <span className="text-right tabular-nums font-semibold text-emerald-700">{fmtBRL2(c.receita_liquida)}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function MetaCard({ meta }: { meta: ResumoContratos['meta'] }) {
   const temMeta = meta && (meta.meta_receita > 0 || meta.meta_lotes > 0)
   return (
@@ -222,14 +286,14 @@ function MetaCard({ meta }: { meta: ResumoContratos['meta'] }) {
       <CardHeader>
         <div className="flex items-center gap-2">
           <Target className="w-4 h-4 text-amber-500" />
-          <CardTitle>{meta ? `Meta ${meta.ano}` : 'Meta anual'}</CardTitle>
+          <CardTitle>{meta ? `Meta ${meta.ano} · escritório` : 'Meta anual'}</CardTitle>
         </div>
         <Link href="/admin/metas" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
           {temMeta ? 'Ajustar' : 'Cadastrar'} <ArrowRight className="w-3 h-3" />
         </Link>
       </CardHeader>
       {!temMeta || !meta ? (
-        <p className="text-sm text-gray-400">Nenhuma meta cadastrada para o ano.</p>
+        <p className="text-sm text-gray-400">Nenhuma meta cadastrada para o ano. As metas por corretora aparecem no dashboard completo.</p>
       ) : (
         <div className="space-y-3">
           {meta.meta_lotes > 0 && (
@@ -286,7 +350,10 @@ function ImportacoesCard({ importacoes }: { importacoes: ResumoContratos['import
             <div key={imp.id} className="flex items-center justify-between gap-3 px-5 py-3"
               style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{imp.nome_arquivo || 'Sem nome'}</p>
+                <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-2">
+                  <span className="truncate">{imp.nome_arquivo || 'Sem nome'}</span>
+                  {imp.corretora && <CorretoraBadge corretora={imp.corretora} />}
+                </p>
                 <p className="text-xs text-gray-500">{imp.created_at ? formatDateTime(imp.created_at) : '—'} · {fmtNum(imp.total_linhas)} linhas</p>
               </div>
               <div className="text-right flex-shrink-0">

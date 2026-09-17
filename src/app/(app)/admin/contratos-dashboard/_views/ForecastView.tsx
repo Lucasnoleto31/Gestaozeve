@@ -16,8 +16,8 @@ import { holtWintersAdd } from '../_lib/holtWinters'
 import { getInsightsIA, type InsightsResposta } from '../actions'
 
 export function ForecastView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
-  const d = useDashboardData(periodo, barra, excluir, {
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     acuracidade: true, kpis: true, evolucao: true,
     receita: true, meta: true, alertas: true, topClientes: true, produtos: true,
   })

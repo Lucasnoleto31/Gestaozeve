@@ -1,21 +1,20 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
-import type { Periodo, DataFlags, DashboardBundle } from '../actions'
+import type { Periodo, DataFlags, DashboardBundle, BarraAtiva } from '../actions'
 import { getDashboardBundle, getBarrasAtivas } from '../actions'
 
 export type { DataFlags }
 
 // Hook que carrega o subset de dados que a sub-rota pede (via flags) sempre
-// que período/barra/exclusão mudam.
+// que período/corretora/barra/exclusão mudam.
 // - Faz UMA server action por carga (getDashboardBundle): o Next enfileira
 //   Server Actions, então 8 actions em Promise.all rodavam em sequência.
 // - Falha em UMA RPC não descarta as demais (o primeiro erro vira o banner).
 // - Um contador de sequência descarta respostas de filtros antigos que
 //   cheguem depois da mais recente (corrida ao trocar filtro rápido).
 
-type Barra = { barra_nome: string; numero: string | null }
-type Data = Omit<DashboardBundle, 'erros'> & { barras: Barra[] }
+type Data = Omit<DashboardBundle, 'erros'> & { barras: BarraAtiva[] }
 
 const VAZIO: Data = {
   kpis: null, produtos: [], topClientes: [], diario: [], heatmap: [], evolucao: [],
@@ -27,9 +26,16 @@ const VAZIO: Data = {
   fluxoOp: null, indiceSobr: null, riscoOp: [],
   abc: [], scoreCli: [], clusters: [], correl: [], riscoEsc: null,
   retencao: [], incentivo: [], incentivoCli: [],
+  corretoras: [], evolucaoCorretora: [], metasCorretoras: [],
 }
 
-export function useDashboardData(periodo: Periodo, barra: string | null, excluir: string | null, flags: DataFlags) {
+export function useDashboardData(
+  periodo: Periodo,
+  barra: string | null,
+  excluir: string | null,
+  corretora: string | null,
+  flags: DataFlags,
+) {
   const [data, setData] = useState<Data>(VAZIO)
   const [isPending, startTransition] = useTransition()
   const [erro, setErro] = useState<string | null>(null)
@@ -53,7 +59,7 @@ export function useDashboardData(periodo: Periodo, barra: string | null, excluir
     startTransition(async () => {
       let bundle: DashboardBundle
       try {
-        bundle = await getDashboardBundle(periodo, barra, excluir, flags)
+        bundle = await getDashboardBundle(periodo, barra, excluir, corretora, flags)
       } catch (e) {
         if (seq !== seqRef.current) return
         setErro((e as Error)?.message ?? 'Falha ao carregar dados')
@@ -65,7 +71,7 @@ export function useDashboardData(periodo: Periodo, barra: string | null, excluir
       setData(d => ({ ...d, ...rest }))
       if (erros.length > 0) setErro(erros[0])
     })
-  }, [periodo, barra, excluir]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [periodo, barra, excluir, corretora]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { ...data, isPending, erro }
 }

@@ -24,6 +24,7 @@ export default async function BarrasPage() {
     supabase
       .from('barras')
       .select('*, assessor:profiles(nome), influenciador:influenciadores(nome, codigo)')
+      .order('corretora')
       .order('nome'),
     supabase.from('profiles').select('id, nome').in('role', ['admin', 'vendedor']).order('nome'),
     supabase.from('influenciadores').select('id, nome, codigo').order('nome'),
@@ -31,7 +32,7 @@ export default async function BarrasPage() {
 
   return (
     <div>
-      <Header title="Barras da Corretora" />
+      <Header title="Barras das Corretoras" />
       <HeroBanner>
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.15)' }}>
@@ -39,18 +40,18 @@ export default async function BarrasPage() {
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-300 mb-1">Configuração</p>
-            <h1 className="text-2xl font-bold text-white">Barras da Corretora</h1>
+            <h1 className="text-2xl font-bold text-white">Barras das Corretoras</h1>
             <p className="text-sm text-blue-100/60 mt-0.5">
-              Mapeie o nome de cada barra (como aparece no Excel) para o assessor e/ou influenciador correspondente.
+              Cada barra pertence a uma corretora (Genial, XP ou BTG). Mapeie o nome como aparece no Excel para o assessor responsável.
             </p>
           </div>
         </div>
       </HeroBanner>
 
-      <div className="p-6 max-w-4xl">
+      <div className="p-6 max-w-5xl">
         <Card>
           <BarrasClient
-            barras={barras ?? []}
+            barras={(barras ?? []).map(b => ({ ...b, corretora: String(b.corretora ?? 'GENIAL') }))}
             assessores={assessores ?? []}
             influenciadores={influenciadores ?? []}
           />

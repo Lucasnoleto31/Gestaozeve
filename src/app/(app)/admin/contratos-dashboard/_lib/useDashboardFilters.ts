@@ -3,21 +3,24 @@
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useCallback, useMemo } from 'react'
 import type { Periodo } from '../actions'
+import { isCorretora, type Corretora } from '@/lib/corretoras'
 
 const VALID_PERIODOS: Periodo[] = ['30d', '60d', '90d', 'ano', 'tudo']
 const DEFAULT_PERIODO: Periodo = '30d'
 const CUSTOM_RE = /^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/
 
 // Hook compartilhado entre sub-rotas: lê os filtros da URL
-// (?periodo=90d&barra=ZEVE+1&excluir=FULANO) e expõe setters que fazem
-// router.replace mantendo a rota atual.
+// (?periodo=90d&corretora=XP&barra=ZEVE+1&excluir=FULANO) e expõe setters
+// que fazem router.replace mantendo a rota atual.
 export function useDashboardFilters(): {
   periodo: Periodo
+  corretora: Corretora | null
   barra: string | null
   excluir: string | null
   customRange: { inicio: string; fim: string } | null
   setPeriodo: (p: Periodo) => void
   setRange: (inicio: string, fim: string) => void
+  setCorretora: (c: Corretora | null) => void
   setBarra: (b: string | null) => void
   setExcluir: (c: string | null) => void
 } {
@@ -36,6 +39,12 @@ export function useDashboardFilters(): {
     const m = CUSTOM_RE.exec(periodo)
     return m ? { inicio: m[1], fim: m[2] } : null
   }, [periodo])
+
+  // Corretora (GENIAL | XP | BTG); qualquer outro valor = todas
+  const corretora = useMemo<Corretora | null>(() => {
+    const c = (searchParams.get('corretora') ?? '').trim().toUpperCase()
+    return isCorretora(c) ? c : null
+  }, [searchParams])
 
   const barra = useMemo<string | null>(() => {
     const b = searchParams.get('barra')
@@ -58,10 +67,12 @@ export function useDashboardFilters(): {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
   }, [router, pathname, searchParams])
 
-  const setPeriodo = useCallback((p: Periodo) => updateParams({ periodo: p === DEFAULT_PERIODO ? null : p }), [updateParams])
-  const setRange   = useCallback((inicio: string, fim: string) => updateParams({ periodo: `custom:${inicio}:${fim}` }), [updateParams])
-  const setBarra   = useCallback((b: string | null) => updateParams({ barra: b }), [updateParams])
-  const setExcluir = useCallback((c: string | null) => updateParams({ excluir: c }), [updateParams])
+  const setPeriodo   = useCallback((p: Periodo) => updateParams({ periodo: p === DEFAULT_PERIODO ? null : p }), [updateParams])
+  const setRange     = useCallback((inicio: string, fim: string) => updateParams({ periodo: `custom:${inicio}:${fim}` }), [updateParams])
+  // Trocar de corretora limpa a barra: as barras são de uma corretora só.
+  const setCorretora = useCallback((c: Corretora | null) => updateParams({ corretora: c, barra: null }), [updateParams])
+  const setBarra     = useCallback((b: string | null) => updateParams({ barra: b }), [updateParams])
+  const setExcluir   = useCallback((c: string | null) => updateParams({ excluir: c }), [updateParams])
 
-  return { periodo, barra, excluir, customRange, setPeriodo, setRange, setBarra, setExcluir }
+  return { periodo, corretora, barra, excluir, customRange, setPeriodo, setRange, setCorretora, setBarra, setExcluir }
 }

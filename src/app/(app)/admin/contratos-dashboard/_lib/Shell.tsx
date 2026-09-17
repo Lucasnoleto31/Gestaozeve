@@ -5,10 +5,11 @@ import { usePathname } from 'next/navigation'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { TABS } from './types'
-import type { Periodo, ClienteListaRow } from '../actions'
+import type { Periodo, ClienteListaRow, BarraAtiva } from '../actions'
 import { getFiltrosOpcoes } from '../actions'
 import { useDashboardFilters } from './useDashboardFilters'
 import { fmtDataPt, fmtNum } from './utils'
+import { CORRETORAS, CORRETORA_COLOR, CORRETORA_LABEL } from '@/lib/corretoras'
 
 const PERIODOS: { id: Periodo; label: string }[] = [
   { id: '30d',  label: '30 dias' },
@@ -17,8 +18,6 @@ const PERIODOS: { id: Periodo; label: string }[] = [
   { id: 'ano',  label: 'Ano' },
   { id: 'tudo', label: 'Tudo' },
 ]
-
-type Barra = { barra_nome: string; numero: string | null }
 
 // Context pra sub-rotas reportarem dataset_max e estado de loading pro Shell
 type ShellCtx = {
@@ -39,12 +38,12 @@ export function useShell() { return useContext(ShellContext) }
 // Renderiza tabs + filtros globais; o conteudo da rota vem via children.
 // ===========================================================
 export function DashboardShell({ children }: { children: React.ReactNode }) {
-  const [barras, setBarras] = useState<Barra[]>([])
+  const [barras, setBarras] = useState<BarraAtiva[]>([])
   const [clientes, setClientes] = useState<ClienteListaRow[]>([])
   const [datasetMax, setDatasetMax] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  // Opções dos dois filtros numa única action (Server Actions rodam em fila;
+  // Opções dos filtros numa única action (Server Actions rodam em fila;
   // quanto menos chamadas separadas, mais rápido a aba abre).
   useEffect(() => {
     getFiltrosOpcoes()
@@ -102,7 +101,7 @@ function DashboardNav() {
 }
 
 // ===========================================================
-// Filtros globais (período + barra + excluir cliente) sincronizados com URL
+// Filtros globais (período + corretora + barra + excluir cliente) na URL
 // ===========================================================
 function RangeFilter({ customRange, datasetMax, isLoading, onApply }:
   { customRange: { inicio: string; fim: string } | null; datasetMax: string | null; isLoading: boolean;
@@ -149,9 +148,15 @@ function RangeFilter({ customRange, datasetMax, isLoading, onApply }:
 }
 
 function FilterBar({ barras, clientes, datasetMax, isLoading }:
-  { barras: Barra[]; clientes: ClienteListaRow[]; datasetMax: string | null; isLoading: boolean }
+  { barras: BarraAtiva[]; clientes: ClienteListaRow[]; datasetMax: string | null; isLoading: boolean }
 ) {
-  const { periodo, barra, excluir, customRange, setPeriodo, setRange, setBarra, setExcluir } = useDashboardFilters()
+  const {
+    periodo, corretora, barra, excluir, customRange,
+    setPeriodo, setRange, setCorretora, setBarra, setExcluir,
+  } = useDashboardFilters()
+
+  // Barras são de uma corretora só: com corretora escolhida, lista só as dela.
+  const barrasVisiveis = corretora ? barras.filter(b => b.corretora === corretora) : barras
 
   // Se a URL tem um cliente que não está na lista (lista ainda carregando ou
   // nome antigo), mantém a opção pra o select mostrar o que está ativo.
@@ -168,7 +173,31 @@ function FilterBar({ barras, clientes, datasetMax, isLoading }:
     <div className="rounded-2xl p-4 space-y-3"
       style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Período</span>
+        <span className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Corretora</span>
+        <div className="flex flex-wrap gap-1.5">
+          <button onClick={() => setCorretora(null)} disabled={isLoading}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+            style={corretora === null
+              ? { background: 'var(--blue)', color: '#fff' }
+              : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
+            Todas
+          </button>
+          {CORRETORAS.map(c => {
+            const active = c === corretora
+            return (
+              <button key={c} onClick={() => setCorretora(c)} disabled={isLoading}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                style={active
+                  ? { background: CORRETORA_COLOR[c], color: '#fff' }
+                  : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: active ? '#fff' : CORRETORA_COLOR[c] }} />
+                {CORRETORA_LABEL[c]}
+              </button>
+            )
+          })}
+        </div>
+
+        <span className="text-xs uppercase tracking-widest text-gray-400 font-semibold ml-2">Período</span>
         <div className="flex flex-wrap gap-1.5">
           {PERIODOS.map(p => {
             const active = p.id === periodo
@@ -186,18 +215,20 @@ function FilterBar({ barras, clientes, datasetMax, isLoading }:
 
         <span className="text-[11px] text-gray-300">ou</span>
         <RangeFilter customRange={customRange} datasetMax={datasetMax} isLoading={isLoading} onApply={setRange} />
+      </div>
 
-        <span className="text-xs uppercase tracking-widest text-gray-400 font-semibold ml-2">Barra</span>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Barra</span>
         <select
           value={barra ?? ''}
           onChange={e => setBarra(e.target.value || null)}
           disabled={isLoading}
           className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 cursor-pointer"
           style={selectStyle(!!barra, 200)}>
-          <option value="">Todas as barras</option>
-          {barras.map(b => (
-            <option key={b.barra_nome} value={b.barra_nome}>
-              {b.barra_nome}{b.numero ? ` · ${b.numero}` : ''}
+          <option value="">{corretora ? `Todas as barras da ${CORRETORA_LABEL[corretora]}` : 'Todas as barras'}</option>
+          {barrasVisiveis.map(b => (
+            <option key={`${b.corretora}|${b.barra_nome}`} value={b.barra_nome}>
+              {b.barra_nome}{b.numero ? ` · ${b.numero}` : ''}{!corretora ? ` · ${CORRETORA_LABEL[b.corretora as keyof typeof CORRETORA_LABEL] ?? b.corretora}` : ''}
             </option>
           ))}
         </select>

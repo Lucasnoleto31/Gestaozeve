@@ -11,10 +11,11 @@ import { useDashboardData } from '../_lib/useDashboardData'
 import { Block } from '../_lib/Blocks'
 import { fmtNum, fmtBRL, fmtBRL2 } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
+import { CorretoraBadge } from '../ChartsCorretora'
 
 export function AssessoresView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
-  const d = useDashboardData(periodo, barra, excluir, {
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     kpis: true, rankingAssessores: true,
   })
 
@@ -111,7 +112,9 @@ export function AssessoresView() {
                         style={{ borderTop: '1px solid var(--border)',
                                  background: r.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
                         <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{r.rank}</td>
-                        <td className="px-3 py-1.5 font-medium text-gray-700">{r.barra_nome}</td>
+                        <td className="px-3 py-1.5 font-medium text-gray-700">
+                          <span className="inline-flex items-center gap-2">{r.barra_nome}<CorretoraBadge corretora={r.corretora} /></span>
+                        </td>
                         <td className="px-3 py-1.5 text-gray-500 tabular-nums">{r.numero ?? '—'}</td>
                         <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.clientes_ativos)}</td>
                         <td className="px-3 py-1.5 text-right tabular-nums text-emerald-600">

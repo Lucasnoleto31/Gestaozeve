@@ -11,8 +11,8 @@ import { fmtNum, fmtBRL2, fmtDataPt } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
 
 export function ClientesView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
-  const d = useDashboardData(periodo, barra, excluir, {
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     topClientes: true, kpis: true, ltv: true, cohort: true, rankingAssessores: true,
   })
 

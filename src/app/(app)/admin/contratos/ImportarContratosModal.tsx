@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/Button'
 import { X, Upload, CheckCircle, AlertCircle, FileSpreadsheet } from 'lucide-react'
 import { importarContratos, ContratoRow } from './actions'
+import { CORRETORAS, CORRETORA_COLOR, CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
 
 interface Props {
   open: boolean
@@ -107,11 +108,40 @@ const HEADER_MAP: Record<string, keyof ContratoRow> = {
 
 const NUMBER_FIELDS = new Set<keyof ContratoRow>(['lotes_operados', 'lotes_zerados'])
 
+// Tenta adivinhar a corretora pelo nome do arquivo (só sugestão; o usuário confirma)
+function sugerirCorretora(nome: string): Corretora | null {
+  const n = nome.toLowerCase()
+  if (n.includes('genial')) return 'GENIAL'
+  if (n.includes('btg')) return 'BTG'
+  if (/(^|[^a-z])xp([^a-z]|$)/.test(n)) return 'XP'
+  return null
+}
+
+function CorretoraPicker({ value, onChange, disabled }: { value: Corretora; onChange: (c: Corretora) => void; disabled?: boolean }) {
+  return (
+    <div className="flex gap-2">
+      {CORRETORAS.map((c) => {
+        const active = c === value
+        return (
+          <button key={c} type="button" disabled={disabled} onClick={() => onChange(c)}
+            className="flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50"
+            style={active
+              ? { background: CORRETORA_COLOR[c], borderColor: CORRETORA_COLOR[c], color: '#fff' }
+              : { background: '#fff', borderColor: '#e5e7eb', color: '#374151' }}>
+            {CORRETORA_LABEL[c]}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ImportarContratosModal({ open, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState<ContratoRow[] | null>(null)
   const [nomeArquivo, setNomeArquivo] = useState('')
+  const [corretora, setCorretora] = useState<Corretora>('GENIAL')
   const [resultado, setResultado] = useState<{ ok: number } | null>(null)
   const [erro, setErro] = useState('')
 
@@ -121,6 +151,8 @@ export function ImportarContratosModal({ open, onClose }: Props) {
     setErro('')
     setLoading(true)
     setNomeArquivo(file.name)
+    const sugestao = sugerirCorretora(file.name)
+    if (sugestao) setCorretora(sugestao)
 
     try {
       const XLSX = await import('xlsx')
@@ -171,7 +203,7 @@ export function ImportarContratosModal({ open, onClose }: Props) {
     setLoading(true)
     setErro('')
     try {
-      const result = await importarContratos(nomeArquivo, preview)
+      const result = await importarContratos(nomeArquivo, corretora, preview)
       setResultado({ ok: result.ok })
     } catch (err: unknown) {
       setErro(err instanceof Error ? err.message : 'Erro ao importar.')
@@ -184,6 +216,7 @@ export function ImportarContratosModal({ open, onClose }: Props) {
     setResultado(null)
     setErro('')
     setNomeArquivo('')
+    setCorretora('GENIAL')
     if (inputRef.current) inputRef.current.value = ''
     onClose()
   }
@@ -208,7 +241,9 @@ export function ImportarContratosModal({ open, onClose }: Props) {
           <div className="space-y-4">
             <div className="flex items-center gap-3 bg-emerald-900/20 border border-emerald-700/30 rounded-lg px-4 py-3">
               <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-              <p className="text-sm text-emerald-300">{resultado.ok} linha(s) importada(s) com sucesso.</p>
+              <p className="text-sm text-emerald-300">
+                {resultado.ok} linha(s) importada(s) com sucesso para a {CORRETORA_LABEL[corretora]}.
+              </p>
             </div>
             <Button className="w-full" onClick={handleClose}>Fechar</Button>
           </div>
@@ -234,6 +269,12 @@ export function ImportarContratosModal({ open, onClose }: Props) {
                   </span>
                 </p>
               </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Corretora deste arquivo</p>
+              <CorretoraPicker value={corretora} onChange={setCorretora} disabled={loading} />
+              <p className="text-[11px] text-gray-400 mt-1">Todas as linhas entram como {CORRETORA_LABEL[corretora]}. Um arquivo por corretora.</p>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-gray-200 max-h-48">
@@ -273,14 +314,21 @@ export function ImportarContratosModal({ open, onClose }: Props) {
 
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setPreview(null)}>Voltar</Button>
-              <Button className="flex-1" loading={loading} onClick={handleImportar}>Confirmar Importação</Button>
+              <Button className="flex-1" loading={loading} onClick={handleImportar}>
+                Importar na {CORRETORA_LABEL[corretora]}
+              </Button>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Corretora do arquivo</p>
+              <CorretoraPicker value={corretora} onChange={setCorretora} disabled={loading} />
+            </div>
+
             <p className="text-sm text-gray-500">
-              Suba o arquivo Excel com os contratos do período. Os clientes serão vinculados automaticamente
-              por número de conta, CPF ou nome.
+              Suba o arquivo Excel com os contratos do período de <strong>uma</strong> corretora. Os clientes serão vinculados
+              automaticamente por número de conta, CPF ou nome, e a barra pelo cadastro de barras dessa corretora.
             </p>
 
             <div

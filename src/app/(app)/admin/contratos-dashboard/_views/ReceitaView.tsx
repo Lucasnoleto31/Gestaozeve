@@ -23,8 +23,8 @@ const CLASSE_LABEL: Record<string, string> = {
 }
 
 export function ReceitaView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
-  const d = useDashboardData(periodo, barra, excluir, {
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     receita: true, meta: true, kpis: true, curvaAbc: true, receitaBrutaLiquida: true,
   })
 
@@ -56,10 +56,9 @@ export function ReceitaView() {
       )}
 
       {/* 4 KPIs financeiros — sempre do escritório inteiro (a receita não tem filtro por barra) */}
-      {barra && (
+      {(corretora || barra || excluir) && (
         <p className="text-xs text-gray-500">
-          Os 4 cards abaixo são do <strong>escritório inteiro</strong> — a receita ainda não filtra por barra
-          (a curva ABC abaixo respeita o filtro).
+          Receita bruta e líquida seguem corretora, barra e exclusão de cliente. Projeção do mês e ritmo da meta valem para o escopo inteiro (escritório ou corretora).
         </p>
       )}
       <KpiRow>

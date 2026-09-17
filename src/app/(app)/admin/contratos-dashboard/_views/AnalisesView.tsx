@@ -38,8 +38,8 @@ const SCORE_CLASS: Record<string, { label: string; color: string }> = {
 }
 
 export function AnalisesView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
-  const d = useDashboardData(periodo, barra, excluir, {
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     kpis: true, riscoEscritorio: true,
     scoreCliente: true, clustersClientes: true, correlacoes: true,
   })

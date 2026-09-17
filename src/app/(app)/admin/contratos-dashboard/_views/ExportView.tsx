@@ -20,11 +20,11 @@ const FORMATOS: { id: Formato; label: string; icon: React.ElementType; w: number
 ]
 
 export function ExportView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
   const [formato, setFormato] = useState<Formato>('story')
   const [escala, setEscala] = useState(0.4)
 
-  const d = useDashboardData(periodo, barra, excluir, {
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     kpis: true, receita: true, meta: true, alertas: true,
   })
 
@@ -89,7 +89,7 @@ export function ExportView() {
           marginBottom: -fmt.h * (1 - escala),
         }}>
           <ExportCard formato={formato} kpis={d.kpis} receita={receitaExibida} meta={d.meta}
-            periodo={periodo} barra={barra} excluir={excluir} alertas={d.alertas.length} />
+            periodo={periodo} barra={barra} excluir={excluir} corretora={corretora} alertas={d.alertas.length} />
         </div>
       </div>
 
@@ -116,7 +116,7 @@ export function ExportView() {
 }
 
 function ExportCard({
-  formato, kpis, receita, meta, periodo, barra, excluir, alertas,
+  formato, kpis, receita, meta, periodo, barra, excluir, corretora, alertas,
 }: {
   formato: Formato
   kpis: DashboardKpis | null
@@ -125,6 +125,7 @@ function ExportCard({
   periodo: string
   barra: string | null
   excluir: string | null
+  corretora: string | null
   alertas: number
 }) {
   const isStory = formato === 'story'
@@ -169,7 +170,7 @@ function ExportCard({
           {isA4 && 'Dashboard de contratos — resumo do período'}
         </h1>
         <p style={{ fontSize: subSize, color: '#cbd5e1', marginTop: 12 }}>
-          {periodoLabel(periodo)}{barra ? ` · ${barra}` : ' · todas as barras'}{excluir ? ` · sem ${excluir}` : ''}
+          {periodoLabel(periodo)}{corretora ? ` · ${corretora}` : ' · todas as corretoras'}{barra ? ` · ${barra}` : ''}{excluir ? ` · sem ${excluir}` : ''}
           {kpis?.dataset_max ? ` · até ${fmtDataPt(kpis.dataset_max)}` : ''}
         </p>
       </div>

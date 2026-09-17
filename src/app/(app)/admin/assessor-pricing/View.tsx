@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from 'react'
 import { Save, Plus, Trash2, RefreshCw, Layers, X } from 'lucide-react'
 import type { PricingRow, SavePricingInput, ModeloZeragem, TierRow } from './actions'
+import { CORRETORAS, CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
+import { CorretoraBadge } from '@/app/(app)/admin/contratos-dashboard/ChartsCorretora'
 
 interface Actions {
   savePricing: (input: SavePricingInput) => Promise<{ ok: true; id: string }>
@@ -20,20 +22,30 @@ const MODELOS_ZERAGEM: { id: ModeloZeragem; label: string }[] = [
 
 const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 })
 
+const NOVA_LINHA: Partial<PricingRow> = {
+  corretora: 'GENIAL', barra_nome: '', numero: '',
+  preco_lote_futuros: 0, modelo_zeragem: 'tiered',
+  preco_zeragem: 0, pct_volume_bovespa: 0.05, observacao: '',
+}
+
+const ordenar = (arr: PricingRow[]) =>
+  [...arr].sort((a, b) =>
+    CORRETORAS.indexOf(a.corretora) - CORRETORAS.indexOf(b.corretora)
+    || a.barra_nome.localeCompare(b.barra_nome))
+
 export function PricingView({ initial, actions }: { initial: PricingRow[]; actions: Actions }) {
-  const [rows, setRows] = useState<PricingRow[]>(initial)
+  const [rows, setRows] = useState<PricingRow[]>(() => ordenar(initial))
   const [editing, setEditing] = useState<Record<string, Partial<PricingRow>>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [filtro, setFiltro] = useState<Corretora | ''>('')
   const [tierModalFor, setTierModalFor] = useState<PricingRow | null>(null)
-  const [newRow, setNewRow] = useState<Partial<PricingRow>>({
-    barra_nome: '', numero: '',
-    preco_lote_futuros: 0, modelo_zeragem: 'tiered',
-    preco_zeragem: 0, pct_volume_bovespa: 0.05, observacao: '',
-  })
+  const [newRow, setNewRow] = useState<Partial<PricingRow>>(NOVA_LINHA)
   const [, startTransition] = useTransition()
+
+  const visiveis = filtro ? rows.filter(r => r.corretora === filtro) : rows
 
   function patch(id: string, key: keyof PricingRow, value: PricingRow[keyof PricingRow]) {
     setEditing(s => ({ ...s, [id]: { ...s[id], [key]: value } }))
@@ -50,6 +62,7 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
     try {
       await actions.savePricing({
         id,
+        corretora: r.corretora,
         barra_nome: r.barra_nome,
         numero: r.numero,
         preco_lote_futuros: Number(r.preco_lote_futuros) || 0,
@@ -58,7 +71,7 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
         pct_volume_bovespa: Number(r.pct_volume_bovespa) || 0,
         observacao: r.observacao ?? null,
       })
-      setRows(arr => arr.map(x => x.id === id ? r : x))
+      setRows(arr => ordenar(arr.map(x => x.id === id ? r : x)))
       setEditing(s => { const n = { ...s }; delete n[id]; return n })
     } catch (err) {
       setErro((err as Error).message)
@@ -84,7 +97,9 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
     if (!newRow.barra_nome?.trim()) { setErro('Nome da barra é obrigatório'); return }
     startTransition(async () => {
       try {
+        const corretora = (newRow.corretora as Corretora) ?? 'GENIAL'
         const res = await actions.savePricing({
+          corretora,
           barra_nome: newRow.barra_nome!.trim(),
           numero: (newRow.numero as string | null) || null,
           preco_lote_futuros: Number(newRow.preco_lote_futuros) || 0,
@@ -95,6 +110,7 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
         })
         const created: PricingRow = {
           id: res.id, barra_id: null,
+          corretora,
           barra_nome: newRow.barra_nome!.trim(),
           numero: (newRow.numero as string | null) || null,
           preco_lote_futuros: Number(newRow.preco_lote_futuros) || 0,
@@ -104,9 +120,9 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
           observacao: (newRow.observacao as string | null) || null,
           ativo: true, updated_at: new Date().toISOString(),
         }
-        setRows(arr => [...arr, created].sort((a, b) => a.barra_nome.localeCompare(b.barra_nome)))
+        setRows(arr => ordenar([...arr, created]))
         setAdding(false)
-        setNewRow({ barra_nome: '', numero: '', preco_lote_futuros: 0, modelo_zeragem: 'tiered', preco_zeragem: 0, pct_volume_bovespa: 0.05, observacao: '' })
+        setNewRow(NOVA_LINHA)
       } catch (err) {
         setErro((err as Error).message)
       }
@@ -123,10 +139,24 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
       )}
 
       <div className="rounded-2xl p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Tarifas ativas ({rows.length})</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold mr-1">Tarifas ativas ({rows.length})</p>
+            <button onClick={() => setFiltro('')}
+              className="px-2.5 py-1 rounded-lg text-xs font-medium"
+              style={filtro === '' ? { background: 'var(--blue)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
+              Todas
+            </button>
+            {CORRETORAS.map(c => (
+              <button key={c} onClick={() => setFiltro(c)}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                style={filtro === c ? { background: 'var(--blue)', color: '#fff' } : { background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
+                {CORRETORA_LABEL[c]} ({rows.filter(r => r.corretora === c).length})
+              </button>
+            ))}
+          </div>
           {!adding && (
-            <button onClick={() => setAdding(true)}
+            <button onClick={() => { setNewRow({ ...NOVA_LINHA, corretora: filtro || 'GENIAL' }); setAdding(true) }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
               style={{ background: 'var(--blue)' }}>
               <Plus className="w-3.5 h-3.5" /> Nova barra
@@ -136,7 +166,14 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
 
         {adding && (
           <div className="mb-3 p-3 rounded-xl" style={{ background: 'var(--surface)', border: '1px dashed var(--border)' }}>
-            <div className="grid grid-cols-2 lg:grid-cols-7 gap-2 items-end">
+            <div className="grid grid-cols-2 lg:grid-cols-8 gap-2 items-end">
+              <Field label="Corretora">
+                <select className="w-full px-2 py-1 rounded text-sm" style={inputStyle}
+                  value={newRow.corretora ?? 'GENIAL'}
+                  onChange={e => setNewRow(s => ({ ...s, corretora: e.target.value as Corretora }))}>
+                  {CORRETORAS.map(c => <option key={c} value={c}>{CORRETORA_LABEL[c]}</option>)}
+                </select>
+              </Field>
               <Field label="Nome da barra" wide>
                 <input className="w-full px-2 py-1 rounded text-sm" style={inputStyle}
                   value={newRow.barra_nome ?? ''} onChange={e => setNewRow(s => ({ ...s, barra_nome: e.target.value }))} />
@@ -164,7 +201,7 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
                 <input type="number" step="0.001" className="w-full px-2 py-1 rounded text-sm tabular-nums" style={inputStyle}
                   value={newRow.pct_volume_bovespa ?? 0} onChange={e => setNewRow(s => ({ ...s, pct_volume_bovespa: Number(e.target.value) }))} />
               </Field>
-              <div className="flex gap-2">
+              <div className="flex gap-2 col-span-2 lg:col-span-8">
                 <button onClick={addNew} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white">
                   <Save className="w-3.5 h-3.5" /> Salvar
                 </button>
@@ -178,22 +215,34 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
           <table className="text-xs border-collapse min-w-max w-full">
             <thead style={{ background: 'var(--surface-2)' }}>
               <tr>
-                {['Barra', 'Nº', 'R$/lote', 'Modelo zeragem', 'R$/zeragem', '% Vol Bovespa', 'Faixas', 'Observação', ''].map((h, i) => (
+                {['Corretora', 'Barra', 'Nº', 'R$/lote', 'Modelo zeragem', 'R$/zeragem', '% Vol Bovespa', 'Faixas', 'Observação', ''].map((h, i) => (
                   <th key={i} className="px-3 py-2 font-semibold text-gray-500 border-r text-left"
                     style={{ borderColor: 'var(--border)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-6 text-center text-gray-400">Sem tarifas cadastradas. Clique em &quot;Nova barra&quot; pra adicionar.</td></tr>
+              {visiveis.length === 0 && (
+                <tr><td colSpan={10} className="px-4 py-6 text-center text-gray-400">
+                  {rows.length === 0 ? 'Sem tarifas cadastradas. Clique em "Nova barra" pra adicionar.' : 'Sem tarifas nesta corretora.'}
+                </td></tr>
               )}
-              {rows.map((orig, idx) => {
+              {visiveis.map((orig, idx) => {
                 const r = row(orig.id)
                 const dirty = !!editing[orig.id]
                 const bg = idx % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)'
                 return (
                   <tr key={orig.id} style={{ borderTop: '1px solid var(--border)', background: bg }}>
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <CorretoraBadge corretora={r.corretora} />
+                        <select className="px-1.5 py-1 rounded text-xs" style={inputStyle}
+                          value={r.corretora}
+                          onChange={e => patch(orig.id, 'corretora', e.target.value as Corretora)}>
+                          {CORRETORAS.map(c => <option key={c} value={c}>{CORRETORA_LABEL[c]}</option>)}
+                        </select>
+                      </div>
+                    </td>
                     <td className="px-3 py-1.5">
                       <input className="w-48 px-2 py-1 rounded text-sm" style={inputStyle}
                         value={r.barra_nome} onChange={e => patch(orig.id, 'barra_nome', e.target.value)} />
@@ -259,7 +308,8 @@ export function PricingView({ initial, actions }: { initial: PricingRow[]; actio
         </div>
 
         <p className="text-[11px] text-gray-400 mt-3">
-          As tarifas alimentam o cálculo de receita do dashboard. Faixas escalonadas (modelo &quot;tiered&quot;)
+          As tarifas alimentam o cálculo de receita do dashboard e são casadas por <strong>corretora + nome da barra</strong>:
+          a mesma barra pode ter tarifas diferentes na Genial, na XP e no BTG. Faixas escalonadas (modelo &quot;tiered&quot;)
           são aplicadas por <strong>volume diário de zeragem por cliente</strong>. Bovespa ainda não vira
           receita até integrarmos volume financeiro por cliente.
         </p>
@@ -354,7 +404,9 @@ function TiersModal({ pricing, listTiers, saveTiers, onClose }: {
         <header className="flex items-start justify-between gap-3 mb-4">
           <div>
             <p className="text-xs uppercase tracking-widest text-gray-400 font-semibold">Faixas de zeragem</p>
-            <h3 className="text-xl font-bold text-gray-900">{pricing.barra_nome}</h3>
+            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              {pricing.barra_nome} <CorretoraBadge corretora={pricing.corretora} size="md" />
+            </h3>
             <p className="text-xs text-gray-500 mt-0.5">A faixa é aplicada por volume zerado <strong>diário, por cliente</strong>.</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100">

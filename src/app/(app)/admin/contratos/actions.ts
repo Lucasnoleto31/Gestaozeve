@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getProfile } from '@/lib/auth/getProfile'
 import { revalidatePath } from 'next/cache'
+import { isCorretora, type Corretora } from '@/lib/corretoras'
 
 export interface ContratoRow {
   data: string
@@ -17,21 +18,25 @@ export interface ContratoRow {
   lotes_zerados: number
 }
 
-export async function importarContratos(nomeArquivo: string, rows: ContratoRow[]) {
+// Cada arquivo importado pertence a UMA corretora (escolhida no modal).
+// A corretora vai para a importação e para cada linha de contratos.
+export async function importarContratos(nomeArquivo: string, corretora: Corretora, rows: ContratoRow[]) {
   const profile = await getProfile()
   if (!profile || profile.role !== 'admin') throw new Error('Não autorizado')
+  if (!isCorretora(corretora)) throw new Error('Escolha a corretora do arquivo (Genial, XP ou BTG).')
 
   const supabase = createAdminClient()
 
   const [{ data: clientes }, { data: contas }, { data: barras }] = await Promise.all([
     supabase.from('clientes').select('id, nome, cpf').range(0, 49999),
     supabase.from('cliente_contas').select('cliente_id, numero_conta').range(0, 49999),
-    supabase.from('barras').select('nome, assessor_id, influenciador_id').range(0, 49999),
+    supabase.from('barras').select('nome, corretora, assessor_id, influenciador_id').range(0, 49999),
   ])
 
   const clientesByCpf = new Map<string, string>()
   const clientesByNome = new Map<string, string>()
   const contasByNumero = new Map<string, string>()
+  // Barras são de uma corretora só: a chave é (corretora, nome)
   const barraMap = new Map<string, { assessor_id: string | null; influenciador_id: string | null }>()
 
   for (const c of clientes ?? []) {
@@ -42,7 +47,8 @@ export async function importarContratos(nomeArquivo: string, rows: ContratoRow[]
     if (conta.numero_conta) contasByNumero.set(conta.numero_conta.trim(), conta.cliente_id)
   }
   for (const b of barras ?? []) {
-    barraMap.set(b.nome.toUpperCase().trim(), { assessor_id: b.assessor_id, influenciador_id: b.influenciador_id })
+    const corr = String(b.corretora ?? 'GENIAL').toUpperCase()
+    barraMap.set(`${corr}|${b.nome.toUpperCase().trim()}`, { assessor_id: b.assessor_id, influenciador_id: b.influenciador_id })
   }
 
   const totalLotesOperados = rows.reduce((s, r) => s + (r.lotes_operados || 0), 0)
@@ -52,6 +58,7 @@ export async function importarContratos(nomeArquivo: string, rows: ContratoRow[]
     .from('contratos_importacoes')
     .insert({
       nome_arquivo: nomeArquivo,
+      corretora,
       total_linhas: rows.length,
       total_lotes_operados: totalLotesOperados,
       total_lotes_zerados: totalLotesZerados,
@@ -76,15 +83,16 @@ export async function importarContratos(nomeArquivo: string, rows: ContratoRow[]
       clienteId = clientesByNome.get(row.cliente_nome?.toLowerCase().trim() ?? '') ?? null
     }
 
-    // Resolve assessor via barras
+    // Resolve assessor via barras da corretora do arquivo
     let assessorId: string | null = null
     if (row.assessor_nome) {
-      const barra = barraMap.get(row.assessor_nome.toUpperCase().trim())
+      const barra = barraMap.get(`${corretora}|${row.assessor_nome.toUpperCase().trim()}`)
       if (barra) assessorId = barra.assessor_id
     }
 
     return {
       importacao_id: importacao.id,
+      corretora,
       cliente_id: clienteId,
       assessor_id: assessorId,
       data: row.data || null,
@@ -130,6 +138,7 @@ export async function deletarImportacaoContrato(importacaoId: string) {
 
 export interface ContratoExportRow {
   data: string | null
+  corretora: string
   numero_conta: string | null
   cliente_nome: string | null
   ativo: string | null
@@ -150,7 +159,7 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
   while (true) {
     const { data, error } = await supabase
       .from('contratos')
-      .select('data, numero_conta, cliente_nome, ativo, lotes_operados, lotes_zerados, cliente:clientes(nome)')
+      .select('data, corretora, numero_conta, cliente_nome, ativo, lotes_operados, lotes_zerados, cliente:clientes(nome)')
       .order('data', { ascending: false })
       .range(from, from + PAGE - 1)
 
@@ -159,6 +168,7 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
 
     for (const c of data as Array<{
       data: string | null
+      corretora: string | null
       numero_conta: string | null
       cliente_nome: string | null
       ativo: string | null
@@ -169,6 +179,7 @@ export async function exportarTodosContratos(): Promise<ContratoExportRow[]> {
       const clienteRel = Array.isArray(c.cliente) ? c.cliente[0] : c.cliente
       all.push({
         data: c.data,
+        corretora: c.corretora ?? 'GENIAL',
         numero_conta: c.numero_conta,
         cliente_nome: clienteRel?.nome ?? c.cliente_nome,
         ativo: c.ativo,

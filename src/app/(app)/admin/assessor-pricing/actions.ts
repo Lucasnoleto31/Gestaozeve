@@ -3,12 +3,14 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/getProfile'
+import { isCorretora, type Corretora } from '@/lib/corretoras'
 
 export type ModeloZeragem = 'b2b' | 'fixo' | 'mesmo_operado' | 'tiered'
 
 export type PricingRow = {
   id: string
   barra_id: string | null
+  corretora: Corretora
   barra_nome: string
   numero: string | null
   preco_lote_futuros: number
@@ -40,11 +42,13 @@ export async function listPricing(): Promise<PricingRow[]> {
   const { data, error } = await supabase
     .from('assessor_pricing')
     .select('*')
+    .order('corretora', { ascending: true })
     .order('barra_nome', { ascending: true })
   if (error) throw new Error(error.message)
   return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
     id: String(r.id),
     barra_id: r.barra_id ? String(r.barra_id) : null,
+    corretora: isCorretora(r.corretora) ? r.corretora : 'GENIAL',
     barra_nome: String(r.barra_nome ?? ''),
     numero: r.numero ? String(r.numero) : null,
     preco_lote_futuros: Number(r.preco_lote_futuros ?? 0),
@@ -59,6 +63,7 @@ export async function listPricing(): Promise<PricingRow[]> {
 
 export type SavePricingInput = {
   id?: string
+  corretora: Corretora
   barra_nome: string
   numero: string | null
   preco_lote_futuros: number
@@ -70,7 +75,10 @@ export type SavePricingInput = {
 
 export async function savePricing(input: SavePricingInput): Promise<{ ok: true; id: string }> {
   const supabase = await adminOnly()
+  if (!isCorretora(input.corretora)) throw new Error('Corretora inválida')
   const payload = {
+    corretora: input.corretora,
+    clearing: input.corretora, // coluna antiga, mantida em sincronia
     barra_nome: input.barra_nome.trim(),
     numero: input.numero?.trim() || null,
     preco_lote_futuros: input.preco_lote_futuros,

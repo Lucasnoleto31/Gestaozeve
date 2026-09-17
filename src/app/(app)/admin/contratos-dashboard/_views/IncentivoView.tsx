@@ -60,8 +60,8 @@ function pivotIncentivo(rows: IncentivoMensalRow[]) {
 }
 
 export function IncentivoView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
-  const d = useDashboardData(periodo, barra, excluir, {
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     kpis: true, incentivo: true, incentivoClientes: true,
   })
 
@@ -98,7 +98,7 @@ export function IncentivoView() {
 
       <p className="text-xs text-gray-500">
         Pontos do cliente no mês = lotes girados × multiplicador do produto. O incentivo é pago por cliente
-        conforme a maior faixa de pontos atingida no mês. Esta aba usa o histórico completo (não segue o filtro de período).
+        conforme a maior faixa de pontos atingida no mês. Esta aba usa o histórico completo (não segue os filtros de período e corretora) e considera só os lotes da GENIAL, que é a corretora do programa.
         As contas do FABRICIO DA SILVA GONCALVES são somadas e pontuam como um cliente único.
       </p>
 

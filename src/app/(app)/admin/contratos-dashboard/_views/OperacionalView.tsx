@@ -13,8 +13,8 @@ import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { fmtNum, fmtDataPt } from '../_lib/utils'
 
 export function OperacionalView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
-  const d = useDashboardData(periodo, barra, excluir, {
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     kpis: true, diario: true, produtos: true,
   })
 
@@ -29,7 +29,7 @@ export function OperacionalView() {
   const [drillErro, setDrillErro] = useState(false)
   function abrirDrilldown(dia: string) {
     setDrillData(dia); setDrillRows([]); setDrillErro(false)
-    getDrilldownDia(dia, barra, excluir).then(setDrillRows).catch(() => setDrillErro(true))
+    getDrilldownDia(dia, barra, excluir, corretora).then(setDrillRows).catch(() => setDrillErro(true))
   }
 
   const totalOperado = d.produtos.reduce((acc, p) => acc + p.lotes_operados, 0)

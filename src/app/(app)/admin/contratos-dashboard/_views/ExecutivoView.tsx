@@ -10,9 +10,11 @@ import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
 import { Block } from '../_lib/Blocks'
 import { EvolucaoMensalChart, BlockSkeleton } from '../Charts'
+import { EvolucaoCorretoraChart, CorretoraBadge } from '../ChartsCorretora'
 import { fmtNum, fmtBRL, fmtBRL2 } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
-import type { RetencaoMensalRow, LotesPorPlataformaRow } from '../actions'
+import { CORRETORA_COLOR, CORRETORA_LABEL, isCorretora } from '@/lib/corretoras'
+import type { RetencaoMensalRow, LotesPorPlataformaRow, ResumoCorretoraRow, MetaAnual } from '../actions'
 
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -22,10 +24,11 @@ function labelMesAno(iso: string): string {
 }
 
 export function ExecutivoView() {
-  const { periodo, barra, excluir } = useDashboardFilters()
-  const d = useDashboardData(periodo, barra, excluir, {
+  const { periodo, barra, excluir, corretora } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, corretora, {
     kpis: true, receita: true, meta: true, evolucao: true,
     receitaBrutaLiquida: true, retencao: true, plataformas: true,
+    corretoras: true, evolucaoCorretora: true, metasCorretoras: true,
   })
 
   const shell = useShell()
@@ -39,8 +42,14 @@ export function ExecutivoView() {
     : null
 
   const exportHref = `/admin/contratos-dashboard/export?periodo=${periodo}`
+    + (corretora ? `&corretora=${corretora}` : '')
     + (barra ? `&barra=${encodeURIComponent(barra)}` : '')
     + (excluir ? `&excluir=${encodeURIComponent(excluir)}` : '')
+
+  const temMetaEscopo = !!d.meta && (d.meta.meta_receita > 0 || d.meta.meta_lotes > 0)
+  const metasCorr = d.metasCorretoras.filter(m => m.meta_receita > 0 || m.meta_lotes > 0)
+  const mostraMetas = temMetaEscopo || (!corretora && metasCorr.length > 0)
+  const escopoLabel = corretora ? CORRETORA_LABEL[corretora] : 'escritório'
 
   return (
     <div className="space-y-5">
@@ -52,10 +61,11 @@ export function ExecutivoView() {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {(barra || excluir) ? (
+        {(corretora || barra || excluir) ? (
           <p className="text-xs text-gray-500">
-            {excluir && <>Excluindo <strong className="text-gray-700">{excluir}</strong> dos lotes, clientes ativos, plataformas e retenção. </>}
-            Receita estimada, receita por barra e meta continuam do <strong className="text-gray-700">escritório inteiro</strong>.
+            {corretora && <>Mostrando só a <strong className="text-gray-700">{CORRETORA_LABEL[corretora]}</strong>. </>}
+            {excluir && <>Excluindo <strong className="text-gray-700">{excluir}</strong> de lotes, clientes, plataformas, retenção e receita. </>}
+            Projeção do mês e meta valem para o {escopoLabel} inteiro e não seguem barra nem exclusão.
           </p>
         ) : <span />}
         <Link href={exportHref}
@@ -66,7 +76,7 @@ export function ExecutivoView() {
         </Link>
       </div>
 
-      {/* 5 KPIs no topo — todos respeitam período + barra + exclusão */}
+      {/* 5 KPIs no topo — todos respeitam corretora + período + barra + exclusão */}
       <KpiRow cols={5}>
         <KpiCard icon={Activity} label="Volume operado"
           value={d.kpis ? fmtNum(d.kpis.volume_operados) : '—'}
@@ -86,16 +96,35 @@ export function ExecutivoView() {
           accent="#10b981" />
       </KpiRow>
 
+      {/* Lotes por corretora — Genial, XP e BTG lado a lado */}
+      <Block title="Lotes por corretora (período)"
+        subtitle="Genial, XP e BTG lado a lado: lotes, participação, zeragem, clientes por conta e receita líquida estimada pela tarifa de cada corretora. Segue período, barra e exclusão de cliente.">
+        {d.corretoras.length === 0
+          ? <p className="text-sm text-gray-400 py-4">
+              {d.isPending ? 'Carregando…' : 'Indisponível: rode o supabase-s13-corretoras.sql no SQL Editor do Supabase.'}
+            </p>
+          : <CorretorasCards rows={d.corretoras} selecionada={corretora} />}
+      </Block>
+
+      {!corretora && (
+        <Block title="Evolução mensal por corretora"
+          subtitle="Lotes operados por mês, empilhados por corretora. Últimos 12 meses · * = mês em andamento.">
+          {d.isPending && d.evolucaoCorretora.length === 0
+            ? <BlockSkeleton height={280} />
+            : <EvolucaoCorretoraChart data={d.evolucaoCorretora} />}
+        </Block>
+      )}
+
       {/* Lotes por plataforma */}
       <Block title="Lotes por plataforma (período)"
-        subtitle="Lotes operados e zerados em cada plataforma de negociação, com clientes distintos (por conta) e pregões. Segue período, barra e exclusão de cliente.">
+        subtitle="Lotes operados e zerados em cada plataforma de negociação, com clientes distintos (por conta) e pregões. Segue corretora, período, barra e exclusão de cliente.">
         {d.plataformas.length === 0
           ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados no período.'}</p>
           : <PlataformasTable rows={d.plataformas} />}
       </Block>
 
       {/* 1 gráfico principal */}
-      <Block title="Evolução mensal"
+      <Block title={`Evolução mensal${corretora ? ` · ${CORRETORA_LABEL[corretora]}` : ''}`}
         subtitle="Lotes operados (azul) e zerados (vermelho) lado a lado + clientes ativos (linha roxa, eixo direito). * = mês em andamento.">
         {d.isPending && d.evolucao.length === 0
           ? <BlockSkeleton height={280} />
@@ -112,7 +141,7 @@ export function ExecutivoView() {
 
       {/* Receita por barra */}
       <Block title="Receita estimada por barra (período)"
-        subtitle="Tarifa cadastrada em Tarifas × lotes WIN/WDO. Lotes de outros produtos aparecem no volume mas ainda não geram receita aqui.">
+        subtitle="Tarifa cadastrada em Tarifas × lotes WIN/WDO, com a tarifa da corretora de cada barra. Lotes de outros produtos aparecem no volume mas ainda não geram receita aqui.">
         {d.receitaPorAss.length === 0
           ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
           : (
@@ -120,8 +149,8 @@ export function ExecutivoView() {
               <table className="text-xs border-collapse min-w-max w-full">
                 <thead style={{ background: 'var(--surface-2)' }}>
                   <tr>
-                    {['#', 'Barra', 'Nº', 'Lotes op.', 'Lotes ze.', '% zer.', 'Receita'].map((h, i) => (
-                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 2 ? 'text-left' : 'text-right'}`}>{h}</th>
+                    {['#', 'Barra', 'Corretora', 'Nº', 'Lotes op.', 'Lotes ze.', '% zer.', 'Receita'].map((h, i) => (
+                      <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i <= 3 ? 'text-left' : 'text-right'}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -129,11 +158,12 @@ export function ExecutivoView() {
                   {[...d.receitaPorAss].sort((a, b) => b.receita_total - a.receita_total).map((r, i) => {
                     const pctZe = r.lotes_operados > 0 ? (r.lotes_zerados / r.lotes_operados) * 100 : 0
                     return (
-                      <tr key={r.barra_nome + i}
+                      <tr key={`${r.corretora}|${r.barra_nome}|${i}`}
                         style={{ borderTop: '1px solid var(--border)',
                                  background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
                         <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{i + 1}</td>
                         <td className="px-3 py-1.5 font-medium text-gray-700">{r.barra_nome}</td>
+                        <td className="px-3 py-1.5"><CorretoraBadge corretora={r.corretora} /></td>
                         <td className="px-3 py-1.5 text-gray-500 tabular-nums">{r.numero ?? '—'}</td>
                         <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.lotes_operados)}</td>
                         <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(r.lotes_zerados)}</td>
@@ -148,18 +178,28 @@ export function ExecutivoView() {
           )}
       </Block>
 
-      {/* Meta — progresso compacto (mostra se qualquer meta estiver cadastrada) */}
-      {d.meta && (d.meta.meta_receita > 0 || d.meta.meta_lotes > 0) && (
-        <Block title={`Meta ${d.meta.ano}`}
-          subtitle={`${d.meta.dias_corridos_restantes} dias úteis restantes · ritmo necessário: ${fmtBRL(d.meta.ritmo_receita_necessario)}/pregão`}>
+      {/* Meta — escopo (escritório ou corretora) + metas de cada corretora */}
+      {mostraMetas && (
+        <Block title={`Meta ${d.meta?.ano ?? metasCorr[0]?.ano ?? ''} · ${escopoLabel}`}
+          subtitle={d.meta
+            ? `${d.meta.dias_corridos_restantes} dias úteis restantes · ritmo necessário: ${fmtBRL(d.meta.ritmo_receita_necessario)}/pregão`
+            : undefined}>
           <div className="space-y-3">
-            {d.meta.meta_lotes > 0 && (
+            {temMetaEscopo && d.meta && d.meta.meta_lotes > 0 && (
               <MetaProgresso label="Lotes operados" pct={d.meta.pct_lotes}
                 realizado={d.meta.realizado_lotes} meta={d.meta.meta_lotes} sufixo=" lotes" />
             )}
-            {d.meta.meta_receita > 0 && (
+            {temMetaEscopo && d.meta && d.meta.meta_receita > 0 && (
               <MetaProgresso label="Receita" pct={d.meta.pct_receita}
                 realizado={d.meta.realizado_receita} meta={d.meta.meta_receita} isCurrency />
+            )}
+            {!temMetaEscopo && (
+              <p className="text-xs text-gray-500">Sem meta cadastrada para o escritório inteiro. Metas por corretora abaixo.</p>
+            )}
+            {!corretora && metasCorr.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                {metasCorr.map(m => <MetaCorretoraMini key={m.corretora} meta={m} />)}
+              </div>
             )}
           </div>
         </Block>
@@ -171,6 +211,73 @@ export function ExecutivoView() {
           <Layers className="w-3 h-3 animate-pulse" /> atualizando…
         </div>
       )}
+    </div>
+  )
+}
+
+// Cards Genial / XP / BTG lado a lado
+function CorretorasCards({ rows, selecionada }: { rows: ResumoCorretoraRow[]; selecionada: string | null }) {
+  const totalOp = rows.reduce((s, r) => s + r.lotes_operados, 0)
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {rows.map(r => {
+        const c = isCorretora(r.corretora) ? r.corretora : null
+        const color = c ? CORRETORA_COLOR[c] : '#64748b'
+        const share = totalOp > 0 ? (r.lotes_operados / totalOp) * 100 : 0
+        const pctZe = r.lotes_operados > 0 ? (r.lotes_zerados / r.lotes_operados) * 100 : 0
+        const ativa = selecionada === r.corretora
+        const apagada = selecionada != null && !ativa
+        return (
+          <div key={r.corretora} className="rounded-xl p-4"
+            style={{ background: 'var(--surface)', border: `1px solid ${ativa ? color : 'var(--border)'}`,
+                     borderLeft: `4px solid ${color}`, opacity: apagada ? 0.55 : 1 }}>
+            <div className="flex items-center justify-between">
+              <CorretoraBadge corretora={r.corretora} size="md" />
+              <span className="text-xs text-gray-500 tabular-nums">{share.toFixed(1)}% do total</span>
+            </div>
+            <p className="text-2xl font-bold tabular-nums mt-2 text-gray-800">{fmtNum(r.lotes_operados)}</p>
+            <p className="text-xs text-gray-500">lotes operados</p>
+            <div className="w-full h-1.5 rounded-full overflow-hidden mt-2" style={{ background: 'rgba(148,163,184,0.2)' }}>
+              <div className="h-full" style={{ width: `${Math.min(100, share)}%`, background: color }} />
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-3 text-xs">
+              <span className="text-gray-500">Zerados</span>
+              <span className="text-right tabular-nums text-gray-700">{fmtNum(r.lotes_zerados)} <span className="text-gray-400">({pctZe.toFixed(1)}%)</span></span>
+              <span className="text-gray-500">Clientes</span>
+              <span className="text-right tabular-nums text-gray-700">{fmtNum(r.num_clientes)}</span>
+              <span className="text-gray-500">Pregões</span>
+              <span className="text-right tabular-nums text-gray-700">{fmtNum(r.num_dias)}</span>
+              <span className="text-gray-500">Receita líquida</span>
+              <span className="text-right tabular-nums font-semibold text-emerald-700">{fmtBRL2(r.receita_liquida)}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Meta de uma corretora em formato compacto
+function MetaCorretoraMini({ meta }: { meta: MetaAnual }) {
+  const c = isCorretora(meta.corretora) ? meta.corretora : null
+  const color = c ? CORRETORA_COLOR[c] : '#64748b'
+  const linha = (label: string, pct: number, realizado: string, alvo: string) => (
+    <div className="mt-2">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-gray-600">{label}</span>
+        <span className="tabular-nums font-semibold" style={{ color }}>{pct.toFixed(1)}%</span>
+      </div>
+      <div className="w-full h-1.5 rounded-full overflow-hidden mt-1" style={{ background: 'rgba(148,163,184,0.2)' }}>
+        <div className="h-full" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
+      </div>
+      <p className="text-[10px] text-gray-400 mt-0.5 tabular-nums">{realizado} de {alvo}</p>
+    </div>
+  )
+  return (
+    <div className="rounded-xl p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <CorretoraBadge corretora={meta.corretora} size="md" />
+      {meta.meta_lotes > 0 && linha('Lotes', meta.pct_lotes, fmtNum(meta.realizado_lotes), fmtNum(meta.meta_lotes))}
+      {meta.meta_receita > 0 && linha('Receita', meta.pct_receita, fmtBRL(meta.realizado_receita), fmtBRL(meta.meta_receita))}
     </div>
   )
 }

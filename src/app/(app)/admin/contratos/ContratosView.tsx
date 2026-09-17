@@ -10,6 +10,8 @@ import {
 } from 'recharts'
 import { ImportarContratosModal } from './ImportarContratosModal'
 import { deletarImportacaoContrato, exportarTodosContratos } from './actions'
+import { CORRETORAS, CORRETORA_LABEL, labelCorretora } from '@/lib/corretoras'
+import { CorretoraBadge } from '@/app/(app)/admin/contratos-dashboard/ChartsCorretora'
 
 interface Resumo {
   total_operados: number
@@ -42,6 +44,7 @@ interface Contrato {
   assessor_nome: string | null
   ativo: string | null
   plataforma: string | null
+  corretora: string
   lotes_operados: number
   lotes_zerados: number
   cliente?: { id: string; nome: string } | null
@@ -50,6 +53,7 @@ interface Contrato {
 interface Importacao {
   id: string
   nome_arquivo: string
+  corretora: string
   total_linhas: number
   total_lotes_operados: number
   total_lotes_zerados: number
@@ -101,6 +105,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
   const [filtroPeriodoInicio, setFiltroPeriodoInicio] = useState('')
   const [filtroPeriodoFim, setFiltroPeriodoFim] = useState('')
   const [filtroPlataforma, setFiltroPlataforma] = useState('')
+  const [filtroCorretora, setFiltroCorretora] = useState('')
 
   const assessores = useMemo(() => {
     const set = new Set(contratos.map((c) => c.assessor_nome).filter(Boolean))
@@ -126,7 +131,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
     return Array.from(map.keys()).sort()
   }, [contratos])
 
-  const temFiltro = filtroCliente || filtroAssessor || filtroAtivo || filtroPeriodoInicio || filtroPeriodoFim || filtroPlataforma
+  const temFiltro = filtroCliente || filtroAssessor || filtroAtivo || filtroPeriodoInicio || filtroPeriodoFim || filtroPlataforma || filtroCorretora
 
   const contratosFiltrados = useMemo(() => {
     return contratos.filter((c) => {
@@ -137,11 +142,12 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
       if (filtroAssessor && c.assessor_nome !== filtroAssessor) return false
       if (filtroAtivo && c.ativo !== filtroAtivo) return false
       if (filtroPlataforma && c.plataforma !== filtroPlataforma) return false
+      if (filtroCorretora && c.corretora !== filtroCorretora) return false
       if (filtroPeriodoInicio && c.data && c.data < filtroPeriodoInicio + '-01') return false
       if (filtroPeriodoFim && c.data && c.data > filtroPeriodoFim + '-31') return false
       return true
     })
-  }, [contratos, filtroCliente, filtroAssessor, filtroAtivo, filtroPlataforma, filtroPeriodoInicio, filtroPeriodoFim])
+  }, [contratos, filtroCliente, filtroAssessor, filtroAtivo, filtroPlataforma, filtroCorretora, filtroPeriodoInicio, filtroPeriodoFim])
 
   const totalOperados = Number(resumo.total_operados ?? 0)
   const totalZerados = Number(resumo.total_zerados ?? 0)
@@ -181,6 +187,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
     setFiltroPeriodoInicio('')
     setFiltroPeriodoFim('')
     setFiltroPlataforma('')
+    setFiltroCorretora('')
   }
 
   async function handleDeletar(id: string) {
@@ -201,6 +208,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
         Data: r.data
           ? new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
           : '',
+        Corretora: labelCorretora(r.corretora),
         'Número Conta': r.numero_conta ?? '',
         Cliente: r.cliente_nome ?? '',
         Ativo: r.ativo ?? '',
@@ -209,7 +217,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
       }))
 
       const ws = XLSX.utils.json_to_sheet(dataFormatada)
-      ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 40 }, { wch: 14 }, { wch: 16 }, { wch: 16 }]
+      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 40 }, { wch: 14 }, { wch: 16 }, { wch: 16 }]
 
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Contratos')
@@ -325,6 +333,10 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
         <div className="px-4 py-3 border-b border-gray-200 flex flex-wrap items-center gap-3">
           <h3 className="text-sm font-semibold text-gray-900">Lançamentos</h3>
 
+          <select value={filtroCorretora} onChange={(e) => setFiltroCorretora(e.target.value)} className={selectClass}>
+            <option value="">Todas corretoras</option>
+            {CORRETORAS.map((c) => <option key={c} value={c}>{CORRETORA_LABEL[c]}</option>)}
+          </select>
           <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} className={selectClass}>
             <option value="">Todos clientes</option>
             {clientes.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -359,6 +371,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
             <thead>
               <tr className="bg-gray-100">
                 <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Data</th>
+                <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Corretora</th>
                 <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Nº Conta</th>
                 <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">CPF/CNPJ</th>
                 <th className="px-4 py-3 text-left text-xs text-gray-500 font-medium">Cliente</th>
@@ -375,6 +388,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {c.data ? new Date(c.data + 'T12:00:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '-'}
                   </td>
+                  <td className="px-4 py-3"><CorretoraBadge corretora={c.corretora} /></td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{c.numero_conta ?? '-'}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{c.cpf ?? c.cnpj ?? '-'}</td>
                   <td className="px-4 py-3 text-gray-700 text-xs font-medium truncate max-w-[150px]">
@@ -395,14 +409,14 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
               ))}
               {contratosFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">
+                  <td colSpan={10} className="px-4 py-10 text-center text-sm text-gray-400">
                     Nenhum contrato encontrado.
                   </td>
                 </tr>
               )}
               {contratosFiltrados.length > 100 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-3 text-center text-xs text-gray-400">
+                  <td colSpan={10} className="px-4 py-3 text-center text-xs text-gray-400">
                     Exibindo 100 de {contratosFiltrados.length}. Use os filtros para refinar.
                   </td>
                 </tr>
@@ -420,7 +434,7 @@ export function ContratosView({ resumo, porMes, porAssessor, porCliente, contrat
             {importacoes.map((imp) => (
               <div key={imp.id} className="flex items-center justify-between py-2.5 border-b border-gray-200 last:border-0">
                 <div>
-                  <p className="text-sm text-gray-700">{imp.nome_arquivo}</p>
+                  <p className="text-sm text-gray-700 flex items-center gap-2">{imp.nome_arquivo}<CorretoraBadge corretora={imp.corretora} /></p>
                   <p className="text-xs text-gray-500">
                     {imp.total_linhas} linhas ·{' '}
                     <span className="text-blue-600">{formatNum(imp.total_lotes_operados)} operados</span>

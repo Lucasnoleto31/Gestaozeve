@@ -2,27 +2,14 @@ import { Role } from '@/types'
 import {
   LayoutDashboard,
   Settings,
-  UserCircle,
-  Link2,
-  UserCheck,
-  Monitor,
-  ShieldAlert,
-  BarChart2,
   FileStack,
   FileDown,
 } from 'lucide-react'
 
 export const ROUTE_PERMISSIONS: Record<string, Role[]> = {
   '/dashboard': ['admin', 'vendedor', 'influenciador'],
-  '/clientes': ['admin', 'vendedor'],
-  '/influenciadores': ['admin', 'vendedor'],
-  '/plataformas': ['admin', 'vendedor'],
-  '/retencao': ['admin', 'vendedor'],
-  '/influenciador': ['influenciador'],
   '/admin': ['admin'],
   '/admin/usuarios': ['admin'],
-  '/admin/influenciadores': ['admin'],
-  '/admin/receitas': ['admin'],
   '/admin/contratos': ['admin'],
   '/admin/relatorios': ['admin'],
 }
@@ -40,45 +27,9 @@ export const NAV_ITEMS: {
     roles: ['admin', 'vendedor', 'influenciador'],
   },
   {
-    label: 'Clientes',
-    href: '/clientes',
-    icon: UserCheck,
-    roles: ['admin', 'vendedor'],
-  },
-  {
-    label: 'Influenciadores',
-    href: '/influenciadores',
-    icon: Link2,
-    roles: ['admin', 'vendedor'],
-  },
-  {
-    label: 'Plataformas',
-    href: '/plataformas',
-    icon: Monitor,
-    roles: ['admin', 'vendedor'],
-  },
-  {
-    label: 'Retenção',
-    href: '/retencao',
-    icon: ShieldAlert,
-    roles: ['admin', 'vendedor'],
-  },
-  {
-    label: 'Meu Painel',
-    href: '/influenciador',
-    icon: UserCircle,
-    roles: ['influenciador'],
-  },
-  {
     label: 'Usuários',
     href: '/admin/usuarios',
     icon: Settings,
-    roles: ['admin'],
-  },
-  {
-    label: 'Receitas',
-    href: '/admin/receitas',
-    icon: BarChart2,
     roles: ['admin'],
   },
   {

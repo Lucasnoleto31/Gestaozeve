@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { Printer, Smartphone, Square, FileText } from 'lucide-react'
 import { useDashboardFilters } from '../_lib/useDashboardFilters'
 import { useDashboardData } from '../_lib/useDashboardData'
-import { ACTIONS } from '../_lib/dashboardActions'
 import { fmtNum, fmtBRL2, fmtDataPt } from '../_lib/utils'
 import type { DashboardKpis, MetaAnual } from '../actions'
 
@@ -21,11 +20,11 @@ const FORMATOS: { id: Formato; label: string; icon: React.ElementType; w: number
 ]
 
 export function ExportView() {
-  const { periodo, barra } = useDashboardFilters()
+  const { periodo, barra, excluir } = useDashboardFilters()
   const [formato, setFormato] = useState<Formato>('story')
   const [escala, setEscala] = useState(0.4)
 
-  const d = useDashboardData(ACTIONS, periodo, barra, {
+  const d = useDashboardData(periodo, barra, excluir, {
     kpis: true, receita: true, meta: true, alertas: true,
   })
 
@@ -90,7 +89,7 @@ export function ExportView() {
           marginBottom: -fmt.h * (1 - escala),
         }}>
           <ExportCard formato={formato} kpis={d.kpis} receita={receitaExibida} meta={d.meta}
-            periodo={periodo} barra={barra} alertas={d.alertas.length} />
+            periodo={periodo} barra={barra} excluir={excluir} alertas={d.alertas.length} />
         </div>
       </div>
 
@@ -117,7 +116,7 @@ export function ExportView() {
 }
 
 function ExportCard({
-  formato, kpis, receita, meta, periodo, barra, alertas,
+  formato, kpis, receita, meta, periodo, barra, excluir, alertas,
 }: {
   formato: Formato
   kpis: DashboardKpis | null
@@ -125,6 +124,7 @@ function ExportCard({
   meta: MetaAnual | null
   periodo: string
   barra: string | null
+  excluir: string | null
   alertas: number
 }) {
   const isStory = formato === 'story'
@@ -169,7 +169,7 @@ function ExportCard({
           {isA4 && 'Dashboard de contratos — resumo do período'}
         </h1>
         <p style={{ fontSize: subSize, color: '#cbd5e1', marginTop: 12 }}>
-          {periodoLabel(periodo)}{barra ? ` · ${barra}` : ' · todas as barras'}
+          {periodoLabel(periodo)}{barra ? ` · ${barra}` : ' · todas as barras'}{excluir ? ` · sem ${excluir}` : ''}
           {kpis?.dataset_max ? ` · até ${fmtDataPt(kpis.dataset_max)}` : ''}
         </p>
       </div>

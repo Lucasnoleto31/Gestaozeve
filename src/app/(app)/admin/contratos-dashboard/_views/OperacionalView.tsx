@@ -9,13 +9,12 @@ import { WinVsWdoBlock, DrilldownModal, Block } from '../_lib/Blocks'
 import { BlockSkeleton } from '../Charts'
 import type { DrilldownRow } from '../actions'
 import { getDrilldownDia } from '../actions'
-import { ACTIONS } from '../_lib/dashboardActions'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { fmtNum, fmtDataPt } from '../_lib/utils'
 
 export function OperacionalView() {
-  const { periodo, barra } = useDashboardFilters()
-  const d = useDashboardData(ACTIONS, periodo, barra, {
+  const { periodo, barra, excluir } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, {
     kpis: true, diario: true, produtos: true,
   })
 
@@ -30,7 +29,7 @@ export function OperacionalView() {
   const [drillErro, setDrillErro] = useState(false)
   function abrirDrilldown(dia: string) {
     setDrillData(dia); setDrillRows([]); setDrillErro(false)
-    getDrilldownDia(dia, barra).then(setDrillRows).catch(() => setDrillErro(true))
+    getDrilldownDia(dia, barra, excluir).then(setDrillRows).catch(() => setDrillErro(true))
   }
 
   const totalOperado = d.produtos.reduce((acc, p) => acc + p.lotes_operados, 0)

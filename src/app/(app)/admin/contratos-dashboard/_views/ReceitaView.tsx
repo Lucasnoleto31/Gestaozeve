@@ -11,7 +11,6 @@ import { useDashboardData } from '../_lib/useDashboardData'
 import { Block } from '../_lib/Blocks'
 import { fmtBRL, fmtBRL2 } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
-import { ACTIONS } from '../_lib/dashboardActions'
 
 const CLASSE_COLOR: Record<string, string> = {
   A: '#10b981', B: '#1764f4', C: '#f59e0b', D: '#94a3b8',
@@ -24,8 +23,8 @@ const CLASSE_LABEL: Record<string, string> = {
 }
 
 export function ReceitaView() {
-  const { periodo, barra } = useDashboardFilters()
-  const d = useDashboardData(ACTIONS, periodo, barra, {
+  const { periodo, barra, excluir } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, {
     receita: true, meta: true, kpis: true, curvaAbc: true, receitaBrutaLiquida: true,
   })
 
@@ -105,7 +104,7 @@ export function ReceitaView() {
 
       {/* Tabela 1: ABC top 30 com classe colorida */}
       <Block title="Clientes por classe ABC"
-        subtitle={`${abcAgg.map(a => `${a.classe}: ${a.num}`).join(' · ')}. Clique no cliente pra abrir o perfil.`}>
+        subtitle={`${abcAgg.map(a => `${a.classe}: ${a.num}`).join(' · ')}.`}>
         {d.abc.length === 0
           ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
           : (
@@ -123,8 +122,6 @@ export function ReceitaView() {
                     const color = CLASSE_COLOR[r.classe]
                     return (
                       <tr key={`${r.cliente_id ?? r.cliente_nome}-${r.rank}`}
-                        onClick={() => { if (r.cliente_id) window.location.href = `/clientes/${r.cliente_id}` }}
-                        className={r.cliente_id ? 'cursor-pointer hover:bg-blue-50' : ''}
                         style={{ borderTop: '1px solid var(--border)',
                                  background: r.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
                         <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{r.rank}</td>

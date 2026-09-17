@@ -12,13 +12,12 @@ import { useDashboardData } from '../_lib/useDashboardData'
 import { Block } from '../_lib/Blocks'
 import { fmtNum } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
-import { ACTIONS } from '../_lib/dashboardActions'
 import { holtWintersAdd } from '../_lib/holtWinters'
 import { getInsightsIA, type InsightsResposta } from '../actions'
 
 export function ForecastView() {
-  const { periodo, barra } = useDashboardFilters()
-  const d = useDashboardData(ACTIONS, periodo, barra, {
+  const { periodo, barra, excluir } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, {
     acuracidade: true, kpis: true, evolucao: true,
     receita: true, meta: true, alertas: true, topClientes: true, produtos: true,
   })

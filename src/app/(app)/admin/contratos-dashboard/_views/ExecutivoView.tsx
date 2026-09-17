@@ -12,8 +12,7 @@ import { Block } from '../_lib/Blocks'
 import { EvolucaoMensalChart, BlockSkeleton } from '../Charts'
 import { fmtNum, fmtBRL, fmtBRL2 } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
-import { ACTIONS } from '../_lib/dashboardActions'
-import type { RetencaoMensalRow } from '../actions'
+import type { RetencaoMensalRow, LotesPorPlataformaRow } from '../actions'
 
 const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -23,10 +22,10 @@ function labelMesAno(iso: string): string {
 }
 
 export function ExecutivoView() {
-  const { periodo, barra } = useDashboardFilters()
-  const d = useDashboardData(ACTIONS, periodo, barra, {
+  const { periodo, barra, excluir } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, {
     kpis: true, receita: true, meta: true, evolucao: true,
-    receitaBrutaLiquida: true, retencao: true,
+    receitaBrutaLiquida: true, retencao: true, plataformas: true,
   })
 
   const shell = useShell()
@@ -39,6 +38,10 @@ export function ExecutivoView() {
     ? (d.kpis.volume_zerados / d.kpis.volume_operados) * 100
     : null
 
+  const exportHref = `/admin/contratos-dashboard/export?periodo=${periodo}`
+    + (barra ? `&barra=${encodeURIComponent(barra)}` : '')
+    + (excluir ? `&excluir=${encodeURIComponent(excluir)}` : '')
+
   return (
     <div className="space-y-5">
       {d.erro && (
@@ -48,8 +51,14 @@ export function ExecutivoView() {
         </div>
       )}
 
-      <div className="flex justify-end">
-        <Link href={`/admin/contratos-dashboard/export?periodo=${periodo}${barra ? `&barra=${encodeURIComponent(barra)}` : ''}`}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {(barra || excluir) ? (
+          <p className="text-xs text-gray-500">
+            {excluir && <>Excluindo <strong className="text-gray-700">{excluir}</strong> dos lotes, clientes ativos, plataformas e retenção. </>}
+            Receita estimada, receita por barra e meta continuam do <strong className="text-gray-700">escritório inteiro</strong>.
+          </p>
+        ) : <span />}
+        <Link href={exportHref}
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold"
           style={{ background: 'var(--surface)', color: 'var(--ink)', border: '1px solid var(--border)' }}>
           <Download className="w-3.5 h-3.5" />
@@ -57,7 +66,7 @@ export function ExecutivoView() {
         </Link>
       </div>
 
-      {/* 5 KPIs no topo — todos respeitam período + barra */}
+      {/* 5 KPIs no topo — todos respeitam período + barra + exclusão */}
       <KpiRow cols={5}>
         <KpiCard icon={Activity} label="Volume operado"
           value={d.kpis ? fmtNum(d.kpis.volume_operados) : '—'}
@@ -76,6 +85,14 @@ export function ExecutivoView() {
           sub={d.receitaBL ? `líquida · bruta ${fmtBRL(d.receitaBL.receita_bruta)} · só WIN/WDO` : 'só WIN/WDO'}
           accent="#10b981" />
       </KpiRow>
+
+      {/* Lotes por plataforma */}
+      <Block title="Lotes por plataforma (período)"
+        subtitle="Lotes operados e zerados em cada plataforma de negociação, com clientes distintos (por conta) e pregões. Segue período, barra e exclusão de cliente.">
+        {d.plataformas.length === 0
+          ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados no período.'}</p>
+          : <PlataformasTable rows={d.plataformas} />}
+      </Block>
 
       {/* 1 gráfico principal */}
       <Block title="Evolução mensal"
@@ -154,6 +171,60 @@ export function ExecutivoView() {
           <Layers className="w-3 h-3 animate-pulse" /> atualizando…
         </div>
       )}
+    </div>
+  )
+}
+
+// Tabela de lotes por plataforma com barra de participação e linha de total
+function PlataformasTable({ rows }: { rows: LotesPorPlataformaRow[] }) {
+  const totalOp = rows.reduce((s, r) => s + r.lotes_operados, 0)
+  const totalZe = rows.reduce((s, r) => s + r.lotes_zerados, 0)
+  return (
+    <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+      <table className="text-xs border-collapse min-w-max w-full">
+        <thead style={{ background: 'var(--surface-2)' }}>
+          <tr>
+            {['Plataforma', 'Lotes op.', '% do total', 'Lotes ze.', '% zer.', 'Clientes', 'Pregões'].map((h, i) => (
+              <th key={i} className={`px-3 py-2 font-semibold text-gray-500 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const pctTotal = totalOp > 0 ? (r.lotes_operados / totalOp) * 100 : 0
+            const pctZe = r.lotes_operados > 0 ? (r.lotes_zerados / r.lotes_operados) * 100 : 0
+            return (
+              <tr key={r.plataforma}
+                style={{ borderTop: '1px solid var(--border)',
+                         background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)' }}>
+                <td className="px-3 py-1.5 font-semibold text-gray-700">{r.plataforma}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(r.lotes_operados)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">
+                  <span className="inline-flex items-center justify-end gap-2">
+                    <span className="h-1.5 rounded-full"
+                      style={{ width: `${Math.max(2, Math.round(pctTotal * 0.8))}px`, background: '#1764f4', opacity: 0.7 }} />
+                    {pctTotal.toFixed(1)}%
+                  </span>
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(r.lotes_zerados)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.num_clientes)}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{fmtNum(r.num_dias)}</td>
+              </tr>
+            )
+          })}
+          <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
+            <td className="px-3 py-2 font-bold text-gray-800">Total</td>
+            <td className="px-3 py-2 text-right tabular-nums font-bold text-gray-800">{fmtNum(totalOp)}</td>
+            <td className="px-3 py-2 text-right tabular-nums text-gray-500">100%</td>
+            <td className="px-3 py-2 text-right tabular-nums font-bold text-gray-700">{fmtNum(totalZe)}</td>
+            <td className="px-3 py-2 text-right tabular-nums font-semibold">
+              {totalOp > 0 ? `${((totalZe / totalOp) * 100).toFixed(1)}%` : '—'}
+            </td>
+            <td className="px-3 py-2" colSpan={2} />
+          </tr>
+        </tbody>
+      </table>
     </div>
   )
 }

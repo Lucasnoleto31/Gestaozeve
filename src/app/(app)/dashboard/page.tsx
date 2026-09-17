@@ -1,17 +1,16 @@
-import { getProfile } from '@/lib/auth/getProfile'
-import { createClient } from '@/lib/supabase/server'
-import { Header } from '@/components/layout/Header'
-import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
-import { redirect } from 'next/navigation'
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
-import { formatDate, formatCurrency } from '@/lib/utils'
-import { CarteiraPie } from '@/components/charts/DashboardCharts'
-import {
-  Users, TrendingUp, Target, BarChart2, AlertTriangle,
-  CheckCircle, Clock, ArrowRight, Zap, Activity,
-  TrendingDown, Minus, Calendar,
-} from 'lucide-react'
+import { redirect } from 'next/navigation'
+import { getProfile } from '@/lib/auth/getProfile'
+import { Header } from '@/components/layout/Header'
+import { HeroBanner, BannerKpi } from '@/components/layout/HeroBanner'
+import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
+import { EvolucaoMensalChart } from '@/app/(app)/admin/contratos-dashboard/Charts'
+import { getResumoContratos, type ResumoContratos } from '@/app/(app)/admin/contratos-dashboard/actions'
+import { fmtNum, fmtBRL, fmtBRL2, fmtDataPt } from '@/app/(app)/admin/contratos-dashboard/_lib/utils'
+import { formatDateTime } from '@/lib/utils'
+import { ArrowRight, BarChart2, Upload, Target, FileStack, Layers, Monitor, Users } from 'lucide-react'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -22,121 +21,26 @@ function getSaudacao() {
   return 'Bom dia'
 }
 
-const classificacaoConfig = {
-  saudavel: { label: 'Saudável',   variant: 'success'  as const, dot: 'bg-emerald-500' },
-  atencao:  { label: 'Em atenção', variant: 'warning'  as const, dot: 'bg-amber-500'   },
-  risco:    { label: 'Em risco',   variant: 'danger'   as const, dot: 'bg-red-500'     },
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+
+function labelMes(iso: string): string {
+  const m = parseInt(iso.slice(5, 7), 10)
+  return `${MESES[m - 1] ?? iso.slice(5, 7)} de ${iso.slice(0, 4)}`
 }
 
-const tendenciaIcon = {
-  subindo: TrendingUp,
-  caindo:  TrendingDown,
-  estavel: Minus,
-}
+const heroButton = 'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition-all'
+const heroButtonStyle = { background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)' }
 
-const tendenciaColor = {
-  subindo: 'text-emerald-600',
-  caindo:  'text-red-500',
-  estavel: 'text-gray-400',
-}
+const th = (align: 'left' | 'right') =>
+  `px-3 py-2 font-semibold text-gray-500 ${align === 'left' ? 'text-left' : 'text-right'}`
+const rowStyle = (i: number) => ({
+  borderTop: '1px solid var(--border)',
+  background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface-2)',
+})
 
-const tipoAcaoConfig = {
-  tarefa:  { label: 'Tarefa',   icon: AlertTriangle, color: 'text-red-500'     },
-  nutricao:{ label: 'Nutrição', icon: Zap,           color: 'text-amber-500'   },
-  upsell:  { label: 'Upsell',   icon: TrendingUp,    color: 'text-emerald-600' },
-}
-
-// ── influenciador stats ────────────────────────────────────────────────────
-
-async function getInfluenciadorStats(userId: string) {
-  const supabase = await createClient()
-  const { data: influenciador } = await supabase
-    .from('influenciadores').select('id').eq('user_id', userId).single()
-  if (!influenciador) return null
-  const { count: totalLeads } = await supabase
-    .from('leads').select('*', { count: 'exact', head: true }).eq('influenciador_id', influenciador.id)
-  const { count: convertidos } = await supabase
-    .from('leads').select('*', { count: 'exact', head: true })
-    .eq('influenciador_id', influenciador.id).eq('status', 'convertido')
-  return { totalLeads: totalLeads ?? 0, convertidos: convertidos ?? 0 }
-}
-
-// ── main stats ─────────────────────────────────────────────────────────────
-
-async function getMainStats() {
-  const supabase = await createClient()
-
-  const [
-    { data: clientesComScore },
-    { data: dadosCHSAll },
-    { data: proximosFollowups },
-    { data: acoesPendentes },
-  ] = await Promise.all([
-    supabase
-      .from('clientes')
-      .select(`id, nome, status, ultimo_score:cliente_scores(score_total, classificacao, tendencia, created_at)`)
-      .eq('status', 'ativo')
-      .order('created_at', { ascending: false })
-      .order('created_at', { referencedTable: 'cliente_scores', ascending: false })
-      .limit(1, { referencedTable: 'cliente_scores' }),
-
-    supabase
-      .from('cliente_dados_chs')
-      .select('receita_periodo_atual'),
-
-    supabase
-      .from('cliente_followups')
-      .select('*, cliente:clientes(id, nome)')
-      .eq('status', 'pendente')
-      .order('agendado_para')
-      .limit(5),
-
-    supabase
-      .from('cliente_acoes')
-      .select('*, cliente:clientes(id, nome)')
-      .eq('status', 'pendente')
-      .order('created_at', { ascending: false })
-      .limit(5),
-  ])
-
-  const clientes = clientesComScore ?? []
-  const totalAtivos = clientes.length
-
-  const comScore = clientes.filter((c) => (c.ultimo_score as any)?.[0])
-  const scoreMedio = comScore.length > 0
-    ? Math.round(comScore.reduce((acc, c) => acc + (c.ultimo_score as any)[0].score_total, 0) / comScore.length)
-    : null
-
-  const distClassificacao = { saudavel: 0, atencao: 0, risco: 0 }
-  for (const c of comScore) {
-    const cls = (c.ultimo_score as any)[0].classificacao as keyof typeof distClassificacao
-    if (cls in distClassificacao) distClassificacao[cls]++
-  }
-
-  const clientesEmAtencao = clientes
-    .filter((c) => {
-      const cls = (c.ultimo_score as any)?.[0]?.classificacao
-      return cls === 'risco' || cls === 'atencao'
-    })
-    .sort((a, b) =>
-      ((a.ultimo_score as any)?.[0]?.score_total ?? 100) -
-      ((b.ultimo_score as any)?.[0]?.score_total ?? 100)
-    )
-    .slice(0, 6)
-
-  const receitaMes = (dadosCHSAll ?? []).reduce((acc, d) => acc + (d.receita_periodo_atual ?? 0), 0)
-
-  return {
-    totalAtivos,
-    scoreMedio,
-    emRisco: distClassificacao.risco,
-    emAtencao: distClassificacao.atencao,
-    receitaMes,
-    distClassificacao,
-    clientesEmAtencao,
-    proximosFollowups: proximosFollowups ?? [],
-    acoesPendentes: acoesPendentes ?? [],
-  }
+function Vazio({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm text-gray-400 py-6 text-center">{children}</p>
 }
 
 // ── page ───────────────────────────────────────────────────────────────────
@@ -147,341 +51,326 @@ export default async function DashboardPage() {
 
   const firstName = profile.nome.split(' ')[0]
   const saudacao = getSaudacao()
-  const isInfluenciador = profile.role === 'influenciador'
 
-  if (isInfluenciador) {
-    const stats = await getInfluenciadorStats(profile.user_id)
-    const conversao = stats?.totalLeads
-      ? Math.round(((stats.convertidos) / stats.totalLeads) * 100)
-      : 0
-
+  // Os painéis de contratos são só do admin (as RPCs do dashboard exigem esse perfil).
+  if (profile.role !== 'admin') {
     return (
       <div>
         <Header title="Dashboard" />
-
-        {/* Hero */}
-        <div
-          className="relative overflow-hidden"
-          style={{ background: 'linear-gradient(140deg, #0A1628 0%, #0F2550 50%, #1764F4 100%)' }}
-        >
-          <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
-          <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 80% at 80% 40%, rgba(23,100,244,0.4) 0%, transparent 70%)' }} />
-          <div className="relative z-10 px-6 py-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-2">Painel do influenciador</p>
-            <h1 className="text-3xl font-bold text-white tracking-tight">{saudacao}, {firstName}</h1>
-            <p className="text-blue-200/60 mt-1 text-sm">Acompanhe seus leads e conversões</p>
-
-            <div className="mt-8 grid grid-cols-3 gap-4">
-              {[
-                { label: 'Total de Leads', value: stats?.totalLeads ?? 0 },
-                { label: 'Convertidos',    value: stats?.convertidos ?? 0 },
-                { label: 'Taxa de Conversão', value: `${conversao}%` },
-              ].map(({ label, value }) => (
-                <div key={label} className="rounded-xl px-4 py-4" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                  <p className="text-xs text-blue-200/70 uppercase tracking-wide mb-1">{label}</p>
-                  <p className="text-2xl font-bold text-white">{value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <HeroBanner>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-2">Bem-vindo</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">{saudacao}, {firstName}</h1>
+          <p className="text-blue-200/60 mt-1 text-sm">
+            Os painéis de contratos são exclusivos do administrador. Fale com ele se precisar de acesso.
+          </p>
+        </HeroBanner>
       </div>
     )
   }
 
-  const stats = await getMainStats()
-  const kpis = [
-    {
-      label: 'Clientes Ativos',
-      value: stats.totalAtivos.toString(),
-      sub: 'na carteira',
-      icon: Users,
-      color: '#1764F4',
-    },
-    {
-      label: 'Score CHS Médio',
-      value: stats.scoreMedio !== null ? stats.scoreMedio.toString() : '—',
-      sub: stats.scoreMedio !== null ? (stats.scoreMedio >= 70 ? 'Carteira saudável' : stats.scoreMedio >= 40 ? 'Atenção necessária' : 'Risco elevado') : 'Sem dados',
-      icon: Activity,
-      color: stats.scoreMedio !== null ? (stats.scoreMedio >= 70 ? '#059669' : stats.scoreMedio >= 40 ? '#d97706' : '#dc2626') : '#6B7280',
-    },
-    {
-      label: 'Em Risco',
-      value: stats.emRisco.toString(),
-      sub: `+ ${stats.emAtencao} em atenção`,
-      icon: AlertTriangle,
-      color: '#dc2626',
-    },
-    {
-      label: 'Receita do Mês',
-      value: formatCurrency(stats.receitaMes),
-      sub: 'período atual',
-      icon: TrendingUp,
-      color: '#059669',
-    },
-  ]
+  const r = await getResumoContratos()
+  const k = r.kpis
+  const pctZeragem = k && k.volume_operados > 0 ? (k.volume_zerados / k.volume_operados) * 100 : null
 
   return (
     <div>
       <Header title="Dashboard" />
 
-      {/* ── Hero Banner ── */}
-      <div
-        className="relative overflow-hidden"
-        style={{ background: 'linear-gradient(140deg, #0A1628 0%, #0F2550 50%, #1764F4 100%)' }}
-      >
-        {/* Grid texture */}
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
-            backgroundSize: '48px 48px',
-          }}
-        />
-        {/* Radial glow */}
-        <div
-          className="absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 60% 80% at 80% 40%, rgba(23,100,244,0.4) 0%, transparent 70%)' }}
-        />
-
-        <div className="relative z-10 px-6 py-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-2">
-            Centro de controle
-          </p>
-          <h1 className="text-3xl font-bold text-white tracking-tight">
-            {saudacao}, {firstName}
-          </h1>
-          <p className="text-blue-200/60 mt-1 text-sm">
-            Acompanhe sua carteira de traders em tempo real
-          </p>
-
-          {/* KPI strip */}
-          <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {kpis.map(({ label, value, sub, icon: Icon, color }) => (
-              <div
-                key={label}
-                className="rounded-xl px-4 py-4"
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-blue-200/70 uppercase tracking-wide leading-tight">{label}</p>
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.10)' }}>
-                    <Icon className="w-3.5 h-3.5 text-white/70" />
-                  </div>
-                </div>
-                <p className="text-2xl font-bold text-white">{value}</p>
-                {sub && <p className="text-xs text-blue-200/50 mt-1">{sub}</p>}
-              </div>
-            ))}
+      {/* ── Hero: resumo do mês ── */}
+      <HeroBanner>
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-300 mb-2">
+              Resumo de contratos · {labelMes(r.mes.inicio)}
+            </p>
+            <h1 className="text-3xl font-bold text-white tracking-tight">{saudacao}, {firstName}</h1>
+            <p className="text-blue-200/60 mt-1 text-sm">
+              Lotes girados de {fmtDataPt(r.mes.inicio)} a {fmtDataPt(r.mes.fim)}
+              {k?.dataset_max ? ` · dados até ${fmtDataPt(k.dataset_max)}` : ''}
+              {k?.ultimo_dia_data ? ` · último pregão (${fmtDataPt(k.ultimo_dia_data)}): ${fmtNum(k.ultimo_dia_lotes)} lotes` : ''}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/admin/contratos-dashboard" className={heroButton} style={heroButtonStyle}>
+              <BarChart2 className="w-3.5 h-3.5" /> Dashboard completo
+            </Link>
+            <Link href="/admin/contratos" className={heroButton} style={heroButtonStyle}>
+              <Upload className="w-3.5 h-3.5" /> Importar contratos
+            </Link>
           </div>
         </div>
-      </div>
 
-      {/* ── Content ── */}
+        <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <BannerKpi label="Lotes operados no mês"
+            value={k ? fmtNum(k.volume_operados) : '—'}
+            sub={k ? `${k.num_dias_com_dado} pregões · ${fmtNum(k.media_diaria)} lotes/pregão` : 'sem dados no mês'} />
+          <BannerKpi label="Lotes zerados no mês"
+            value={k ? fmtNum(k.volume_zerados) : '—'}
+            sub={pctZeragem != null ? `${pctZeragem.toFixed(1)}% do operado` : undefined} />
+          <BannerKpi label="Clientes ativos"
+            value={k ? fmtNum(k.num_clientes_ativos) : '—'}
+            sub="contas que operaram no mês" />
+          <BannerKpi label="Receita estimada no mês"
+            value={r.receitaBL ? fmtBRL2(r.receitaBL.receita_liquida) : '—'}
+            sub={r.receitaProj
+              ? `projeção do mês ${fmtBRL(r.receitaProj.projecao_total)} · só WIN/WDO`
+              : 'líquida · só WIN/WDO'} />
+        </div>
+      </HeroBanner>
+
+      {/* ── Conteúdo ── */}
       <div className="p-6 space-y-6">
-
-        {/* Row 1: Clients needing attention + Score distribution */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* Clients needing attention */}
-          <div className="lg:col-span-2">
-            <Card className="p-0 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Clientes que precisam de atenção</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Ordenados por menor score CHS</p>
-                </div>
-                <Link
-                  href="/clientes?classificacao=risco"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                >
-                  Ver todos <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-
-              {stats.clientesEmAtencao.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-14 gap-2">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-50">
-                    <CheckCircle className="w-5 h-5 text-emerald-500" />
-                  </div>
-                  <p className="text-sm text-gray-500">Todos os clientes estão saudáveis!</p>
-                </div>
-              ) : (
-                <div>
-                  {stats.clientesEmAtencao.map((c) => {
-                    const score = (c.ultimo_score as any)?.[0]
-                    const cls = score?.classificacao as keyof typeof classificacaoConfig | undefined
-                    const tend = score?.tendencia as keyof typeof tendenciaIcon | undefined
-                    const TendIcon = tend ? tendenciaIcon[tend] : Minus
-                    const iniciais = c.nome.trim().split(' ').map((p: string) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
-                    return (
-                      <Link
-                        key={c.id}
-                        href={`/clientes/${c.id}`}
-                        className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/80 transition-colors group"
-                        style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold text-white select-none"
-                            style={{ background: 'linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%)' }}
-                          >
-                            {iniciais}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">{c.nome}</p>
-                            {score && (
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                Score: <span className="font-semibold">{Math.round(score.score_total)}</span>
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {cls && (
-                            <Badge variant={classificacaoConfig[cls].variant}>
-                              {classificacaoConfig[cls].label}
-                            </Badge>
-                          )}
-                          {tend && (
-                            <TendIcon className={`w-4 h-4 ${tendenciaColor[tend]}`} />
-                          )}
-                          <ArrowRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-400 transition-colors" />
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
-              )}
-            </Card>
+        {r.erros.length > 0 && (
+          <div className="rounded-xl px-4 py-3 text-sm"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444' }}>
+            Parte dos dados não carregou: {r.erros[0]}
           </div>
+        )}
 
-          {/* Score distribution */}
-          <div>
+        {/* Linha 1: evolução mensal + meta + importações */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
             <Card>
               <CardHeader>
-                <CardTitle>Distribuição da carteira</CardTitle>
+                <div>
+                  <CardTitle>Evolução mensal</CardTitle>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Lotes operados (azul) e zerados (vermelho) + clientes ativos (linha roxa). Últimos 12 meses · * = mês em andamento.
+                  </p>
+                </div>
               </CardHeader>
-              <CarteiraPie
-                distribuicao={stats.distClassificacao}
-                total={stats.totalAtivos}
-              />
+              <EvolucaoMensalChart data={r.evolucao} />
             </Card>
+          </div>
+
+          <div className="space-y-6">
+            <MetaCard meta={r.meta} />
+            <ImportacoesCard importacoes={r.importacoes} />
           </div>
         </div>
 
-        {/* Row 2: Follow-ups + Pending actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* Próximos follow-ups */}
+        {/* Linha 2: top clientes + produtos + plataformas (mês atual) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="p-0 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--blue-dim)' }}>
-                  <Calendar className="w-3.5 h-3.5" style={{ color: 'var(--blue)' }} />
-                </div>
-                <h3 className="text-sm font-semibold text-gray-900">Próximos Follow-ups</h3>
-              </div>
-              {stats.proximosFollowups.length > 0 && (
-                <span
-                  className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                  style={{ background: 'var(--blue-dim)', color: 'var(--blue)' }}
-                >
-                  {stats.proximosFollowups.length}
-                </span>
-              )}
-            </div>
-
-            {stats.proximosFollowups.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 gap-2">
-                <Clock className="w-8 h-8 text-gray-300" />
-                <p className="text-sm text-gray-400">Nenhum follow-up agendado.</p>
-              </div>
-            ) : (
+            <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <Users className="w-4 h-4 text-blue-600" />
               <div>
-                {stats.proximosFollowups.map((f: any) => {
-                  const data = new Date(f.agendado_para + 'T12:00:00')
-                  const hoje = new Date()
-                  const diff = Math.floor((data.getTime() - hoje.getTime()) / 86400000)
-                  const isAtrasado = diff < 0
-                  const isHoje = diff === 0
-                  return (
-                    <Link
-                      key={f.id}
-                      href={`/clientes/${f.cliente?.id}`}
-                      className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/80 transition-colors"
-                      style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                    >
-                      <div
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: isAtrasado ? '#dc2626' : isHoje ? '#d97706' : '#1764F4' }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{f.cliente?.nome ?? '—'}</p>
-                        {f.observacao && <p className="text-xs text-gray-500 truncate mt-0.5">{f.observacao}</p>}
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className={`text-xs font-semibold ${isAtrasado ? 'text-red-500' : isHoje ? 'text-amber-500' : 'text-gray-500'}`}>
-                          {isAtrasado ? `${Math.abs(diff)}d atrasado` : isHoje ? 'Hoje' : formatDate(f.agendado_para)}
-                        </p>
-                      </div>
-                    </Link>
-                  )
-                })}
+                <CardTitle>Top 10 clientes do mês</CardTitle>
+                <p className="text-xs text-gray-500 mt-0.5">Por lotes operados · % acumulado do total</p>
               </div>
+            </div>
+            {r.topClientes.length === 0 ? <Vazio>Sem operações no mês.</Vazio> : (
+              <table className="text-xs border-collapse w-full">
+                <thead style={{ background: 'var(--surface-2)' }}>
+                  <tr>
+                    <th className={th('left')}>#</th>
+                    <th className={th('left')}>Cliente</th>
+                    <th className={th('right')}>Lotes</th>
+                    <th className={th('right')}>% acum.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.topClientes.map((c, i) => (
+                    <tr key={`${c.cliente_nome}-${c.rank}`} style={rowStyle(i)}>
+                      <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{c.rank}</td>
+                      <td className="px-3 py-1.5">
+                        <p className="font-medium text-gray-700 truncate max-w-[180px]">{c.cliente_nome}</p>
+                        {c.assessor_nome && <p className="text-[10px] text-gray-400 truncate max-w-[180px]">{c.assessor_nome}</p>}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(c.lotes_operados)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{c.pct_acumulado.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </Card>
 
-          {/* Ações pendentes */}
           <Card className="p-0 overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-amber-50">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                </div>
-                <h3 className="text-sm font-semibold text-gray-900">Ações Pendentes</h3>
-              </div>
-              {stats.acoesPendentes.length > 0 && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">
-                  {stats.acoesPendentes.length}
-                </span>
-              )}
-            </div>
-
-            {stats.acoesPendentes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 gap-2">
-                <CheckCircle className="w-8 h-8 text-gray-300" />
-                <p className="text-sm text-gray-400">Sem ações pendentes.</p>
-              </div>
-            ) : (
+            <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <Layers className="w-4 h-4 text-purple-600" />
               <div>
-                {stats.acoesPendentes.map((a: any) => {
-                  const config = tipoAcaoConfig[a.tipo as keyof typeof tipoAcaoConfig]
-                  const Icon = config?.icon ?? AlertTriangle
-                  return (
-                    <Link
-                      key={a.id}
-                      href={`/clientes/${a.cliente?.id}`}
-                      className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/80 transition-colors"
-                      style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                    >
-                      <Icon className={`w-4 h-4 flex-shrink-0 ${config?.color ?? 'text-gray-400'}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{a.titulo}</p>
-                        <p className="text-xs text-gray-500 truncate mt-0.5">{a.cliente?.nome ?? '—'}</p>
-                      </div>
-                      <Badge variant={a.prioridade === 'alta' ? 'danger' : a.prioridade === 'media' ? 'warning' : 'default'}>
-                        {a.prioridade}
-                      </Badge>
-                    </Link>
-                  )
-                })}
+                <CardTitle>Lotes por produto no mês</CardTitle>
+                <p className="text-xs text-gray-500 mt-0.5">Operados, participação e % de zeragem</p>
               </div>
-            )}
+            </div>
+            <ProdutosTable produtos={r.produtos} />
           </Card>
 
+          <Card className="p-0 overflow-hidden">
+            <div className="px-5 py-4 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <Monitor className="w-4 h-4 text-cyan-600" />
+              <div>
+                <CardTitle>Lotes por plataforma no mês</CardTitle>
+                <p className="text-xs text-gray-500 mt-0.5">Plataforma de negociação informada na importação</p>
+              </div>
+            </div>
+            <PlataformasTable plataformas={r.plataformas} />
+          </Card>
         </div>
       </div>
     </div>
+  )
+}
+
+// ── cards ──────────────────────────────────────────────────────────────────
+
+function MetaCard({ meta }: { meta: ResumoContratos['meta'] }) {
+  const temMeta = meta && (meta.meta_receita > 0 || meta.meta_lotes > 0)
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Target className="w-4 h-4 text-amber-500" />
+          <CardTitle>{meta ? `Meta ${meta.ano}` : 'Meta anual'}</CardTitle>
+        </div>
+        <Link href="/admin/metas" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+          {temMeta ? 'Ajustar' : 'Cadastrar'} <ArrowRight className="w-3 h-3" />
+        </Link>
+      </CardHeader>
+      {!temMeta || !meta ? (
+        <p className="text-sm text-gray-400">Nenhuma meta cadastrada para o ano.</p>
+      ) : (
+        <div className="space-y-3">
+          {meta.meta_lotes > 0 && (
+            <MetaProgresso label="Lotes operados" pct={meta.pct_lotes}
+              realizado={fmtNum(meta.realizado_lotes)} alvo={fmtNum(meta.meta_lotes) + ' lotes'} />
+          )}
+          {meta.meta_receita > 0 && (
+            <MetaProgresso label="Receita" pct={meta.pct_receita}
+              realizado={fmtBRL(meta.realizado_receita)} alvo={fmtBRL(meta.meta_receita)} />
+          )}
+          <p className="text-xs text-gray-500">
+            {meta.dias_corridos_restantes} dias úteis restantes
+            {meta.meta_receita > 0 ? ` · ritmo necessário ${fmtBRL(meta.ritmo_receita_necessario)}/pregão` : ''}
+          </p>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function MetaProgresso({ label, pct, realizado, alvo }: {
+  label: string; pct: number; realizado: string; alvo: string
+}) {
+  const color = pct >= 100 ? '#10b981' : pct >= 75 ? '#1764f4' : pct >= 50 ? '#f59e0b' : '#dc2626'
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1 text-sm">
+        <span className="font-medium text-gray-700">{label}</span>
+        <span className="tabular-nums font-semibold" style={{ color }}>{pct.toFixed(1)}%</span>
+      </div>
+      <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.2)' }}>
+        <div className="h-full" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
+      </div>
+      <p className="text-xs text-gray-500 mt-1 tabular-nums">{realizado} de {alvo}</p>
+    </div>
+  )
+}
+
+function ImportacoesCard({ importacoes }: { importacoes: ResumoContratos['importacoes'] }) {
+  return (
+    <Card className="p-0 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="flex items-center gap-2">
+          <FileStack className="w-4 h-4 text-blue-600" />
+          <CardTitle>Últimas importações</CardTitle>
+        </div>
+        <Link href="/admin/contratos" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+          Ver todas <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+      {importacoes.length === 0 ? <Vazio>Nenhuma importação ainda.</Vazio> : (
+        <div>
+          {importacoes.map(imp => (
+            <div key={imp.id} className="flex items-center justify-between gap-3 px-5 py-3"
+              style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{imp.nome_arquivo || 'Sem nome'}</p>
+                <p className="text-xs text-gray-500">{imp.created_at ? formatDateTime(imp.created_at) : '—'} · {fmtNum(imp.total_linhas)} linhas</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-sm font-semibold text-gray-900 tabular-nums">{fmtNum(imp.total_lotes_operados)}</p>
+                <p className="text-[10px] uppercase tracking-wide text-gray-400">lotes op.</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function ProdutosTable({ produtos }: { produtos: ResumoContratos['produtos'] }) {
+  if (produtos.length === 0) return <Vazio>Sem operações no mês.</Vazio>
+  const total = produtos.reduce((s, p) => s + p.lotes_operados, 0)
+  return (
+    <table className="text-xs border-collapse w-full">
+      <thead style={{ background: 'var(--surface-2)' }}>
+        <tr>
+          <th className={th('left')}>Produto</th>
+          <th className={th('right')}>Lotes</th>
+          <th className={th('right')}>% total</th>
+          <th className={th('right')}>% zer.</th>
+          <th className={th('right')}>Clientes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {produtos.map((p, i) => {
+          const pctTotal = total > 0 ? (p.lotes_operados / total) * 100 : 0
+          const pctZe = p.lotes_operados > 0 ? (p.lotes_zerados / p.lotes_operados) * 100 : 0
+          return (
+            <tr key={p.produto} style={rowStyle(i)}>
+              <td className="px-3 py-1.5 font-semibold text-gray-700">{p.produto}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(p.lotes_operados)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{pctTotal.toFixed(1)}%</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.num_clientes)}</td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
+function PlataformasTable({ plataformas }: { plataformas: ResumoContratos['plataformas'] }) {
+  if (plataformas === null) {
+    return (
+      <div className="px-5 py-6 text-sm text-gray-500">
+        Indisponível: rode o arquivo <code className="text-xs px-1 py-0.5 rounded bg-gray-100">supabase-s12-plataforma-excluir-cliente.sql</code> no
+        SQL Editor do Supabase para habilitar os lotes por plataforma.
+      </div>
+    )
+  }
+  if (plataformas.length === 0) return <Vazio>Sem operações no mês.</Vazio>
+  const total = plataformas.reduce((s, p) => s + p.lotes_operados, 0)
+  return (
+    <table className="text-xs border-collapse w-full">
+      <thead style={{ background: 'var(--surface-2)' }}>
+        <tr>
+          <th className={th('left')}>Plataforma</th>
+          <th className={th('right')}>Lotes</th>
+          <th className={th('right')}>% total</th>
+          <th className={th('right')}>% zer.</th>
+          <th className={th('right')}>Clientes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {plataformas.map((p, i) => {
+          const pctTotal = total > 0 ? (p.lotes_operados / total) * 100 : 0
+          const pctZe = p.lotes_operados > 0 ? (p.lotes_zerados / p.lotes_operados) * 100 : 0
+          return (
+            <tr key={p.plataforma} style={rowStyle(i)}>
+              <td className="px-3 py-1.5 font-semibold text-gray-700">{p.plataforma}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmtNum(p.lotes_operados)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{pctTotal.toFixed(1)}%</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{pctZe.toFixed(1)}%</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(p.num_clientes)}</td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
   )
 }

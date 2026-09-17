@@ -11,7 +11,6 @@ import { useDashboardData } from '../_lib/useDashboardData'
 import { Block } from '../_lib/Blocks'
 import { fmtNum } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
-import { ACTIONS } from '../_lib/dashboardActions'
 
 const CLUSTER_COLOR: Record<string, string> = {
   consistente: '#10b981',
@@ -39,8 +38,8 @@ const SCORE_CLASS: Record<string, { label: string; color: string }> = {
 }
 
 export function AnalisesView() {
-  const { periodo, barra } = useDashboardFilters()
-  const d = useDashboardData(ACTIONS, periodo, barra, {
+  const { periodo, barra, excluir } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, {
     kpis: true, riscoEscritorio: true,
     scoreCliente: true, clustersClientes: true, correlacoes: true,
   })
@@ -177,8 +176,6 @@ export function AnalisesView() {
                     const klass = SCORE_CLASS[s.classificacao] ?? { label: s.classificacao, color: '#94a3b8' }
                     return (
                       <tr key={`${s.cliente_id ?? s.cliente_nome}-${s.rank}`}
-                        onClick={() => { if (s.cliente_id) window.location.href = `/clientes/${s.cliente_id}` }}
-                        className={s.cliente_id ? 'cursor-pointer hover:bg-blue-50' : ''}
                         style={{ borderTop: '1px solid var(--border)',
                                  background: s.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
                         <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{s.rank}</td>

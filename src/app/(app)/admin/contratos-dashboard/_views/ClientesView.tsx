@@ -9,11 +9,10 @@ import { Block } from '../_lib/Blocks'
 import { CohortHeatmap, BlockSkeleton } from '../Charts'
 import { fmtNum, fmtBRL2, fmtDataPt } from '../_lib/utils'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
-import { ACTIONS } from '../_lib/dashboardActions'
 
 export function ClientesView() {
-  const { periodo, barra } = useDashboardFilters()
-  const d = useDashboardData(ACTIONS, periodo, barra, {
+  const { periodo, barra, excluir } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, {
     topClientes: true, kpis: true, ltv: true, cohort: true, rankingAssessores: true,
   })
 
@@ -68,7 +67,7 @@ export function ClientesView() {
 
       {/* Tabela: Top 50 LTV */}
       <Block title="Top 50 clientes — LTV"
-        subtitle="Receita estimada acumulada desde a primeira operação (só WIN/WDO). Histórico completo — não segue os filtros acima. Clique pra abrir o perfil.">
+        subtitle="Receita estimada acumulada desde a primeira operação (só WIN/WDO). Histórico completo — não segue os filtros acima.">
         {d.ltv.length === 0
           ? <p className="text-sm text-gray-400 py-4">{d.isPending ? 'Carregando…' : 'Sem dados.'}</p>
           : (
@@ -84,8 +83,6 @@ export function ClientesView() {
                 <tbody>
                   {d.ltv.map(c => (
                     <tr key={`${c.cliente_id ?? c.cliente_nome}-${c.rank}`}
-                      onClick={() => { if (c.cliente_id) window.location.href = `/clientes/${c.cliente_id}` }}
-                      className={c.cliente_id ? 'cursor-pointer hover:bg-blue-50' : ''}
                       style={{ borderTop: '1px solid var(--border)',
                                background: c.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
                       <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{c.rank}</td>
@@ -125,8 +122,6 @@ export function ClientesView() {
                     const pctZe = c.lotes_operados > 0 ? (c.lotes_zerados / c.lotes_operados) * 100 : 0
                     return (
                       <tr key={`${c.cliente_id ?? c.cliente_nome}-${c.rank}`}
-                        onClick={() => { if (c.cliente_id) window.location.href = `/clientes/${c.cliente_id}` }}
-                        className={c.cliente_id ? 'cursor-pointer hover:bg-blue-50' : ''}
                         style={{ borderTop: '1px solid var(--border)',
                                  background: c.rank % 2 === 1 ? 'var(--surface)' : 'var(--surface-2)' }}>
                         <td className="px-3 py-1.5 font-bold text-gray-700 tabular-nums">{c.rank}</td>

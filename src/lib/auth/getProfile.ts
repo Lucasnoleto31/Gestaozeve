@@ -1,7 +1,11 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { Profile } from '@/types'
 
-export async function getProfile(): Promise<Profile | null> {
+// Memoizado por requisição (React cache): layout, página e server actions
+// da mesma requisição compartilham o mesmo getUser() + select em profiles,
+// em vez de repetir as duas idas ao Supabase em cada camada.
+export const getProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -14,4 +18,4 @@ export async function getProfile(): Promise<Profile | null> {
     .single()
 
   return data
-}
+})

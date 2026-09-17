@@ -11,7 +11,6 @@ import { useDashboardData } from '../_lib/useDashboardData'
 import { Block } from '../_lib/Blocks'
 import { KpiCard, KpiRow } from '../_lib/Kpi'
 import { fmtNum, fmtBRL } from '../_lib/utils'
-import { ACTIONS } from '../_lib/dashboardActions'
 import type { IncentivoMensalRow } from '../actions'
 
 // Faixas do programa de incentivo (pontos → R$ por cliente que atingiu a faixa)
@@ -61,8 +60,8 @@ function pivotIncentivo(rows: IncentivoMensalRow[]) {
 }
 
 export function IncentivoView() {
-  const { periodo, barra } = useDashboardFilters()
-  const d = useDashboardData(ACTIONS, periodo, barra, {
+  const { periodo, barra, excluir } = useDashboardFilters()
+  const d = useDashboardData(periodo, barra, excluir, {
     kpis: true, incentivo: true, incentivoClientes: true,
   })
 
@@ -100,6 +99,7 @@ export function IncentivoView() {
       <p className="text-xs text-gray-500">
         Pontos do cliente no mês = lotes girados × multiplicador do produto. O incentivo é pago por cliente
         conforme a maior faixa de pontos atingida no mês. Esta aba usa o histórico completo (não segue o filtro de período).
+        As contas do FABRICIO DA SILVA GONCALVES são somadas e pontuam como um cliente único.
       </p>
 
       {/* KPIs */}

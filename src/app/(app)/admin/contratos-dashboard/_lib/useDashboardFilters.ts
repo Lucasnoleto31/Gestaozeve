@@ -8,15 +8,18 @@ const VALID_PERIODOS: Periodo[] = ['30d', '60d', '90d', 'ano', 'tudo']
 const DEFAULT_PERIODO: Periodo = '30d'
 const CUSTOM_RE = /^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/
 
-// Hook compartilhado entre sub-rotas: lê os filtros da URL (?periodo=mes&barra=ZEVE+1)
-// e expõe setters que fazem router.replace mantendo a rota atual.
+// Hook compartilhado entre sub-rotas: lê os filtros da URL
+// (?periodo=90d&barra=ZEVE+1&excluir=FULANO) e expõe setters que fazem
+// router.replace mantendo a rota atual.
 export function useDashboardFilters(): {
   periodo: Periodo
   barra: string | null
+  excluir: string | null
   customRange: { inicio: string; fim: string } | null
   setPeriodo: (p: Periodo) => void
   setRange: (inicio: string, fim: string) => void
   setBarra: (b: string | null) => void
+  setExcluir: (c: string | null) => void
 } {
   const router = useRouter()
   const pathname = usePathname()
@@ -39,6 +42,12 @@ export function useDashboardFilters(): {
     return b && b.trim() !== '' ? b : null
   }, [searchParams])
 
+  // Cliente excluído dos lotes (nome como veio da importação; casa todas as contas dele)
+  const excluir = useMemo<string | null>(() => {
+    const c = searchParams.get('excluir')
+    return c && c.trim() !== '' ? c : null
+  }, [searchParams])
+
   const updateParams = useCallback((updates: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams.toString())
     for (const [k, v] of Object.entries(updates)) {
@@ -52,6 +61,7 @@ export function useDashboardFilters(): {
   const setPeriodo = useCallback((p: Periodo) => updateParams({ periodo: p === DEFAULT_PERIODO ? null : p }), [updateParams])
   const setRange   = useCallback((inicio: string, fim: string) => updateParams({ periodo: `custom:${inicio}:${fim}` }), [updateParams])
   const setBarra   = useCallback((b: string | null) => updateParams({ barra: b }), [updateParams])
+  const setExcluir = useCallback((c: string | null) => updateParams({ excluir: c }), [updateParams])
 
-  return { periodo, barra, customRange, setPeriodo, setRange, setBarra }
+  return { periodo, barra, excluir, customRange, setPeriodo, setRange, setBarra, setExcluir }
 }

@@ -7,8 +7,7 @@ import { cn } from '@/lib/utils'
 import { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
 import {
-  LayoutDashboard, Settings, UserCircle, Link2,
-  UserCheck, Monitor, ShieldAlert, BarChart2, FileStack, FileDown,
+  LayoutDashboard, Settings, BarChart2, FileStack, FileDown,
   TrendingUp, Building2, Bell, X, DollarSign, Target,
 } from 'lucide-react'
 
@@ -29,29 +28,11 @@ const NAV_SECTIONS: {
     ],
   },
   {
-    label: 'Gestão',
-    roles: ['admin', 'vendedor'],
-    items: [
-      { label: 'Clientes', href: '/clientes', icon: UserCheck },
-      { label: 'Influenciadores', href: '/influenciadores', icon: Link2 },
-      { label: 'Plataformas', href: '/plataformas', icon: Monitor },
-      { label: 'Retenção', href: '/retencao', icon: ShieldAlert },
-    ],
-  },
-  {
-    label: 'Meu espaço',
-    roles: ['influenciador'],
-    items: [
-      { label: 'Meu Painel', href: '/influenciador', icon: UserCircle },
-    ],
-  },
-  {
     label: 'Administração',
     roles: ['admin'],
     items: [
       { label: 'Usuários', href: '/admin/usuarios', icon: Settings },
       { label: 'Barras', href: '/admin/barras', icon: Building2 },
-      { label: 'Receitas', href: '/admin/receitas', icon: BarChart2 },
       { label: 'Contratos', href: '/admin/contratos', icon: FileStack },
       { label: 'Dashboard Contratos', href: '/admin/contratos-dashboard', icon: BarChart2 },
       { label: 'Tarifas por Barra', href: '/admin/assessor-pricing', icon: DollarSign },

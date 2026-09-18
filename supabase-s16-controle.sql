@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS public.contratos_importacoes_log (
 );
 CREATE INDEX IF NOT EXISTS contratos_importacoes_log_created_idx
   ON public.contratos_importacoes_log (created_at DESC);
+-- Tabelas novas neste projeto precisam de GRANT explícito (sem ele o PostgREST devolve 403)
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.contratos_importacoes_log TO authenticated, service_role;
 ALTER TABLE public.contratos_importacoes_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "admin le o log" ON public.contratos_importacoes_log;
 CREATE POLICY "admin le o log" ON public.contratos_importacoes_log
@@ -309,6 +311,7 @@ CREATE TABLE IF NOT EXISTS public.assessor_pricing_produto (
   created_at timestamptz DEFAULT now(),
   UNIQUE (pricing_id, produto)
 );
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.assessor_pricing_produto TO authenticated, service_role;
 ALTER TABLE public.assessor_pricing_produto ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "admin gerencia tarifa por produto" ON public.assessor_pricing_produto;
 CREATE POLICY "admin gerencia tarifa por produto" ON public.assessor_pricing_produto

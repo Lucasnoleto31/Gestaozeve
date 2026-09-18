@@ -33,6 +33,8 @@ export function ClientesView() {
   const novos = useMemo(() => d.movimento.filter(m => m.tipo === 'novo'), [d.movimento])
   const voltaram = useMemo(() => d.movimento.filter(m => m.tipo === 'voltou'), [d.movimento])
   const lotesPararam = pararam.reduce((s, m) => s + m.lotes_anterior, 0)
+  const lotesNovos = novos.reduce((s, m) => s + m.lotes_atual, 0)
+  const lotesVoltaram = voltaram.reduce((s, m) => s + m.lotes_atual, 0)
 
   const k = d.kpis
   const ka = d.kpisAnterior
@@ -89,9 +91,9 @@ export function ClientesView() {
         <KpiCard icon={UserMinus} tone="danger" label="Pararam de operar" loading={d.loading && d.movimento.length === 0}
           value={fmtNum(pararam.length)} sub={pararam.length > 0 ? `${fmtNum(lotesPararam)} lotes no período anterior` : 'ninguém parou'} />
         <KpiCard icon={UserPlus} tone="success" label="Novos clientes" loading={d.loading && d.movimento.length === 0}
-          value={fmtNum(novos.length)} sub="primeira operação no período" />
+          value={fmtNum(novos.length)} sub={novos.length > 0 ? `${fmtNum(lotesNovos)} lotes no período` : 'primeira operação no período'} />
         <KpiCard icon={RotateCcw} tone="info" label="Voltaram a operar" loading={d.loading && d.movimento.length === 0}
-          value={fmtNum(voltaram.length)} sub="estavam parados no período anterior" />
+          value={fmtNum(voltaram.length)} sub={voltaram.length > 0 ? `${fmtNum(lotesVoltaram)} lotes no período` : 'estavam parados no período anterior'} />
       </KpiRow>
 
       <Panel flush title="Quem parou de operar"

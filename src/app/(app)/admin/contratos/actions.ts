@@ -299,14 +299,16 @@ export async function importarContratos(
 
   const supabase = createAdminClient()
 
-  // Trava de duplicidade (a mesma checagem do modal, refeita aqui por segurança)
+  // Trava de duplicidade (a mesma checagem do modal, refeita aqui por segurança).
+  // Só o período já coberto bloqueia: o nome do arquivo costuma se repetir
+  // (a corretora exporta sempre com o mesmo nome), então é apenas aviso.
   const periodo = periodoDasLinhas(rows)
   const dup = await checarDuplicidade(supabase, corretora, nomeArquivo, periodo)
-  if (!opcoes.forcar && (dup.mesmoArquivo || dup.sobreposicao)) {
-    const motivo = dup.mesmoArquivo
-      ? `o arquivo "${nomeArquivo}" já foi importado na ${corretora}`
-      : `já existem ${dup.sobreposicao!.linhas} linhas da ${corretora} entre ${periodo.inicio} e ${periodo.fim}`
-    throw new Error(`Importação bloqueada: ${motivo}. Se for uma correção, marque "importar mesmo assim".`)
+  if (!opcoes.forcar && dup.sobreposicao) {
+    throw new Error(
+      `Importação bloqueada: já existem ${dup.sobreposicao.linhas} linhas da ${corretora} entre ${periodo.inicio} e ${periodo.fim}. ` +
+      'Se for uma correção, desfaça a importação antiga ou marque "importar mesmo assim".',
+    )
   }
 
   const [resolverCliente, { data: barras }] = await Promise.all([

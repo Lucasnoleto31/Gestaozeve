@@ -112,7 +112,9 @@ export function ImportarContratosModal({ open, onClose }: Props) {
   const totalZerados = preview?.reduce((s, r) => s + (r.lotes_zerados || 0), 0) ?? 0
   const semData = preview?.filter(r => !r.data).length ?? 0
   const dup = checagem?.duplicidade
-  const temDuplicidade = !!(dup?.mesmoArquivo || dup?.sobreposicao)
+  // Só período já coberto bloqueia; nome de arquivo repetido é normal (a corretora exporta sempre com o mesmo nome)
+  const temDuplicidade = !!dup?.sobreposicao
+  const mesmoNome = !!dup?.mesmoArquivo && !dup?.sobreposicao
   const temAvisos = !!checagem && (checagem.desconhecidas.length > 0 || checagem.parecemPlataforma.length > 0 || checagem.semBarra.linhas > 0)
   const podeImportar = !loading && !checando && (!temDuplicidade || forcar)
 
@@ -162,12 +164,16 @@ export function ImportarContratosModal({ open, onClose }: Props) {
           ) : checagem && (
             <>
               {/* Duplicidade: bloqueia até o usuário assumir */}
+              {mesmoNome && dup?.mesmoArquivo && (
+                <p className="text-xs text-fg-muted">
+                  Um arquivo com este nome já entrou na {CORRETORA_LABEL[corretora]} em {fmtDataHoraPt(dup.mesmoArquivo.created_at)} ({fmtNum(dup.mesmoArquivo.total_linhas)} linhas),
+                  mas cobria outras datas. Tudo certo: as datas deste arquivo ainda não foram importadas.
+                </p>
+              )}
+
               {temDuplicidade && (
-                <Alert tone="danger" title="Isto já foi importado">
+                <Alert tone="danger" title="Este período já foi importado">
                   <div className="space-y-1.5 text-xs">
-                    {dup?.mesmoArquivo && (
-                      <p>O arquivo <strong>{nomeArquivo}</strong> já entrou na {CORRETORA_LABEL[corretora]} em {fmtDataHoraPt(dup.mesmoArquivo.created_at)} ({fmtNum(dup.mesmoArquivo.total_linhas)} linhas).</p>
-                    )}
                     {dup?.sobreposicao && (
                       <div>
                         <p>

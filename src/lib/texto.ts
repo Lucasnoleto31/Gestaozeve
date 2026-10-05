@@ -52,6 +52,17 @@ export function normalizarNome(s: string | null | undefined): string {
   return corrigirMojibake(String(s)).replace(/\s+/g, ' ').trim()
 }
 
+// Igual ao norm_texto do banco: maiúsculas, sem acento, espaços colapsados
+export function normTexto(s: string | null | undefined): string {
+  if (!s) return ''
+  return semAcento(corrigirMojibake(String(s))).toUpperCase().replace(/\s+/g, ' ').trim()
+}
+
+// Chave de cabeçalho de planilha: minúsculas, sem acento, '_' e '-' viram espaço
+export function normalizarChave(s: string): string {
+  return semAcento(corrigirMojibake(s)).toLowerCase().replace(/[_\-]+/g, ' ').replace(/[^a-z0-9 /?.]/g, '').replace(/\s+/g, ' ').trim()
+}
+
 // Nomes de plataforma que já apareceram na coluna de assessor por engano
 export const PLATAFORMAS_CONHECIDAS = [
   'NELOGICA', 'NELOGICA_DT', 'NELOGICA_HB', 'METATRADER', 'TRYD', 'TRYD_DT',

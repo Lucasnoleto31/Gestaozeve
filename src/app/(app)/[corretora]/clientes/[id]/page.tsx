@@ -140,7 +140,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 {contas.map(c => (
                   <tr key={c.conta_id}>
                     <td className="num font-medium">{c.conta}</td><td className="num muted">{c.conta_digito ?? TRACO}</td>
-                    <td>{c.situacao_conta ?? TRACO}</td><td><StatusBadge status={c.status} /></td>
+                    <td>{c.situacao_conta ?? TRACO}</td><td>{c.conta_id ? <StatusBadge status={c.status} /> : <span title="Conta que só aparece nos lotes; ligada ao cliente pelo nome ou ID"><Badge variant="warning">só nos lotes</Badge></span>}</td>
                     <td className="num">{dataPt(c.data_habilitacao)}</td><td className="muted">{c.assessor_nome ?? TRACO}</td><td className="muted">{c.filial ?? TRACO}</td>
                     <td>{c.principal ? <Badge variant="accent">★ principal</Badge> : ''}</td>
                     <td className="num">{n0(c.lotes)}</td><td className="num">{n0(c.lotes_12m)}</td><td className="num">{n0(c.zerados)}</td>

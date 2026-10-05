@@ -42,6 +42,7 @@ export function HistoricoImportacoes({ corretora, itens }: { corretora: Corretor
                 d.removidas ? `${n0(Number(d.removidas))} substituídas` : null,
                 d.operados != null ? `${n0(Number(d.operados))} operados · ${n0(Number(d.zerados ?? 0))} zerados` : null,
                 d.clientes_novos != null ? `${n0(Number(d.clientes_novos))} clientes novos · ${n0(Number(d.contas_atualizadas ?? 0))} contas atualizadas` : null,
+                d.por_cpf != null ? `casados: ${n0(Number(d.por_cpf))} CPF · ${n0(Number(d.por_conta))} conta · ${n0(Number(d.por_telefone))} tel. · ${n0(Number(d.por_nome))} nome` : null,
                 d.status === 'em andamento' ? 'incompleta' : null,
               ].filter(Boolean).join(' · ')
               return (

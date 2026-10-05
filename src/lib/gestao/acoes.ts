@@ -35,22 +35,26 @@ export async function importarClientes(corretoraIn: string, nomeArquivo: string,
   return tentar(async () => {
     const corretora = corretoraValida(corretoraIn)
     const { db, profile } = await somenteAdmin()
-    let clientesNovos = 0, contasNovas = 0, contasAtualizadas = 0
+    const tot = { clientesNovos: 0, contasNovas: 0, contasAtualizadas: 0, semConta: 0, porCpf: 0, porConta: 0, porTelefone: 0, porNome: 0 }
     for (let i = 0; i < linhas.length; i += 1000) {
       const bloco = linhas.slice(i, i + 1000)
       const { data, error } = await db.rpc('importar_clientes', { p_corretora: corretora, p_linhas: bloco })
       if (error) falha(error, 'importar_clientes')
       const r = ((data ?? []) as Row[])[0] ?? {}
-      clientesNovos += num(r.clientes_novos); contasNovas += num(r.contas_novas); contasAtualizadas += num(r.contas_atualizadas)
+      tot.clientesNovos += num(r.clientes_novos); tot.contasNovas += num(r.contas_novas); tot.contasAtualizadas += num(r.contas_atualizadas)
+      tot.semConta += num(r.sem_conta); tot.porCpf += num(r.por_cpf); tot.porConta += num(r.por_conta); tot.porTelefone += num(r.por_telefone); tot.porNome += num(r.por_nome)
     }
     const { error } = await db.from('importacoes').insert({
-      corretora, tipo: 'clientes', nome_arquivo: nomeArquivo, linhas: linhas.length, linhas_novas: contasNovas, linhas_ignoradas: 0,
-      detalhes: { clientes_novos: clientesNovos, contas_atualizadas: contasAtualizadas },
+      corretora, tipo: 'clientes', nome_arquivo: nomeArquivo, linhas: linhas.length, linhas_novas: tot.contasNovas, linhas_ignoradas: 0,
+      detalhes: {
+        clientes_novos: tot.clientesNovos, contas_atualizadas: tot.contasAtualizadas, sem_conta: tot.semConta,
+        por_cpf: tot.porCpf, por_conta: tot.porConta, por_telefone: tot.porTelefone, por_nome: tot.porNome,
+      },
       criado_por: profile.user_id, criado_por_nome: profile.nome,
     })
     if (error) falha(error, 'importacoes')
     revalidarCorretora(corretora)
-    return { linhas: linhas.length, clientesNovos, contasNovas, contasAtualizadas }
+    return { linhas: linhas.length, ...tot }
   })
 }
 

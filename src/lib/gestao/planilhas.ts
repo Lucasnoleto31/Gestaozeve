@@ -141,7 +141,7 @@ const MAPA_CLIENTES: Mapa<keyof ClienteImport> = {
   id_conta: ['id conta'],
   id_cliente: ['id cliente'],
   nome: ['nome cliente', 'cliente', 'nome'],
-  conta: ['cd conta sem digito', 'conta', 'conta genial', 'conta xp', 'conta btg', 'conta sem digito', 'sinacor'],
+  conta: ['cd conta sem digito', 'conta', 'conta genial', 'conta xp', 'conta btg', 'conta sem digito', 'sinacor', 'n conta', 'numero da conta', 'numero conta', 'codigo', 'codigo do cliente'],
   conta_digito: ['cd conta com digito', 'conta com digito', 'conta c/ digito'],
   documento: ['cpf cnpj', 'cpf/cnpj', 'cpf', 'documento'],
   assessor: ['assessor', 'nome assessor'],
@@ -155,7 +155,7 @@ const MAPA_CLIENTES: Mapa<keyof ClienteImport> = {
   rendimentos: ['rendimentos', 'renda'],
   patrimonio: ['patrimonio'],
   email: ['email', 'e mail'],
-  telefone: ['telefone', 'celular', 'whatsapp'],
+  telefone: ['telefone', 'celular', 'whatsapp', 'fone', 'contato'],
   perfil: ['perfil'],
   perfil_suitability: ['perfil suitability', 'suitability'],
   dt_nascimento: ['dt nasc', 'data nascimento', 'dt nascimento', 'nascimento'],
@@ -174,10 +174,9 @@ export function lerClientes(raw: unknown[][]): Leitura<ClienteImport> {
   const h = acharCabecalho(raw, ['cd conta sem digito', 'nome cliente', 'cpf cnpj'])
   const cab = raw[h] ?? []
   const idx = indices(cab, MAPA_CLIENTES)
-  if (idx.conta === undefined && idx.conta_digito === undefined) {
-    return { ok: false, erro: `Não encontrei a coluna da conta (CD_CONTA_SEM_DIGITO). Cabeçalhos lidos: ${cab.map(texto).filter(Boolean).join(', ')}` }
+  if (idx.nome === undefined && idx.conta === undefined && idx.conta_digito === undefined) {
+    return { ok: false, erro: `Não encontrei a coluna do nome (NOME_CLIENTE) nem a da conta (CD_CONTA_SEM_DIGITO). Cabeçalhos lidos: ${cab.map(texto).filter(Boolean).join(', ')}` }
   }
-  if (idx.nome === undefined) return { ok: false, erro: 'Não encontrei a coluna NOME_CLIENTE.' }
   const g = (row: unknown[], c: keyof ClienteImport) => (idx[c] === undefined ? undefined : row[idx[c]!])
   const linhas: ClienteImport[] = []
   for (const row of raw.slice(h + 1)) {
@@ -185,14 +184,15 @@ export function lerClientes(raw: unknown[][]): Leitura<ClienteImport> {
     const contaCom = digitos(g(row, 'conta_digito'))
     let conta = digitos(g(row, 'conta'))
     if (!conta && contaCom) conta = contaCom.slice(0, -1)   // sem o dígito verificador
-    if (!conta) continue
+    const nome = texto(g(row, 'nome'))
+    if (!conta && !nome) continue   // a conta é opcional (lista própria): casa por CPF, telefone ou nome
     const rend = g(row, 'rendimentos'), patr = g(row, 'patrimonio'), soma = g(row, 'soma_total')
     linhas.push({
       conta,
       conta_digito: contaCom,
       id_conta: texto(g(row, 'id_conta')),
       id_cliente: texto(g(row, 'id_cliente')),
-      nome: texto(g(row, 'nome')),
+      nome,
       documento: digitos(g(row, 'documento')),
       assessor: texto(g(row, 'assessor')),
       filial: texto(g(row, 'filial')),

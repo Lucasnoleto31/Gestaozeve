@@ -65,8 +65,10 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
     setEstado({ fase: 'enviando', progresso: 0, total: linhas.length, texto: 'Enviando cadastro…' })
     const r = await importarClientes(corretora, nome, linhas)
     if (!r.ok) { setEstado({ fase: 'erro', erro: r.erro }); return }
-    setEstado({ fase: 'pronto', texto: `Cadastro importado: ${fmtNum(r.dados.linhas)} contas lidas.`, detalhes: [
-      `${fmtNum(r.dados.clientesNovos)} clientes novos`, `${fmtNum(r.dados.contasNovas)} contas novas`, `${fmtNum(r.dados.contasAtualizadas)} contas atualizadas`,
+    const d = r.dados
+    setEstado({ fase: 'pronto', texto: `Cadastro importado: ${fmtNum(d.linhas)} linhas lidas.`, detalhes: [
+      `Casados com clientes já cadastrados: ${fmtNum(d.porCpf)} por CPF/CNPJ · ${fmtNum(d.porConta)} pela conta · ${fmtNum(d.porTelefone)} pelo telefone · ${fmtNum(d.porNome)} pelo nome`,
+      `${fmtNum(d.clientesNovos)} clientes novos · ${fmtNum(d.contasNovas)} contas novas · ${fmtNum(d.contasAtualizadas)} contas atualizadas${d.semConta ? ` · ${fmtNum(d.semConta)} linhas sem conta (só completaram o cadastro)` : ''}`,
       'Contas principais, vínculos dos lotes e leads foram recalculados.',
     ] })
     router.refresh()
@@ -118,7 +120,7 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
         <p className="text-xs text-fg-subtle">
           {tipo === 'lotes'
             ? 'Colunas aceitas: Sinacor/CD_CONTA_COM_DIGITO, Data/DATA_CONTRATO, Ativo, Qtd. Contratos, Modo, Plataforma, Assessor, ID_CLIENTE, NOME_CLIENTE…'
-            : 'Export de clientes (DT_PARTITION … ID_ASSESSOR). Se vier da planilha antiga, Parceiro, Data de Entrada, Observações e Motivo da Recusa também entram.'}
+            : 'Export de clientes (DT_PARTITION … ID_ASSESSOR) ou a sua própria lista (Nome, CPF, Telefone, Conta…). Cada linha é casada com o cadastro por CPF → conta → telefone → nome; Parceiro, Data de Entrada, Observações e Motivo da Recusa também entram.'}
         </p>
       </div>
 
@@ -138,17 +140,19 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
 
       {estado.fase === 'clientes' && (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <Resumo label="Arquivo" valor={estado.nome} />
-            <Resumo label="Contas no arquivo" valor={fmtNum(estado.linhas.length)} />
+            <Resumo label="Linhas" valor={fmtNum(estado.linhas.length)} />
+            <Resumo label="Com conta" valor={fmtNum(estado.linhas.filter(l => l.conta).length)} sub={estado.linhas.some(l => !l.conta) ? `${fmtNum(estado.linhas.filter(l => !l.conta).length)} sem conta` : undefined} />
             <Resumo label="Com CPF/CNPJ" valor={fmtNum(estado.linhas.filter(l => l.documento).length)} />
+            <Resumo label="Com telefone" valor={fmtNum(estado.linhas.filter(l => l.telefone).length)} />
             <Resumo label="Campos manuais" valor={estado.linhas.some(l => l.data_entrada || l.parceiro || l.observacoes || l.motivo_recusa) ? 'sim' : 'não vieram'} />
           </div>
           {estado.faltando.length > 0 && <Alert tone="warning" title="Colunas não encontradas (vão ficar em branco)">{estado.faltando.join(', ')}</Alert>}
           <Previa cabecalhos={['Conta', 'Nome', 'CPF/CNPJ', 'Assessor', 'Situação', 'Migração', 'Telefone']} linhas={estado.linhas.slice(0, 5).map(l => [l.conta, l.nome, l.documento, l.assessor, l.situacao_conta, dataPt(l.data_habilitacao), l.telefone])} />
-          <p className="text-xs text-fg-muted">Contas já cadastradas são atualizadas (o export manda; campo vazio não apaga o que já existe). Contas novas entram; clientes são juntados pelo CPF/CNPJ.</p>
+          <p className="text-xs text-fg-muted">Cada linha é casada com o cadastro por CPF/CNPJ, depois conta (com ou sem dígito), depois telefone e por último nome (só quando único). Quem já existe é completado (campo vazio não apaga); quem não existe entra como cliente novo. Linhas com conta criam/atualizam a conta e ligam os lotes dela.</p>
           <div className="flex gap-2">
-            <Button onClick={importarClientesAgora}>Importar {fmtNum(estado.linhas.length)} contas</Button>
+            <Button onClick={importarClientesAgora}>Importar {fmtNum(estado.linhas.length)} linhas</Button>
             <Button variant="ghost" onClick={() => setEstado({ fase: 'vazio' })}>Cancelar</Button>
           </div>
         </div>

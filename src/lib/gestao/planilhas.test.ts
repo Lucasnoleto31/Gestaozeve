@@ -84,6 +84,22 @@ describe('lerClientes (export de clientes)', () => {
     const r = lerClientes([['NOME_CLIENTE', 'CD_CONTA_COM_DIGITO'], ['Fulano', '1234567']])
     expect(r.ok && r.linhas[0].conta).toBe('123456')
   })
+  it('aceita a lista própria sem conta (nome, CPF, telefone)', () => {
+    const r = lerClientes([
+      ['Nome', 'CPF', 'Telefone', 'Conta Genial', 'Parceiro'],
+      ['Maria Souza', '123.456.789-00', '(62) 99999-0000', '', 'Aikon'],
+      ['Pedro Lima', '', '5511988887777', '119396', ''],
+      ['', '', '', '', ''],
+    ])
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.linhas).toHaveLength(2)
+    expect(r.linhas[0]).toMatchObject({ nome: 'Maria Souza', conta: '', documento: '12345678900', telefone: '(62) 99999-0000', parceiro: 'Aikon' })
+    expect(r.linhas[1]).toMatchObject({ nome: 'Pedro Lima', conta: '119396', documento: '', telefone: '5511988887777' })
+  })
+  it('recusa arquivo sem coluna de nome e de conta', () => {
+    expect(lerClientes([['CPF', 'Telefone'], ['123', '456']]).ok).toBe(false)
+  })
 })
 
 describe('lerLeads (formulário)', () => {

@@ -72,7 +72,6 @@ export function EditarUsuarioButton({ usuario }: { usuario: Usuario }) {
           <Input id={`${formId}-email`} label="E-mail" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
           <Select id={`${formId}-role`} label="Função" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             <option value="vendedor">Assessor</option>
-            <option value="influenciador">Influenciador</option>
             <option value="admin">Administrador</option>
           </Select>
           {error && <Alert tone="danger">{error}</Alert>}

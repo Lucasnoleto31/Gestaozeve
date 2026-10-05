@@ -1,6 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import type { Role } from '@/types'
+
+const ROLES: Role[] = ['admin', 'vendedor', 'influenciador']
+const isRole = (v: unknown): v is Role => typeof v === 'string' && (ROLES as string[]).includes(v)
 
 function getAdminClient() {
   return createAdminClient(
@@ -9,33 +13,24 @@ function getAdminClient() {
   )
 }
 
-async function getCallerProfile() {
+async function chamadorEhAdmin(): Promise<boolean> {
   const supabase = await createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError) return { _debug: `auth error: ${authError.message}`, role: null }
-  if (!user) return { _debug: 'no user in session', role: null }
-
-  const supabaseAdmin = getAdminClient()
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .select('*')
-    .eq('user_id', user.id)
-    .single()
-
-  if (error) return { _debug: `profile query error: ${error.message} | user_id: ${user.id}`, role: null }
-  if (!data) return { _debug: `no profile found for user_id: ${user.id}`, role: null }
-  return data
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return false
+  const { data } = await getAdminClient().from('profiles').select('role').eq('user_id', user.id).single()
+  return data?.role === 'admin'
 }
 
+// Cria a conta e o perfil. O gatilho handle_new_user (supabase-s18) já cria o
+// perfil a partir dos metadados; o upsert abaixo garante nome, perfil e status
+// mesmo se o gatilho não existir.
 export async function POST(req: NextRequest) {
-  const profile = await getCallerProfile()
-  if (!profile || profile.role !== 'admin') {
+  if (!(await chamadorEhAdmin())) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
   const { nome, email, senha, role } = await req.json()
-
-  if (!nome || !email || !senha || !role) {
+  if (!nome || !email || !senha || !isRole(role)) {
     return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
   }
 
@@ -45,46 +40,29 @@ export async function POST(req: NextRequest) {
     email,
     password: senha,
     email_confirm: true,
+    user_metadata: { nome, role },
   })
-
   if (authError) {
     return NextResponse.json({ error: authError.message }, { status: 400 })
   }
 
-  const { error: profileError } = await supabaseAdmin.from('profiles').insert({
-    user_id: authUser.user.id,
-    name: nome,
-    nome,
-    email,
-    role,
-    ativo: true,
-  })
-
+  const { error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .upsert({ user_id: authUser.user.id, name: nome, nome, email, role, ativo: true }, { onConflict: 'user_id' })
   if (profileError) {
     return NextResponse.json({ error: profileError.message }, { status: 400 })
-  }
-
-  if (role === 'influenciador') {
-    const codigo = nome.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '') + Math.floor(Math.random() * 1000)
-    await supabaseAdmin.from('influenciadores').insert({
-      user_id: authUser.user.id,
-      nome,
-      codigo,
-    })
   }
 
   return NextResponse.json({ ok: true })
 }
 
 export async function PATCH(req: NextRequest) {
-  const profile = await getCallerProfile()
-  if (!profile || profile.role !== 'admin') {
+  if (!(await chamadorEhAdmin())) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
   const { id, userId, nome, email, role } = await req.json()
-
-  if (!id || !userId || !nome || !email || !role) {
+  if (!id || !userId || !nome || !email || !isRole(role)) {
     return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
   }
 
@@ -92,7 +70,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data: perfilAtual } = await supabaseAdmin
     .from('profiles')
-    .select('role, email')
+    .select('email')
     .eq('id', id)
     .single()
 
@@ -100,34 +78,20 @@ export async function PATCH(req: NextRequest) {
     .from('profiles')
     .update({ name: nome, nome, email, role })
     .eq('id', id)
-
   if (profileError) {
     return NextResponse.json({ error: profileError.message }, { status: 400 })
   }
 
   if (email !== perfilAtual?.email) {
-    await supabaseAdmin.auth.admin.updateUserById(userId, { email })
-  }
-
-  if (role === 'influenciador' && perfilAtual?.role !== 'influenciador') {
-    const { data: existing } = await supabaseAdmin
-      .from('influenciadores')
-      .select('id')
-      .eq('user_id', userId)
-      .single()
-
-    if (!existing) {
-      const codigo = nome.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '') + Math.floor(Math.random() * 1000)
-      await supabaseAdmin.from('influenciadores').insert({ user_id: userId, nome, codigo })
-    }
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { email })
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
   return NextResponse.json({ ok: true })
 }
 
 export async function DELETE(req: NextRequest) {
-  const profile = await getCallerProfile()
-  if (!profile || profile.role !== 'admin') {
+  if (!(await chamadorEhAdmin())) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
@@ -136,9 +100,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'userId obrigatório' }, { status: 400 })
   }
 
-  const supabaseAdmin = getAdminClient()
-
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
+  // profiles.user_id referencia auth.users com ON DELETE CASCADE: o perfil cai junto
+  const { error } = await getAdminClient().auth.admin.deleteUser(userId)
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 })
   }

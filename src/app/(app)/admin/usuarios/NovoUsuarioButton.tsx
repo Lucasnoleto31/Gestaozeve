@@ -64,7 +64,6 @@ export function NovoUsuarioButton() {
           <Input id="novo-senha" label="Senha" type="password" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} required minLength={6} hint="Mínimo de 6 caracteres." />
           <Select id="novo-role" label="Função" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             <option value="vendedor">Assessor</option>
-            <option value="influenciador">Influenciador</option>
             <option value="admin">Administrador</option>
           </Select>
           {error && <Alert tone="danger">{error}</Alert>}

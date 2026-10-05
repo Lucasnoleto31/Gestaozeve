@@ -1,53 +1,144 @@
 -- =============================================
--- ZeveAI — S17: limpeza total do sistema de gestão
--- Apaga TODAS as tabelas, views e funções do sistema de lotes/CRM antigo.
+-- ZeveAI — S17: limpeza do projeto Supabase (menos a autenticação)
 --
--- Mantém só a autenticação:
---   auth.* (usuários e senhas), public.profiles (nome, e-mail, perfil) e as
---   funções get_my_role(), get_my_profile_id() e set_updated_at().
+-- Apaga, por nome, as 27 tabelas do sistema de gestão antigo e as 17 tabelas
+-- do outro sistema abandonado (nomes em inglês), a view e as funções do
+-- sistema antigo.
 --
--- NÃO toca nas tabelas de outro sistema que divide este projeto Supabase
--- (alerts, assets, campaigns, clients, contracts, daily_metrics, goals,
---  interactions, loss_reasons, origins, partners, platform_costs, platforms,
---  products, revenues, subproducts, user_roles).
+-- Mantém a autenticação: auth.* (usuários e senhas), public.profiles (nome,
+-- e-mail, perfil, políticas) e as funções get_my_role(), get_my_profile_id()
+-- e set_updated_at().
 --
--- Antes de rodar: cópia completa em Projetos/Zeve/backup-banco-gestao-2026-10-05.
--- Isto é irreversível.
+-- Por que este formato:
+--   • A primeira tentativa morreu em "deadlock detected": outra sessão segurava
+--     uma tabela enquanto o DROP de 27 tabelas numa tacada só pedia lock em
+--     todas. Agora cada DROP é uma transação própria (COMMIT depois de cada um),
+--     com lock_timeout de 15 s, e as sessões que estiverem segurando essas
+--     tabelas são encerradas antes.
+--   • Se algum passo falhar, rode o arquivo de novo: tudo é IF EXISTS.
+--
+-- Backup completo em Projetos/Zeve/backup-banco-gestao-2026-10-05. Irreversível.
 -- =============================================
 
+SET lock_timeout = '15s';
+
+-- 0. Encerra as sessões que estão segurando alguma das tabelas que vão cair
+--    (app antigo ainda aberto em algum navegador, consultas penduradas).
+SELECT DISTINCT pg_terminate_backend(l.pid)
+FROM pg_locks l
+JOIN pg_class c ON c.oid = l.relation
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND l.pid <> pg_backend_pid()
+  AND c.relname IN (
+    'contratos_importacoes_log', 'contratos', 'contratos_importacoes', 'assessor_pricing_produto',
+    'assessor_pricing_zeragem_tier', 'assessor_pricing', 'metas_anuais', 'metas_assessor', 'cliente_acoes',
+    'cliente_contas', 'cliente_dados_chs', 'cliente_followups', 'cliente_historico_mensal', 'cliente_notas',
+    'cliente_scores', 'plataformas', 'clientes', 'clientes_com_score', 'lead_historico', 'lead_notas', 'leads',
+    'scripts', 'funil_etapas', 'barras', 'influenciadores', 'notificacoes_log', 'receitas', 'receitas_importacoes',
+    'alerts', 'assets', 'campaigns', 'clients', 'contracts', 'daily_metrics', 'goals', 'interactions',
+    'loss_reasons', 'origins', 'partners', 'platform_costs', 'platforms', 'products', 'revenues', 'subproducts',
+    'user_roles'
+  );
+COMMIT;
+
+-- 1. View
 DROP VIEW IF EXISTS public.clientes_com_score CASCADE;
+COMMIT;
 
-DROP TABLE IF EXISTS
-  public.contratos_importacoes_log,
-  public.contratos,
-  public.contratos_importacoes,
-  public.assessor_pricing_produto,
-  public.assessor_pricing_zeragem_tier,
-  public.assessor_pricing,
-  public.metas_anuais,
-  public.metas_assessor,
-  public.barras,
-  public.cliente_acoes,
-  public.cliente_contas,
-  public.cliente_dados_chs,
-  public.cliente_followups,
-  public.cliente_historico_mensal,
-  public.cliente_notas,
-  public.cliente_scores,
-  public.plataformas,
-  public.clientes,
-  public.lead_historico,
-  public.lead_notas,
-  public.leads,
-  public.scripts,
-  public.funil_etapas,
-  public.influenciadores,
-  public.notificacoes_log,
-  public.receitas,
-  public.receitas_importacoes
-CASCADE;
+-- 2. Tabelas do sistema de gestão antigo (filhas antes das mães)
+DROP TABLE IF EXISTS public.contratos_importacoes_log CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.contratos CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.contratos_importacoes CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.assessor_pricing_produto CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.assessor_pricing_zeragem_tier CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.assessor_pricing CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.metas_anuais CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.metas_assessor CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.cliente_acoes CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.cliente_contas CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.cliente_dados_chs CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.cliente_followups CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.cliente_historico_mensal CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.cliente_notas CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.cliente_scores CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.plataformas CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.clientes CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.lead_historico CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.lead_notas CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.leads CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.scripts CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.funil_etapas CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.barras CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.influenciadores CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.notificacoes_log CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.receitas CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.receitas_importacoes CASCADE;
+COMMIT;
 
--- Funções do sistema antigo (todas as assinaturas de cada nome)
+-- 3. Tabelas do outro sistema abandonado (confirmado como lixo em 05/10/2026)
+DROP TABLE IF EXISTS public.alerts CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.assets CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.campaigns CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.clients CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.contracts CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.daily_metrics CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.goals CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.interactions CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.loss_reasons CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.origins CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.partners CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.platform_costs CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.platforms CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.products CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.revenues CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.subproducts CASCADE;
+COMMIT;
+DROP TABLE IF EXISTS public.user_roles CASCADE;
+COMMIT;
+
+-- 4. Funções do sistema de gestão antigo (todas as assinaturas de cada nome)
 DO $$
 DECLARE f record;
 BEGIN
@@ -89,8 +180,14 @@ BEGIN
     EXECUTE format('DROP FUNCTION IF EXISTS %s CASCADE', f.assinatura);
   END LOOP;
 END $$;
+COMMIT;
 
 NOTIFY pgrst, 'reload schema';
 
--- Conferência: deve sobrar só profiles entre as tabelas deste sistema
-SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1;
+-- Conferência: deve sobrar profiles e, no máximo, funções/tipos do outro sistema
+SELECT 'tabela' AS tipo, tablename AS nome FROM pg_tables WHERE schemaname = 'public'
+UNION ALL
+SELECT 'funcao', p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public'
+UNION ALL
+SELECT 'tipo', t.typname FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typtype IN ('e', 'd')
+ORDER BY 1, 2;

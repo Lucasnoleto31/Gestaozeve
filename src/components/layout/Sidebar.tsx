@@ -3,10 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
-import {
-  Activity, Building2, ChevronRight, DollarSign, FileSpreadsheet, Gift, Home, KeyRound,
-  LayoutDashboard, Layers, Receipt, Target, Trophy, Upload, Users, X,
-} from 'lucide-react'
+import { ChevronRight, Home, KeyRound, Layers, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
@@ -16,35 +13,12 @@ type NavSection = { label: string; roles: Role[]; items: NavItem[] }
 
 const TODOS: Role[] = ['admin', 'vendedor', 'influenciador']
 
-// Estrutura do sistema: tudo gira em torno dos lotes.
+// As seções das corretoras (XP, BTG, Genial) entram aqui conforme as telas forem construídas.
 export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Visão geral',
     roles: TODOS,
     items: [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }],
-  },
-  {
-    label: 'Lotes',
-    roles: ['admin'],
-    items: [
-      { label: 'Painel', href: '/admin/contratos-dashboard', icon: LayoutDashboard, exact: true },
-      { label: 'Ranking de barras', href: '/admin/contratos-dashboard/barras', icon: Trophy },
-      { label: 'Clientes', href: '/admin/contratos-dashboard/clientes', icon: Users },
-      { label: 'Operacional', href: '/admin/contratos-dashboard/operacional', icon: Activity },
-      { label: 'Receita', href: '/admin/contratos-dashboard/receita', icon: DollarSign },
-      { label: 'Fechamento mensal', href: '/admin/contratos-dashboard/fechamento', icon: FileSpreadsheet },
-      { label: 'Incentivo Genial', href: '/admin/contratos-dashboard/incentivo', icon: Gift },
-      { label: 'Importações', href: '/admin/contratos', icon: Upload },
-    ],
-  },
-  {
-    label: 'Cadastros',
-    roles: ['admin'],
-    items: [
-      { label: 'Barras', href: '/admin/barras', icon: Building2 },
-      { label: 'Tarifas', href: '/admin/assessor-pricing', icon: Receipt },
-      { label: 'Metas', href: '/admin/metas', icon: Target },
-    ],
   },
   {
     label: 'Sistema',
@@ -53,7 +27,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ]
 
-// Match por segmento: '/admin/contratos' não acende em '/admin/contratos-dashboard'.
+// Match por segmento: um item só acende na própria rota ou nas filhas dela.
 export function isActivePath(pathname: string, href: string, exact?: boolean): boolean {
   if (exact) return pathname === href
   return pathname === href || pathname.startsWith(href + '/')
@@ -90,7 +64,7 @@ export function Sidebar({ role, nome }: { role: Role; nome: string }) {
         </div>
         <div className="min-w-0 leading-tight">
           <p className="text-sm font-semibold tracking-tight">ZeveAI</p>
-          <p className="text-[10px] uppercase tracking-[0.14em] text-sb-muted">Controle de lotes</p>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-sb-muted">Gestão</p>
         </div>
         <button
           onClick={close}

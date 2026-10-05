@@ -8,17 +8,6 @@ import { ThemeToggle } from '@/lib/theme'
 
 // Breadcrumb derivado da rota (prefixos mais longos primeiro).
 const ROTAS: { prefix: string; section: string; label: string }[] = [
-  { prefix: '/admin/contratos-dashboard/barras', section: 'Lotes', label: 'Ranking de barras' },
-  { prefix: '/admin/contratos-dashboard/clientes', section: 'Lotes', label: 'Clientes' },
-  { prefix: '/admin/contratos-dashboard/fechamento', section: 'Lotes', label: 'Fechamento mensal' },
-  { prefix: '/admin/contratos-dashboard/operacional', section: 'Lotes', label: 'Operacional' },
-  { prefix: '/admin/contratos-dashboard/receita', section: 'Lotes', label: 'Receita' },
-  { prefix: '/admin/contratos-dashboard/incentivo', section: 'Lotes', label: 'Incentivo Genial' },
-  { prefix: '/admin/contratos-dashboard', section: 'Lotes', label: 'Painel' },
-  { prefix: '/admin/contratos', section: 'Lotes', label: 'Importações' },
-  { prefix: '/admin/assessor-pricing', section: 'Cadastros', label: 'Tarifas' },
-  { prefix: '/admin/barras', section: 'Cadastros', label: 'Barras' },
-  { prefix: '/admin/metas', section: 'Cadastros', label: 'Metas' },
   { prefix: '/admin/usuarios', section: 'Sistema', label: 'Usuários' },
   { prefix: '/perfil', section: 'Conta', label: 'Meu perfil' },
   { prefix: '/dashboard', section: 'Visão geral', label: 'Início' },
@@ -26,7 +15,7 @@ const ROTAS: { prefix: string; section: string; label: string }[] = [
 
 function crumbFor(pathname: string) {
   return ROTAS.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/'))
-    ?? { section: 'ZeveAI', label: 'Controle de lotes' }
+    ?? { section: 'ZeveAI', label: 'Gestão' }
 }
 
 export function TopBar() {

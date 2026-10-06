@@ -1,13 +1,17 @@
 @import "tailwindcss";
 
 /* Tema escuro por classe no <html>. A classe é definida antes da hidratação
-   por um script inline no layout raiz (src/lib/theme.tsx), então não pisca. */
+   por um script inline no layout raiz (src/lib/theme-shared.ts), então não pisca.
+   Escuro é o padrão; claro fica disponível no seletor de tema. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Tokens semânticos → utilitários Tailwind
-   bg-bg, bg-surface, bg-surface-2, border-line, text-fg, text-fg-muted,
-   text-accent, bg-accent-soft, text-success, bg-danger-soft, bg-sb …
+   Tokens → utilitários Tailwind (ver DESIGN.md)
+   Cor:   bg-bg, bg-surface(-2/-3), border-line(-strong), text-fg(-muted/-subtle),
+          text-accent, bg-accent-soft, text-gain, bg-loss-soft, text-warn …
+   Tipo:  text-micro, text-label, text-dense, text-body, text-section,
+          text-title, text-kpi, text-display
+   Raio:  rounded-sm (6) · rounded-md (8) · rounded-lg (12)
    "inline" faz o utilitário apontar pra var(), então o tema troca em runtime.
    ───────────────────────────────────────────────────────────────────────── */
 @theme inline {
@@ -24,143 +28,146 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
-  --color-success: var(--success);
-  --color-success-soft: var(--success-soft);
-  --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
-  --color-warning: var(--warning);
-  --color-warning-soft: var(--warning-soft);
-  --color-info: var(--info);
-  --color-info-soft: var(--info-soft);
-  --color-violet: var(--violet);
-  --color-violet-soft: var(--violet-soft);
-  --color-sb: var(--sb-bg);
-  --color-sb-fg: var(--sb-fg);
-  --color-sb-muted: var(--sb-muted);
-  --color-sb-line: var(--sb-line);
-  --color-sb-active: var(--sb-active);
-  --color-sb-accent: var(--sb-accent);
-  --shadow-card: var(--shadow-card);
+  --color-gain: var(--gain);
+  --color-gain-soft: var(--gain-soft);
+  --color-loss: var(--loss);
+  --color-loss-soft: var(--loss-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-focus: var(--focus);
+
+  /* Aliases de transição dos nomes antigos (somem quando as telas migrarem) */
+  --color-success: var(--gain);
+  --color-success-soft: var(--gain-soft);
+  --color-danger: var(--loss);
+  --color-danger-soft: var(--loss-soft);
+  --color-warning: var(--warn);
+  --color-warning-soft: var(--warn-soft);
+  --color-info: var(--accent);
+  --color-info-soft: var(--accent-soft);
+  --color-violet: var(--fg-muted);
+  --color-violet-soft: var(--surface-3);
+  --color-sb: var(--surface);
+  --color-sb-fg: var(--fg);
+  --color-sb-muted: var(--fg-muted);
+  --color-sb-line: var(--line);
+  --color-sb-active: var(--surface-3);
+  --color-sb-accent: var(--accent);
+
+  /* Escala tipográfica (DESIGN.md §2.2) */
+  --text-micro: 11px;
+  --text-micro--line-height: 1.3;
+  --text-label: 12px;
+  --text-label--line-height: 1.3;
+  --text-dense: 13px;
+  --text-dense--line-height: 1.4;
+  --text-body: 14px;
+  --text-body--line-height: 1.5;
+  --text-section: 15px;
+  --text-section--line-height: 1.3;
+  --text-title: 20px;
+  --text-title--line-height: 1.2;
+  --text-kpi: 26px;
+  --text-kpi--line-height: 1.1;
+  --text-display: 32px;
+  --text-display--line-height: 1.1;
+
+  /* Raio e sombra */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-float: var(--elev-float);
 }
 
-/* ─── Tema claro (padrão) ─────────────────────────────────────────────── */
+/* ─── Paleta clara ─────────────────────────────────────────────────────── */
 :root {
-  color-scheme: light;
-
-  --bg: #f3f5f9;
+  --bg: #f4f6f9;
   --surface: #ffffff;
   --surface-2: #f7f9fc;
-  --surface-3: #edf1f6;
-  --line: #e2e7ef;
+  --surface-3: #eef2f6;
+  --line: #e3e8ef;
   --line-strong: #c9d2df;
 
-  --fg: #101828;
-  --fg-muted: #475467;
-  --fg-subtle: #8b95a7;
+  --fg: #0f1722;
+  --fg-muted: #4a5667;
+  --fg-subtle: #8a95a5;
 
-  --accent: #1f4fd1;
-  --accent-hover: #1a44b5;
+  --accent: #1f5eff;
+  --accent-hover: #1a4fd6;
   --accent-fg: #ffffff;
-  --accent-soft: rgba(31, 79, 209, 0.09);
+  --accent-soft: rgba(31, 94, 255, 0.09);
 
-  --success: #157f3d;
-  --success-soft: rgba(21, 127, 61, 0.1);
-  --danger: #b42318;
-  --danger-soft: rgba(180, 35, 24, 0.09);
-  --warning: #b54708;
-  --warning-soft: rgba(181, 71, 8, 0.11);
-  --info: #0e7490;
-  --info-soft: rgba(14, 116, 144, 0.1);
-  --violet: #6d28d9;
-  --violet-soft: rgba(109, 40, 217, 0.1);
+  --gain: #148a4f;
+  --gain-soft: rgba(20, 138, 79, 0.1);
+  --loss: #d6382d;
+  --loss-soft: rgba(214, 56, 45, 0.09);
+  --warn: #b26a05;
+  --warn-soft: rgba(178, 106, 5, 0.1);
 
-  /* Corretoras */
   --c-genial: #2563eb;
-  --c-xp: #d97706;
-  --c-btg: #059669;
+  --c-xp: #c77d00;
+  --c-btg: #0f8f72;
 
-  /* Sidebar: navy fixa nos dois temas (identidade da marca) */
-  --sb-bg: #0c1526;
-  --sb-fg: #e6ecf5;
-  --sb-muted: #8d9bb5;
-  --sb-line: rgba(255, 255, 255, 0.07);
-  --sb-active: rgba(255, 255, 255, 0.08);
-  --sb-accent: #5b8def;
-
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05);
-
-  /* Gráficos (recharts recebe cor como string; ver src/lib/theme.tsx) */
-  --chart-grid: rgba(16, 24, 40, 0.08);
-  --chart-axis: #8b95a7;
+  --focus: var(--accent);
+  --panel-line: var(--line);
+  --elev-float: 0 8px 24px rgba(15, 23, 34, 0.08);
+  --bar-fill: var(--accent);
 }
 
-/* ─── Tema escuro ─────────────────────────────────────────────────────── */
+/* ─── Paleta escura (padrão) ───────────────────────────────────────────── */
 .dark {
-  color-scheme: dark;
+  --bg: #0a0e14;
+  --surface: #10151d;
+  --surface-2: #151b25;
+  --surface-3: #1b2230;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.14);
 
-  --bg: #0b0f17;
-  --surface: #111723;
-  --surface-2: #161d2b;
-  --surface-3: #1c2534;
-  --line: #232d3f;
-  --line-strong: #334159;
+  --fg: #eef2f6;
+  --fg-muted: #a7b1bf;
+  --fg-subtle: #6f7a89;
 
-  --fg: #e6ebf2;
-  --fg-muted: #a3aec2;
-  --fg-subtle: #6c788d;
-
-  --accent: #5b8def;
-  --accent-hover: #78a3f5;
+  --accent: #4d8dff;
+  --accent-hover: #6ea1ff;
   --accent-fg: #ffffff;
-  --accent-soft: rgba(91, 141, 239, 0.16);
+  --accent-soft: rgba(77, 141, 255, 0.14);
 
-  --success: #3dd68c;
-  --success-soft: rgba(61, 214, 140, 0.14);
-  --danger: #f4706b;
-  --danger-soft: rgba(244, 112, 107, 0.14);
-  --warning: #f5b942;
-  --warning-soft: rgba(245, 185, 66, 0.14);
-  --info: #38c4e0;
-  --info-soft: rgba(56, 196, 224, 0.14);
-  --violet: #a78bfa;
-  --violet-soft: rgba(167, 139, 250, 0.14);
+  --gain: #2ecc8a;
+  --gain-soft: rgba(46, 204, 138, 0.14);
+  --loss: #ff5c5c;
+  --loss-soft: rgba(255, 92, 92, 0.14);
+  --warn: #f0b35b;
+  --warn-soft: rgba(240, 179, 91, 0.14);
 
   --c-genial: #60a5fa;
-  --c-xp: #fbbf24;
-  --c-btg: #34d399;
+  --c-xp: #f5b942;
+  --c-btg: #35c3a2;
 
-  --sb-bg: #090d15;
-  --sb-fg: #e6ecf5;
-  --sb-muted: #7f8ba3;
-  --sb-line: rgba(255, 255, 255, 0.06);
-  --sb-active: rgba(255, 255, 255, 0.07);
-  --sb-accent: #6d9bf5;
-
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
-
-  --chart-grid: rgba(255, 255, 255, 0.07);
-  --chart-axis: #6c788d;
+  --focus: var(--accent);
+  --panel-line: transparent;
+  --elev-float: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
-/* Aliases dos nomes antigos: qualquer var(--blue) / var(--muted) que sobrar
-   continua funcionando nos dois temas. */
+/* Nomes antigos que ainda aparecem em componentes (somem na fase 2) */
 :root,
 .dark {
-  --background: var(--bg);
-  --surface-1: var(--surface);
-  --surface-4: var(--surface-3);
-  --border: var(--line);
-  --border-subtle: var(--line);
-  --foreground: var(--fg);
-  --ink: var(--fg);
-  --muted: var(--fg-muted);
-  --muted-lg: var(--fg-subtle);
-  --blue: var(--accent);
-  --blue-light: var(--accent-hover);
-  --blue-dark: var(--accent-hover);
-  --blue-dim: var(--accent-soft);
-  --blue-glow: var(--accent-soft);
-  --sidebar: var(--sb-bg);
+  --success: var(--gain);
+  --success-soft: var(--gain-soft);
+  --danger: var(--loss);
+  --danger-soft: var(--loss-soft);
+  --warning: var(--warn);
+  --warning-soft: var(--warn-soft);
+  --info: var(--accent);
+  --info-soft: var(--accent-soft);
+  --violet: var(--fg-muted);
+  --violet-soft: var(--surface-3);
+  --sb-bg: var(--surface);
+  --sb-fg: var(--fg);
+  --sb-muted: var(--fg-muted);
+  --sb-line: var(--line);
+  --sb-active: var(--surface-3);
+  --sb-accent: var(--accent);
+  --shadow-card: none;
 }
 
 /* ─── Base ─────────────────────────────────────────────────────────────── */
@@ -179,7 +186,7 @@ body {
   min-height: 100%;
   background: var(--bg);
   color: var(--fg);
-  font-size: 14px;
+  font-size: var(--text-body);
   line-height: 1.5;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   -webkit-font-smoothing: antialiased;
@@ -188,18 +195,28 @@ body {
 
 a,
 button {
-  transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+  transition-property: color, background-color, border-color, opacity, box-shadow;
   transition-duration: 120ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
-/* ─── Campos de formulário (inputs, selects, textarea) ───────────────────
-   Na camada base pra utilitários (w-full, border-danger, px-2…) vencerem. */
+/* Toque: alvo mínimo de 44 px em telas de toque */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  [role="button"],
+  select,
+  input:where(:not([type="checkbox"], [type="radio"], [type="file"], [type="range"])) {
+    min-height: 44px;
+  }
+}
+
+/* ─── Campos de formulário ──────────────────────────────────────────────
+   Na camada base pra utilitários (w-full, border-loss, px-2…) vencerem. */
 @layer base {
 input:where(:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="submit"], [type="button"], [type="color"])),
 select,
@@ -207,16 +224,21 @@ textarea {
   appearance: none;
   -webkit-appearance: none;
   min-width: 0;
+  min-height: 40px;
   background: var(--surface);
   color: var(--fg);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--text-body);
   line-height: 1.35;
   outline: none;
   transition: border-color 120ms, box-shadow 120ms, background 120ms;
+}
+
+textarea {
+  min-height: 80px;
 }
 
 input::placeholder,
@@ -248,14 +270,14 @@ textarea:disabled {
 select {
   padding-right: 2rem;
   cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b95a7' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a95a5' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.6rem center;
   background-size: 12px;
 }
 
 .dark select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3aec2' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a7b1bf' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 
 select option {
@@ -282,9 +304,10 @@ input[type="month"]::-webkit-calendar-picker-indicator {
 
 /* Variante compacta (barras de filtro) */
 .field-sm {
-  padding: 0.3rem 0.55rem;
-  font-size: 12px;
-  border-radius: 7px;
+  min-height: 34px;
+  padding: 0.35rem 0.6rem;
+  font-size: var(--text-dense);
+  border-radius: var(--radius-sm);
 }
 
 select.field-sm {
@@ -294,27 +317,28 @@ select.field-sm {
 
 /* ─── Componentes de layout ─────────────────────────────────────────────── */
 @layer components {
+  /* Superfície destacada do fundo. No escuro a borda é transparente: o degrau
+     de cor já separa; no claro a hairline faz esse papel. Sem sombra. */
   .panel {
     background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    box-shadow: var(--shadow-card);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius-lg);
   }
 
+  /* Rótulo de campo / cabeçalho discreto: sentence case, sem espaçamento de planilha */
   .label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-size: var(--text-label);
+    line-height: 1.3;
+    font-weight: 500;
     color: var(--fg-subtle);
   }
 
+  /* Identificação de seção acima do título da página */
   .eyebrow {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent);
+    font-size: var(--text-label);
+    line-height: 1.3;
+    font-weight: 500;
+    color: var(--fg-subtle);
   }
 
   .num {
@@ -334,7 +358,7 @@ select.field-sm {
   .tbl-wrap {
     overflow: auto;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     background: var(--surface);
   }
 
@@ -342,27 +366,25 @@ select.field-sm {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    font-size: 12.5px;
+    font-size: var(--text-dense);
   }
 
   .tbl th {
     position: sticky;
     top: 0;
     z-index: 1;
-    padding: 8px 12px;
+    padding: 9px 12px;
     text-align: left;
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-size: var(--text-label);
+    font-weight: 500;
     color: var(--fg-subtle);
-    background: var(--surface-2);
-    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line-strong);
     white-space: nowrap;
   }
 
   .tbl td {
-    padding: 7px 12px;
+    padding: 9px 12px;
     color: var(--fg);
     border-bottom: 1px solid var(--line);
     vertical-align: middle;
@@ -386,7 +408,7 @@ select.field-sm {
   .tbl tr.total td {
     font-weight: 600;
     background: var(--surface-2);
-    border-top: 2px solid var(--line-strong);
+    border-top: 1px solid var(--line-strong);
   }
 
   .tbl .muted {
@@ -398,11 +420,11 @@ select.field-sm {
   }
 
   .tbl-dense th {
-    padding: 6px 10px;
+    padding: 7px 10px;
   }
 
   .tbl-dense td {
-    padding: 5px 10px;
+    padding: 6px 10px;
   }
 
   .tbl td.sticky-col,
@@ -415,7 +437,6 @@ select.field-sm {
 
   .tbl th.sticky-col {
     z-index: 3;
-    background: var(--surface-2);
   }
 
   .tbl tbody tr:hover td.sticky-col,
@@ -429,18 +450,18 @@ select.field-sm {
     align-items: center;
     gap: 2px;
     padding: 2px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: var(--surface-3);
-    border: 1px solid var(--line);
   }
 
   .seg > button {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-height: 30px;
     padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 12px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-label);
     font-weight: 500;
     color: var(--fg-muted);
     white-space: nowrap;
@@ -455,7 +476,6 @@ select.field-sm {
     background: var(--surface);
     color: var(--fg);
     font-weight: 600;
-    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14);
   }
 
   .seg > button:disabled {
@@ -468,12 +488,12 @@ select.field-sm {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 28px;
+    min-height: 30px;
     padding: 0 10px;
-    border-radius: 8px;
-    font-size: 12px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-label);
     font-weight: 500;
-    border: 1px solid var(--line);
+    border: 1px solid var(--line-strong);
     background: var(--surface);
     color: var(--fg-muted);
     white-space: nowrap;
@@ -482,13 +502,12 @@ select.field-sm {
 
   .chip:hover {
     color: var(--fg);
-    border-color: var(--line-strong);
   }
 
   .chip[data-active="true"] {
-    background: var(--accent);
+    background: var(--accent-soft);
     border-color: var(--accent);
-    color: var(--accent-fg);
+    color: var(--fg);
   }
 
   .chip:disabled {
@@ -507,41 +526,36 @@ select.field-sm {
   .bar-fill {
     height: 100%;
     border-radius: 999px;
-    background: var(--accent);
+    background: var(--bar-fill);
   }
 
   .skeleton {
     background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-2) 50%, var(--surface-3) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.6s infinite;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
   }
 
   .modal-backdrop {
-    background: rgba(3, 7, 18, 0.55);
-    backdrop-filter: blur(4px);
+    background: rgba(3, 7, 18, 0.6);
     animation: fadeIn 0.15s ease both;
   }
 
   .modal-panel {
-    animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+    border: 1px solid var(--line);
+    box-shadow: var(--elev-float);
   }
 }
 
-/* ─── Animações ────────────────────────────────────────────────────────── */
+/* ─── Animações (só em resposta a ação) ─────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.97); }
+  from { opacity: 0; transform: scale(0.98); }
   to { opacity: 1; transform: scale(1); }
 }
 
@@ -550,9 +564,8 @@ select.field-sm {
   100% { background-position: 200% center; }
 }
 
-.animate-fade-in { animation: fadeIn 0.2s ease both; }
-.animate-fade-up { animation: fadeUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-scale-in { animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in { animation: fadeIn 0.15s ease both; }
+.animate-scale-in { animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 /* ─── Scrollbar ────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {

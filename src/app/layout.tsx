@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Geist } from 'next/font/google'
 import { cookies } from 'next/headers'
 import { ThemeProvider } from '@/lib/theme'
-import { THEME_COOKIE, THEME_INIT_SCRIPT, isThemePref, type ThemePref } from '@/lib/theme-shared'
+import { THEME_COOKIE, THEME_INIT_SCRIPT, THEME_PADRAO, isThemePref, type ThemePref } from '@/lib/theme-shared'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'] })
@@ -17,8 +17,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // o caso "seguir o sistema" antes da hidratação.
   const store = await cookies()
   const raw = store.get(THEME_COOKIE)?.value
-  const initial: ThemePref = isThemePref(raw) ? raw : 'system'
-  const dark = initial === 'dark'
+  const initial: ThemePref = isThemePref(raw) ? raw : THEME_PADRAO
+  // 'system' só se resolve no cliente; aqui assume o padrão (escuro)
+  const dark = initial !== 'light'
 
   return (
     <html

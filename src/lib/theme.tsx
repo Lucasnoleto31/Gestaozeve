@@ -4,14 +4,15 @@
 // - Preferência salva em localStorage + cookie (o cookie deixa o servidor
 //   renderizar o <html class="dark"> certo; o localStorage manda no cliente).
 // - THEME_INIT_SCRIPT roda inline no <head> antes da hidratação, então a
-//   página já nasce no tema certo (sem piscar).
+//   página já nasce no tema certo (sem piscar). Sem preferência, é escuro.
 // - O estado vive fora do React (useSyncExternalStore): sem setState em
 //   effect e sem divergência entre servidor e cliente.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { THEME_COOKIE, THEME_STORAGE_KEY, isThemePref, type ResolvedTheme, type ThemePref } from './theme-shared'
+import { THEME_COOKIE, THEME_PADRAO, THEME_STORAGE_KEY, isThemePref, type ResolvedTheme, type ThemePref } from './theme-shared'
+import { comAlpha, useTokens } from './tokens'
 
 export type { ResolvedTheme, ThemePref }
 
@@ -26,7 +27,7 @@ function readPref(): ThemePref {
     if (isThemePref(s)) return s
   } catch {}
   const m = typeof document !== 'undefined' ? document.cookie.match(/(?:^|; )zeve-theme=(light|dark|system)/) : null
-  return m && isThemePref(m[1]) ? m[1] : 'system'
+  return m && isThemePref(m[1]) ? m[1] : THEME_PADRAO
 }
 
 function systemDark(): boolean {
@@ -63,12 +64,12 @@ function writePref(p: ThemePref) {
 
 // ── contexto ───────────────────────────────────────────────────────────────
 type Ctx = { pref: ThemePref; resolved: ResolvedTheme; setPref: (p: ThemePref) => void }
-const ThemeContext = createContext<Ctx>({ pref: 'system', resolved: 'light', setPref: () => {} })
+const ThemeContext = createContext<Ctx>({ pref: THEME_PADRAO, resolved: 'dark', setPref: () => {} })
 
 export function ThemeProvider({ initial, children }: { initial: ThemePref; children: React.ReactNode }) {
-  // No servidor (e no primeiro render do cliente) só sabemos o cookie.
+  // No servidor (e no primeiro render do cliente) só sabemos o cookie; "system" assume escuro.
   const getServerSnapshot = useCallback(
-    () => `${initial}|${initial === 'dark' ? 'dark' : 'light'}`,
+    () => `${initial}|${initial === 'light' ? 'light' : 'dark'}`,
     [initial],
   )
   const snap = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
@@ -88,10 +89,10 @@ export function useTheme() {
   return useContext(ThemeContext)
 }
 
-// ── seletor (claro / escuro / automático) ──────────────────────────────────
+// ── seletor (escuro / claro / automático) ──────────────────────────────────
 const OPCOES: { id: ThemePref; icon: React.ElementType; label: string }[] = [
-  { id: 'light', icon: Sun, label: 'Tema claro' },
   { id: 'dark', icon: Moon, label: 'Tema escuro' },
+  { id: 'light', icon: Sun, label: 'Tema claro' },
   { id: 'system', icon: Monitor, label: 'Seguir o sistema' },
 ]
 
@@ -107,10 +108,11 @@ export function ThemeToggle({ className }: { className?: string }) {
           aria-checked={pref === o.id}
           data-active={pref === o.id}
           title={o.label}
+          aria-label={o.label}
           onClick={() => setPref(o.id)}
           className="px-2"
         >
-          <o.icon className="h-3.5 w-3.5" />
+          <o.icon className="h-3.5 w-3.5" aria-hidden />
         </button>
       ))}
     </div>
@@ -118,7 +120,8 @@ export function ThemeToggle({ className }: { className?: string }) {
 }
 
 // ── cores dos gráficos ─────────────────────────────────────────────────────
-// Recharts pinta SVG com strings de cor, então cada tema tem a sua paleta.
+// Recharts pinta SVG com strings de cor; os valores vêm dos tokens do CSS
+// (src/lib/tokens.ts), então acompanham o tema sem paleta própria aqui.
 export type ChartColors = {
   grid: string
   axis: string
@@ -131,53 +134,30 @@ export type ChartColors = {
   receita: string
   acumulado: string
   incentivo: string
-  produto: Record<string, string>
   corretora: Record<'GENIAL' | 'XP' | 'BTG', string>
+  // 1ª accent, 2ª gain, 3ª warn, 4ª neutro; depois versões atenuadas (séries empilhadas)
   palette: string[]
 }
 
-export const CHART_COLORS: Record<ResolvedTheme, ChartColors> = {
-  light: {
-    grid: 'rgba(16,24,40,0.08)',
-    axis: '#8b95a7',
-    text: '#475467',
-    tooltipBg: '#ffffff',
-    tooltipBorder: '#e2e7ef',
-    operados: '#1f4fd1',
-    zerados: '#d92d20',
-    clientes: '#7a5af8',
-    receita: '#1f4fd1',
-    acumulado: '#d92d20',
-    incentivo: '#157f3d',
-    produto: {
-      WIN: '#1f4fd1', WDO: '#157f3d', BIT: '#d97706', IND: '#7a5af8', DOL: '#d92d20',
-      WSP: '#0e7490', CCM: '#65a30d', SOL: '#db2777', OUTRO: '#64748b',
-    },
-    corretora: { GENIAL: '#2563eb', XP: '#d97706', BTG: '#059669' },
-    palette: ['#1f4fd1', '#157f3d', '#d97706', '#7a5af8', '#d92d20', '#0e7490', '#64748b', '#db2777'],
-  },
-  dark: {
-    grid: 'rgba(255,255,255,0.07)',
-    axis: '#6c788d',
-    text: '#a3aec2',
-    tooltipBg: '#161d2b',
-    tooltipBorder: '#334159',
-    operados: '#6d9bf5',
-    zerados: '#f4706b',
-    clientes: '#b197fc',
-    receita: '#6d9bf5',
-    acumulado: '#f4706b',
-    incentivo: '#3dd68c',
-    produto: {
-      WIN: '#6d9bf5', WDO: '#3dd68c', BIT: '#f5b942', IND: '#b197fc', DOL: '#f4706b',
-      WSP: '#38c4e0', CCM: '#a3e635', SOL: '#f472b6', OUTRO: '#94a3b8',
-    },
-    corretora: { GENIAL: '#60a5fa', XP: '#fbbf24', BTG: '#34d399' },
-    palette: ['#6d9bf5', '#3dd68c', '#f5b942', '#b197fc', '#f4706b', '#38c4e0', '#94a3b8', '#f472b6'],
-  },
-}
-
 export function useChartColors(): ChartColors {
-  const { resolved } = useTheme()
-  return CHART_COLORS[resolved]
+  const t = useTokens()
+  return useMemo(() => ({
+    grid: comAlpha(t.fg, 0.08),
+    axis: t.fgSubtle,
+    text: t.fgMuted,
+    tooltipBg: t.surface2,
+    tooltipBorder: t.lineStrong,
+    operados: t.accent,
+    zerados: t.loss,
+    clientes: t.fgMuted,
+    receita: t.accent,
+    acumulado: t.warn,
+    incentivo: t.gain,
+    corretora: t.corretora,
+    palette: [
+      t.accent, t.gain, t.warn, t.fgMuted,
+      comAlpha(t.accent, 0.55), comAlpha(t.gain, 0.55), comAlpha(t.warn, 0.55), comAlpha(t.fgMuted, 0.55),
+      t.fgSubtle,
+    ],
+  }), [t])
 }

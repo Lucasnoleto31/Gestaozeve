@@ -41,17 +41,17 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <PageHeader
         eyebrow="Leads · todas as corretoras"
         title="Leads"
-        description={<>Uma linha por lead do formulário. Dados do formulário são cinza; o acompanhamento da equipe (origem, responsável, status, contatos) é editado aqui. Leads sem contato há mais de {diasAlerta} dias ficam com alerta. Veja também o <Link href="/funil" className="link">funil</Link>.</>}
+        description={<>Um lead por linha do formulário; o acompanhamento (origem, responsável, status, contatos) é editado aqui. Sem contato há mais de {diasAlerta} dias vira alerta. Veja o <Link href="/funil" className="link">funil</Link>.</>}
         actions={<AcoesLeads responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)} status={status} admin={profile.role === 'admin'} />}
       />
       <PageBody>
         <KpiRow cols={6}>
           <KpiCard label="Total de leads" value={fmtNum(leads.length)} sub={`${fmtNum(nesteMes)} neste mês`} />
-          <KpiCard label="Em aberto" value={fmtNum(abertos.length)} sub={`${fmtNum(comAlerta)} com alerta de contato`} tone="warning" />
-          <KpiCard label="Ganhos" value={fmtNum(ganhos.length)} sub={fechados ? `conversão: ${fmtPct((ganhos.length / fechados) * 100, 0)} dos fechados` : 'nenhum fechado ainda'} tone="success" />
-          <KpiCard label="Perdidos" value={fmtNum(perdidos.length)} sub={motivoComum ? `motivo + comum: ${motivoComum[0]}` : TRACO} tone="danger" />
-          <KpiCard label="Já eram clientes" value={fmtNum(jaClientes)} sub={`${fmtNum(jaGiraram)} já giraram lotes`} tone="info" />
-          <KpiCard label="Tempo médio até fechar" value={mediaFechar != null ? `${Math.round(mediaFechar)} dias` : TRACO} sub={mediaAberto != null ? `${Math.round(mediaAberto)} dias em aberto (média)` : undefined} tone="neutral" />
+          <KpiCard label="Em aberto" value={fmtNum(abertos.length)} sub={`${fmtNum(comAlerta)} com alerta de contato`} tone={comAlerta ? 'warn' : 'neutral'} />
+          <KpiCard label="Ganhos" value={fmtNum(ganhos.length)} sub={fechados ? `${fmtPct((ganhos.length / fechados) * 100, 0)} dos fechados` : 'nenhum fechado ainda'} />
+          <KpiCard label="Perdidos" value={fmtNum(perdidos.length)} sub={motivoComum ? `motivo mais comum: ${motivoComum[0]}` : TRACO} />
+          <KpiCard label="Já eram clientes" value={fmtNum(jaClientes)} sub={`${fmtNum(jaGiraram)} já giraram lotes`} />
+          <KpiCard label="Tempo até fechar" value={mediaFechar != null ? `${Math.round(mediaFechar)} dias` : TRACO} sub={mediaAberto != null ? `${Math.round(mediaAberto)} dias em aberto (média)` : undefined} />
         </KpiRow>
         <TabelaLeads
           leads={leads}

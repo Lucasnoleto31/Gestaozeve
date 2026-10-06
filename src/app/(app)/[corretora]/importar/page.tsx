@@ -27,15 +27,15 @@ export default async function ImportarPage({ params, searchParams }: { params: P
       <PageHeader
         eyebrow={ctx.eyebrow}
         title="Importar"
-        description={`Cole aqui os exports da ${ctx.label}: o cadastro de clientes (25 colunas, DT_PARTITION … ID_ASSESSOR) e os lotes (export "Export", 9 ou 13 colunas). Leads entram pela tela de Leads. Depois de importar, tudo recalcula sozinho.`}
+        description={`Exports da ${ctx.label}: cadastro de clientes e lotes. Depois de importar, tudo recalcula sozinho. Leads entram pela tela de Leads.`}
       />
       <PageBody>
         <KpiRow cols={5}>
           <KpiCard label="Última data lançada" value={kpis?.ultima_data ? dataCurta(kpis.ultima_data) : TRACO} sub={kpis ? `${fmtNum(kpis.lotes_mes)} lotes no mês de referência` : undefined} />
-          <KpiCard label="Clientes cadastrados" value={fmtNum(kpis?.clientes_levados ?? 0)} sub={`${fmtNum(kpis?.total_contas ?? 0)} contas`} tone="success" />
-          <KpiCard label="Receita no mês de ref." value={rCurto(kpis?.receita_mes ?? 0)} tone="success" />
-          <KpiCard label="Linhas com cliente não cadastrado" value={fmtNum(kpis?.linhas_nao_cadastradas ?? 0)} sub={`${fmtNum(kpis?.lotes_nao_cadastrados ?? 0)} lotes sem cliente`} tone={kpis?.linhas_nao_cadastradas ? 'warning' : 'neutral'} />
-          <KpiCard label="Assessores não cadastrados" value={fmtNum(par.assessoresNaoCadastrados.length)} sub="aparecem nos exports mas não em Parâmetros" tone={par.assessoresNaoCadastrados.length ? 'warning' : 'neutral'} />
+          <KpiCard label="Clientes cadastrados" value={fmtNum(kpis?.clientes_levados ?? 0)} sub={`${fmtNum(kpis?.total_contas ?? 0)} contas`} />
+          <KpiCard label="Receita no mês" value={rCurto(kpis?.receita_mes ?? 0)} />
+          <KpiCard label="Linhas sem cliente" value={fmtNum(kpis?.linhas_nao_cadastradas ?? 0)} sub={`${fmtNum(kpis?.lotes_nao_cadastrados ?? 0)} lotes`} tone={kpis?.linhas_nao_cadastradas ? 'warn' : 'neutral'} />
+          <KpiCard label="Assessores sem cadastro" value={fmtNum(par.assessoresNaoCadastrados.length)} sub="nos exports, mas não em Parâmetros" tone={par.assessoresNaoCadastrados.length ? 'warn' : 'neutral'} />
         </KpiRow>
         <Importador corretora={corretora} label={ctx.label} modoZeragem={modoZeragem} />
         <NaoCadastrados corretora={corretora} linhas={naoCad} base={base} />

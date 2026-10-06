@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Field, Input } from '@/components/ui/Input'
+import { useToast } from '@/components/ui/Toast'
 import { excluirLead, salvarLead } from '@/lib/gestao/acoes'
 import type { LeadCampos, LeadRow, StatusLead } from '@/lib/gestao/tipos'
 
@@ -22,6 +23,7 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin }:
   admin: boolean
 }) {
   const router = useRouter()
+  const { avisar } = useToast()
   const [erro, setErro] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [f, setF] = useState<LeadCampos>(() => ({
@@ -37,6 +39,7 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin }:
     const r = await salvarLead(lead?.id ?? null, f)
     setSalvando(false)
     if (!r.ok) { setErro(r.erro); return }
+    avisar({ titulo: lead ? 'Lead atualizado' : 'Lead criado', detalhe: f.nome, tom: 'gain' })
     onClose()
     router.refresh()
   }
@@ -44,6 +47,7 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin }:
     if (!lead || !confirm(`Excluir o lead ${lead.nome}?`)) return
     const r = await excluirLead(lead.id)
     if (!r.ok) { setErro(r.erro); return }
+    avisar({ titulo: 'Lead excluído', detalhe: lead.nome, tom: 'neutral' })
     onClose()
     router.refresh()
   }
@@ -51,14 +55,14 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin }:
   return (
     <Modal open={aberto} onClose={onClose} size="xl" title={lead ? lead.nome : 'Novo lead'} subtitle={lead ? `Recebido em ${new Date(lead.data_hora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}${lead.cliente_nome ? ` · já é cliente: ${lead.cliente_nome}` : ''}` : 'Cadastro manual (fora do formulário)'}
       footer={<>
-        {lead && admin && <Button variant="ghost" onClick={excluir} className="mr-auto text-danger"><Trash2 className="h-4 w-4" />Excluir</Button>}
+        {lead && admin && <Button variant="ghost" onClick={excluir} className="mr-auto text-loss hover:text-loss"><Trash2 className="h-4 w-4" aria-hidden />Excluir</Button>}
         <Button variant="secondary" onClick={onClose}>Cancelar</Button>
         <Button onClick={salvar} loading={salvando}>Salvar</Button>
       </>}>
-      <div className="space-y-5">
-        {erro && <Alert tone="danger">{erro}</Alert>}
+      <div className="space-y-6">
+        {erro && <Alert tone="loss">{erro}</Alert>}
         <div>
-          <p className="label mb-2">Dados do formulário</p>
+          <p className="label mb-3">Dados do formulário</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Nome" value={f.nome} onChange={e => set('nome', e.target.value)} className="sm:col-span-2" />
             <Input label="WhatsApp" value={f.whatsapp ?? ''} onChange={e => set('whatsapp', e.target.value)} />
@@ -77,7 +81,7 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin }:
           </div>
         </div>
         <div>
-          <p className="label mb-2">Acompanhamento da equipe</p>
+          <p className="label mb-3">Acompanhamento da equipe</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Origem / parceiro" value={f.origem ?? ''} onChange={e => set('origem', e.target.value)} placeholder="Instagram, Aikon, indicação…" />
             <Field label="Responsável">

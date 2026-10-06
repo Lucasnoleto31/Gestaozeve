@@ -36,6 +36,11 @@ export function isActivePath(pathname: string, href: string, exact?: boolean): b
   return pathname === href || pathname.startsWith(href + '/')
 }
 
+// Rótulo de grupo do menu
+function Secao({ label }: { label: string }) {
+  return <p className="mb-1.5 px-3 text-micro font-medium text-fg-subtle">{label}</p>
+}
+
 const ROLE_LABELS: Record<Role, string> = {
   admin: 'Administrador',
   vendedor: 'Assessor',
@@ -74,11 +79,11 @@ export function Sidebar({ role, nome, corretoraPadrao }: { role: Role; nome: str
           href={item.href}
           aria-current={active ? 'page' : undefined}
           className={cn(
-            'group flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px] font-medium',
-            active ? 'bg-sb-active text-sb-fg shadow-[inset_2px_0_0_var(--sb-accent)]' : 'text-sb-muted hover:bg-sb-active hover:text-sb-fg',
+            'group flex items-center gap-2.5 rounded-md px-3 py-2.5 text-dense font-medium lg:py-2',
+            active ? 'bg-accent-soft text-fg shadow-[inset_2px_0_0_var(--accent)]' : 'text-fg-muted hover:bg-surface-3 hover:text-fg',
           )}
         >
-          <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-sb-accent' : 'text-sb-muted group-hover:text-sb-fg')} />
+          <Icon className={cn('h-4 w-4 shrink-0', active ? 'text-accent' : 'text-fg-subtle group-hover:text-fg')} aria-hidden />
           <span className="truncate">{item.label}</span>
         </Link>
       </li>
@@ -88,41 +93,41 @@ export function Sidebar({ role, nome, corretoraPadrao }: { role: Role; nome: str
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-sb-line bg-sb text-sb-fg',
+        'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-surface text-fg',
         'transition-transform duration-200 lg:translate-x-0',
         isOpen ? 'translate-x-0' : '-translate-x-full',
       )}
+      aria-label="Menu principal"
     >
       {/* Marca */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-sb-line px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sb-accent text-white">
-          <Layers className="h-4 w-4" />
+      <div className="flex h-14 items-center gap-2.5 px-4">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg">
+          <Layers className="h-4 w-4" aria-hidden />
         </div>
         <div className="min-w-0 leading-tight">
-          <p className="text-sm font-semibold tracking-tight">ZeveAI</p>
-          <p className="text-[10px] uppercase tracking-[0.14em] text-sb-muted">Controle de lotes</p>
+          <p className="text-dense font-semibold tracking-tight">ZeveAI</p>
+          <p className="text-micro text-fg-subtle">Controle de lotes</p>
         </div>
-        <button onClick={close} className="ml-auto rounded-md p-1.5 text-sb-muted hover:bg-sb-active hover:text-sb-fg lg:hidden" aria-label="Fechar menu">
-          <X className="h-4 w-4" />
+        <button onClick={close} className="icon-btn ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-3 hover:text-fg lg:hidden" aria-label="Fechar menu">
+          <X className="h-4 w-4" aria-hidden />
         </button>
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4 pt-2">
         {sections.filter(s => s.label === 'Visão geral').map(section => (
           <div key={section.label}>
-            <p className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-sb-muted">{section.label}</p>
+            <Secao label={section.label} />
             <ul className="space-y-0.5">{section.items.map(renderItem)}</ul>
           </div>
         ))}
 
-        {/* Corretoras: seletor + páginas do controle */}
+        {/* Corretora: seletor + páginas do controle */}
         {paginas.length > 0 && (
           <div>
-            <p className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-sb-muted">Corretora</p>
-            <div className="mb-2 grid grid-cols-3 gap-1 px-1" role="tablist" aria-label="Corretora">
+            <Secao label="Corretora" />
+            <div className="mb-2 flex rounded-md bg-surface-3 p-0.5" role="tablist" aria-label="Corretora">
               {CORRETORAS.map(c => {
                 const ativa = c === corretora
-                const cor = CORRETORA_COLOR[c]
                 return (
                   <Link
                     key={c}
@@ -130,12 +135,11 @@ export function Sidebar({ role, nome, corretoraPadrao }: { role: Role; nome: str
                     aria-selected={ativa}
                     href={`/${CORRETORA_SLUG[c]}/${paginaAtual}`}
                     className={cn(
-                      'flex items-center justify-center gap-1.5 rounded-md border px-1 py-1.5 text-[11.5px] font-semibold',
-                      ativa ? 'border-sb-line bg-sb-active text-sb-fg' : 'border-transparent text-sb-muted hover:bg-sb-active hover:text-sb-fg',
+                      'flex min-h-[30px] flex-1 items-center justify-center gap-1.5 rounded-sm text-label font-medium',
+                      ativa ? 'bg-surface text-fg font-semibold' : 'text-fg-muted hover:text-fg',
                     )}
-                    style={ativa ? { boxShadow: `inset 0 -2px 0 ${cor}` } : undefined}
                   >
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: cor }} />
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: CORRETORA_COLOR[c] }} aria-hidden />
                     {CORRETORA_LABEL[c]}
                   </Link>
                 )
@@ -149,24 +153,24 @@ export function Sidebar({ role, nome, corretoraPadrao }: { role: Role; nome: str
 
         {sections.filter(s => s.label !== 'Visão geral').map(section => (
           <div key={section.label}>
-            <p className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-sb-muted">{section.label}</p>
+            <Secao label={section.label} />
             <ul className="space-y-0.5">{section.items.map(renderItem)}</ul>
           </div>
         ))}
       </nav>
 
       {/* Usuário */}
-      <div className="border-t border-sb-line p-3">
+      <div className="border-t border-line p-3">
         <Link
           href="/perfil"
-          className={cn('flex items-center gap-3 rounded-md px-2 py-2 hover:bg-sb-active', isActivePath(pathname, '/perfil') && 'bg-sb-active')}
+          className={cn('flex items-center gap-3 rounded-md px-2 py-2 hover:bg-surface-3', isActivePath(pathname, '/perfil') && 'bg-surface-3')}
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sb-accent text-xs font-bold text-white">{inicial}</div>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-label font-semibold text-accent" aria-hidden>{inicial}</div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium text-sb-fg">{nome}</p>
-            <p className="truncate text-[11px] text-sb-muted">{ROLE_LABELS[role] ?? role}</p>
+            <p className="truncate text-dense font-medium text-fg">{nome}</p>
+            <p className="truncate text-micro text-fg-subtle">{ROLE_LABELS[role] ?? role}</p>
           </div>
-          <ChevronRight className="h-4 w-4 text-sb-muted" />
+          <ChevronRight className="h-4 w-4 text-fg-subtle" aria-hidden />
         </Link>
       </div>
     </aside>

@@ -1,13 +1,13 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { ChevronRight, LogOut, Menu } from 'lucide-react'
+import { LogOut, Menu } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useSidebar } from '@/lib/sidebar-context'
 import { ThemeToggle } from '@/lib/theme'
 import { CORRETORA_LABEL, PAGINAS_CORRETORA, corretoraDoSlug } from '@/lib/corretoras'
 
-// Breadcrumb derivado da rota
+// Localização derivada da rota (o título grande fica no cabeçalho da página)
 const ROTAS: { prefix: string; section: string; label: string }[] = [
   { prefix: '/admin/usuarios', section: 'Sistema', label: 'Usuários' },
   { prefix: '/perfil', section: 'Conta', label: 'Meu perfil' },
@@ -40,22 +40,20 @@ export function TopBar() {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-surface/85 px-4 backdrop-blur lg:px-8">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-bg/90 px-4 backdrop-blur lg:px-8">
       <div className="flex min-w-0 items-center gap-2">
-        <button onClick={toggle} className="-ml-1 rounded-md p-1.5 text-fg-muted hover:bg-surface-3 hover:text-fg lg:hidden" aria-label="Abrir menu">
-          <Menu className="h-5 w-5" />
+        <button onClick={toggle} className="icon-btn -ml-2 inline-flex h-9 w-9 items-center justify-center rounded-md text-fg-muted hover:bg-surface-3 hover:text-fg lg:hidden" aria-label="Abrir menu">
+          <Menu className="h-5 w-5" aria-hidden />
         </button>
-        <nav className="flex min-w-0 items-center gap-1.5 text-[13px]" aria-label="Localização">
-          <span className="text-fg-subtle">{crumb.section}</span>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
-          <span className="truncate font-medium text-fg">{crumb.label}</span>
-        </nav>
+        <p className="min-w-0 truncate text-label text-fg-subtle" aria-label="Localização">
+          {crumb.section} <span aria-hidden>·</span> <span className="font-medium text-fg-muted">{crumb.label}</span>
+        </p>
       </div>
 
       <div className="flex items-center gap-2">
         <ThemeToggle />
-        <button onClick={sair} className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-3 hover:text-fg">
-          <LogOut className="h-4 w-4" />
+        <button onClick={sair} className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-label font-medium text-fg-muted hover:bg-surface-3 hover:text-fg">
+          <LogOut className="h-4 w-4" aria-hidden />
           <span className="hidden sm:inline">Sair</span>
         </button>
       </div>

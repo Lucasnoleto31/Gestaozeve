@@ -2,26 +2,28 @@ import { cn } from '@/lib/utils'
 
 // Classes dos botões, separadas do componente pra servirem também em <Link>
 // dentro de Server Components (Button.tsx é 'use client').
+// DESIGN.md §3: primário (accent), secundário (superfície + hairline), ghost, destrutivo (loss).
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
 export type ButtonSize = 'xs' | 'sm' | 'md'
 
 export const BUTTON_BASE =
-  'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg border font-medium ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ' +
+  'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md border font-medium ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/50 ' +
   'disabled:cursor-not-allowed disabled:opacity-50'
 
 export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary: 'border-accent bg-accent text-accent-fg hover:bg-accent-hover hover:border-accent-hover',
   secondary: 'border-line-strong bg-surface text-fg hover:bg-surface-2',
   ghost: 'border-transparent text-fg-muted hover:bg-surface-3 hover:text-fg',
-  danger: 'border-danger bg-danger text-white hover:opacity-90',
-  success: 'border-success bg-success text-white hover:opacity-90',
+  danger: 'border-loss bg-loss text-white hover:opacity-90',
+  // "success" é só alias do primário: cor de ação é uma só (DESIGN.md §1)
+  success: 'border-accent bg-accent text-accent-fg hover:bg-accent-hover hover:border-accent-hover',
 }
 
 export const BUTTON_SIZE: Record<ButtonSize, string> = {
-  xs: 'h-7 gap-1 px-2.5 text-xs',
-  sm: 'h-8 gap-1.5 px-3 text-xs',
-  md: 'h-9 gap-2 px-4 text-sm',
+  xs: 'h-8 gap-1 px-2.5 text-label',
+  sm: 'h-9 gap-1.5 px-3 text-dense',
+  md: 'h-10 gap-2 px-4 text-body',
 }
 
 export function buttonClasses(variant: ButtonVariant = 'primary', size: ButtonSize = 'md', className?: string) {

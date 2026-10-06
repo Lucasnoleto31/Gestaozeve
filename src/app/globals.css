@@ -213,6 +213,10 @@ button {
   input:where(:not([type="checkbox"], [type="radio"], [type="file"], [type="range"])) {
     min-height: 44px;
   }
+
+  .icon-btn {
+    min-width: 44px;
+  }
 }
 
 /* ─── Campos de formulário ──────────────────────────────────────────────
@@ -527,6 +531,34 @@ select.field-sm {
     height: 100%;
     border-radius: 999px;
     background: var(--bar-fill);
+  }
+
+  /* Faixa de KPIs: células separadas por hairline (o gap mostra a cor de --line) */
+  .kpi-row {
+    gap: 1px;
+    background: var(--line);
+  }
+
+  .kpi-row > .kpi {
+    background: var(--surface);
+  }
+
+  /* Prioridade de colunas (DESIGN.md §3): P1 sempre; P2 ≥ 768 px; P3 ≥ 1280 px */
+  .col-p2,
+  .col-p3 {
+    display: none;
+  }
+
+  @media (min-width: 768px) {
+    .col-p2 {
+      display: table-cell;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .col-p3 {
+      display: table-cell;
+    }
   }
 
   .skeleton {

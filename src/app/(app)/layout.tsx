@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { MobileOverlay } from '@/components/layout/MobileOverlay'
 import { SidebarProvider } from '@/lib/sidebar-context'
+import { ToastProvider } from '@/components/ui/Toast'
 import { CORRETORA_COOKIE, isCorretora } from '@/lib/corretoras'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <SidebarProvider>
+      <ToastProvider>
       <div className="min-h-screen bg-bg">
         <Sidebar role={profile.role} nome={profile.nome} corretoraPadrao={corretoraPadrao} />
         <MobileOverlay />
@@ -26,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <main className="min-w-0 flex-1">{children}</main>
         </div>
       </div>
+    </ToastProvider>
     </SidebarProvider>
   )
 }

@@ -1,18 +1,12 @@
 import { cn } from '@/lib/utils'
-import type { Tone } from './Kpi'
+import { tomDe, type Tone } from './Kpi'
 
-const FILL: Record<Tone, string> = {
-  accent: 'bg-accent', success: 'bg-success', danger: 'bg-danger', warning: 'bg-warning',
-  info: 'bg-info', violet: 'bg-violet', neutral: 'bg-fg-subtle',
-}
-const TEXT: Record<Tone, string> = {
-  accent: 'text-accent', success: 'text-success', danger: 'text-danger', warning: 'text-warning',
-  info: 'text-info', violet: 'text-violet', neutral: 'text-fg-muted',
-}
+const FILL = { accent: 'bg-accent', gain: 'bg-gain', loss: 'bg-loss', warn: 'bg-warn', neutral: 'bg-fg-subtle' } as const
+const TEXT = { accent: 'text-accent', gain: 'text-gain', loss: 'text-loss', warn: 'text-warn', neutral: 'text-fg-muted' } as const
 
 // Tom de uma meta pelo % atingido
 export function metaTone(pct: number): Tone {
-  return pct >= 100 ? 'success' : pct >= 75 ? 'accent' : pct >= 50 ? 'warning' : 'danger'
+  return pct >= 100 ? 'gain' : pct >= 75 ? 'accent' : pct >= 50 ? 'warn' : 'loss'
 }
 
 export function ProgressBar({ pct, tone = 'accent', color, className }: {
@@ -24,7 +18,7 @@ export function ProgressBar({ pct, tone = 'accent', color, className }: {
   return (
     <div className={cn('bar-track', className)}>
       <div
-        className={cn('bar-fill', !color && FILL[tone])}
+        className={cn('bar-fill', !color && FILL[tomDe(tone)])}
         style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }}
       />
     </div>
@@ -40,8 +34,8 @@ export function ShareBar({ pct, color, width = 64, className }: {
 }) {
   return (
     <span className={cn('inline-flex items-center justify-end gap-2', className)}>
-      <span className="bar-track h-1.5 shrink-0" style={{ width }}>
-        <span className="bar-fill block opacity-80" style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} />
+      <span className="bar-track h-1.5 shrink-0" style={{ width }} aria-hidden>
+        <span className="bar-fill block opacity-70" style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} />
       </span>
       <span className="tabular-nums text-fg-muted">{pct.toFixed(1)}%</span>
     </span>
@@ -59,12 +53,12 @@ export function MetaProgress({ label, pct, realizado, alvo, color }: {
   const tone = metaTone(pct)
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between text-sm">
+      <div className="mb-1 flex items-center justify-between text-body">
         <span className="font-medium text-fg">{label}</span>
-        <span className={cn('font-semibold tabular-nums', !color && TEXT[tone])} style={{ color }}>{pct.toFixed(1)}%</span>
+        <span className={cn('font-semibold tabular-nums', !color && TEXT[tomDe(tone)])} style={{ color }}>{pct.toFixed(1)}%</span>
       </div>
       <ProgressBar pct={pct} tone={tone} color={color} className="h-2" />
-      <p className="mt-1 text-xs tabular-nums text-fg-muted">{realizado} de {alvo}</p>
+      <p className="mt-1 text-label tabular-nums text-fg-muted">{realizado} de {alvo}</p>
     </div>
   )
 }

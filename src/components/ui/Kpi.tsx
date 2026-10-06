@@ -1,23 +1,29 @@
 import type { ElementType, ReactNode } from 'react'
-import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { deltaPct, fmtDelta } from '@/lib/format'
 
-export type Tone = 'accent' | 'success' | 'danger' | 'warning' | 'info' | 'violet' | 'neutral'
+// Tom de cor. Só gain/loss/warn pintam; o resto é neutro (DESIGN.md §1).
+// Os nomes antigos continuam aceitos até as telas migrarem.
+export type Tone = 'accent' | 'gain' | 'loss' | 'warn' | 'neutral' | 'success' | 'danger' | 'warning' | 'info' | 'violet'
 
+const TOM: Record<Tone, 'accent' | 'gain' | 'loss' | 'warn' | 'neutral'> = {
+  accent: 'accent', gain: 'gain', loss: 'loss', warn: 'warn', neutral: 'neutral',
+  success: 'gain', danger: 'loss', warning: 'warn', info: 'neutral', violet: 'neutral',
+}
 export const TONE_TEXT: Record<Tone, string> = {
-  accent: 'text-accent', success: 'text-success', danger: 'text-danger', warning: 'text-warning',
-  info: 'text-info', violet: 'text-violet', neutral: 'text-fg-muted',
+  accent: 'text-accent', gain: 'text-gain', loss: 'text-loss', warn: 'text-warn', neutral: 'text-fg-muted',
+  success: 'text-gain', danger: 'text-loss', warning: 'text-warn', info: 'text-fg-muted', violet: 'text-fg-muted',
 }
 export const TONE_SOFT: Record<Tone, string> = {
-  accent: 'bg-accent-soft', success: 'bg-success-soft', danger: 'bg-danger-soft', warning: 'bg-warning-soft',
-  info: 'bg-info-soft', violet: 'bg-violet-soft', neutral: 'bg-surface-3',
+  accent: 'bg-accent-soft', gain: 'bg-gain-soft', loss: 'bg-loss-soft', warn: 'bg-warn-soft', neutral: 'bg-surface-3',
+  success: 'bg-gain-soft', danger: 'bg-loss-soft', warning: 'bg-warn-soft', info: 'bg-surface-3', violet: 'bg-surface-3',
 }
+export const tomDe = (t: Tone) => TOM[t]
 
 export type KpiDelta = {
   atual: number
   anterior: number | null | undefined
-  // true quando "menor é melhor" (ex.: % zeragem): inverte a cor
+  // true quando "menor é melhor": inverte a cor
   menorMelhor?: boolean
   // rótulo curto do que está sendo comparado (default: 'vs período anterior')
   rotulo?: string
@@ -33,42 +39,34 @@ function classifica(pct: number, menorMelhor?: boolean) {
   return { positivo, negativo, bom, ruim }
 }
 
+// Variação: só o número com sinal, colorido (gain/loss). Sem seta: o sinal já diz.
 export function DeltaPill({ delta }: { delta: KpiDelta }) {
   const pct = deltaPct(delta.atual, delta.anterior)
   const rotulo = delta.rotulo ?? 'vs período anterior'
-  if (pct == null) return <span className="text-[11px] text-fg-subtle">sem base de comparação</span>
-  const { positivo, negativo, bom, ruim } = classifica(pct, delta.menorMelhor)
-  const Icon = positivo ? ArrowUpRight : negativo ? ArrowDownRight : Minus
+  if (pct == null) return <span className="text-micro text-fg-subtle">sem base de comparação</span>
+  const { bom, ruim } = classifica(pct, delta.menorMelhor)
   const anteriorTxt = delta.anterior != null ? (delta.fmt ?? String)(delta.anterior) : '—'
   return (
     <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums',
-        bom ? 'bg-success-soft text-success' : ruim ? 'bg-danger-soft text-danger' : 'bg-surface-3 text-fg-muted',
-      )}
+      className={cn('inline-flex items-baseline gap-1 text-micro font-semibold tabular-nums', bom ? 'text-gain' : ruim ? 'text-loss' : 'text-fg-muted')}
       title={`Anterior: ${anteriorTxt} · ${rotulo}`}
     >
-      <Icon className="h-3 w-3" />
       {fmtDelta(pct)}
-      <span className="font-normal opacity-75">{rotulo}</span>
+      <span className="font-normal text-fg-subtle">{rotulo}</span>
     </span>
   )
 }
 
-// Variação inline (tabelas): só o número colorido, sem fundo
-export function DeltaText({ pct, menorMelhor, icon }: { pct: number | null; menorMelhor?: boolean; icon?: boolean }) {
+// Variação inline (tabelas)
+export function DeltaText({ pct, menorMelhor }: { pct: number | null; menorMelhor?: boolean; icon?: boolean }) {
   if (pct == null) return <span className="text-fg-subtle">—</span>
-  const { positivo, negativo, bom, ruim } = classifica(pct, menorMelhor)
-  const Icon = positivo ? ArrowUpRight : negativo ? ArrowDownRight : null
-  return (
-    <span className={cn('inline-flex items-center gap-0.5 font-semibold tabular-nums', bom ? 'text-success' : ruim ? 'text-danger' : 'text-fg-muted')}>
-      {icon && Icon && <Icon className="h-3 w-3" />}
-      {fmtDelta(pct)}
-    </span>
-  )
+  const { bom, ruim } = classifica(pct, menorMelhor)
+  return <span className={cn('font-semibold tabular-nums', bom ? 'text-gain' : ruim ? 'text-loss' : 'text-fg-muted')}>{fmtDelta(pct)}</span>
 }
 
-export function KpiCard({ icon: Icon, label, value, sub, tone = 'accent', delta, loading, className, valueClassName }: {
+// Uma célula da faixa de KPIs: rótulo, valor grande, subtexto. Sem ícone, sem
+// cor própria — só a variação e, quando pedido, o valor em gain/loss.
+export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, className, valueClassName }: {
   icon?: ElementType
   label: string
   value: ReactNode
@@ -79,27 +77,21 @@ export function KpiCard({ icon: Icon, label, value, sub, tone = 'accent', delta,
   className?: string
   valueClassName?: string
 }) {
+  const tom = TOM[tone]
   return (
-    <div className={cn('panel min-w-0 p-4', className)}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="label truncate">{label}</p>
-        {Icon && (
-          <span className={cn('inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md', TONE_SOFT[tone], TONE_TEXT[tone])}>
-            <Icon className="h-3.5 w-3.5" />
-          </span>
-        )}
-      </div>
+    <div className={cn('kpi min-w-0 px-5 py-4', className)}>
+      <p className="label truncate">{label}</p>
       {loading ? (
-        <div className="mt-3 space-y-2">
+        <div className="mt-2 space-y-2">
           <div className="skeleton h-7 w-28" />
           <div className="skeleton h-3 w-36" />
         </div>
       ) : (
         <>
-          <p className={cn('mt-2 text-[26px] font-semibold leading-none tracking-tight tabular-nums text-fg', valueClassName)}>{value}</p>
-          <div className="mt-2 flex min-h-[18px] flex-wrap items-center gap-x-2 gap-y-1">
+          <p className={cn('mt-1.5 truncate text-kpi font-semibold tracking-tight tabular-nums', tom === 'gain' ? 'text-gain' : tom === 'loss' ? 'text-loss' : tom === 'warn' ? 'text-warn' : 'text-fg', valueClassName)}>{value}</p>
+          <div className="mt-1.5 flex min-h-[16px] flex-wrap items-center gap-x-2 gap-y-0.5">
             {delta && <DeltaPill delta={delta} />}
-            {sub && <span className="text-xs text-fg-muted">{sub}</span>}
+            {sub && <span className="truncate text-micro text-fg-muted">{sub}</span>}
           </div>
         </>
       )}
@@ -107,14 +99,15 @@ export function KpiCard({ icon: Icon, label, value, sub, tone = 'accent', delta,
   )
 }
 
-export function KpiRow({ children, cols = 4 }: { children: ReactNode; cols?: 2 | 3 | 4 | 5 | 6 | 7 }) {
+// Faixa única com divisórias (não N caixas). No mobile vira grade de 2 colunas.
+export function KpiRow({ children, cols = 4, className }: { children: ReactNode; cols?: 2 | 3 | 4 | 5 | 6 | 7; className?: string }) {
   const grid = {
-    2: 'grid-cols-1 sm:grid-cols-2',
-    3: 'grid-cols-1 sm:grid-cols-3',
-    4: 'grid-cols-2 xl:grid-cols-4',
+    2: 'grid-cols-2',
+    3: 'grid-cols-2 md:grid-cols-3',
+    4: 'grid-cols-2 md:grid-cols-4',
     5: 'grid-cols-2 md:grid-cols-3 xl:grid-cols-5',
     6: 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6',
     7: 'grid-cols-2 md:grid-cols-4 2xl:grid-cols-7',
   }[cols]
-  return <div className={cn('grid gap-3', grid)}>{children}</div>
+  return <div className={cn('kpi-row panel grid overflow-hidden', grid, className)}>{children}</div>
 }

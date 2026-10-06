@@ -1,23 +1,30 @@
 import { cn } from '@/lib/utils'
 
-export type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'accent'
+// Neutro por padrão (hairline + texto apagado). Cor só para estado que importa:
+// gain (ativo, migrado, ganho), loss (perdido, recusou, crítico), warn (atenção).
+export type BadgeVariant = 'neutral' | 'gain' | 'loss' | 'warn' | 'accent' | 'default' | 'success' | 'warning' | 'danger' | 'info'
 
 const VARIANT: Record<BadgeVariant, string> = {
-  default: 'border border-line bg-surface-3 text-fg-muted',
-  success: 'bg-success-soft text-success',
-  warning: 'bg-warning-soft text-warning',
-  danger: 'bg-danger-soft text-danger',
-  info: 'bg-info-soft text-info',
+  neutral: 'border border-line-strong text-fg-muted',
+  gain: 'bg-gain-soft text-gain',
+  loss: 'bg-loss-soft text-loss',
+  warn: 'bg-warn-soft text-warn',
   accent: 'bg-accent-soft text-accent',
+  // nomes antigos (somem quando as telas migrarem)
+  default: 'border border-line-strong text-fg-muted',
+  success: 'bg-gain-soft text-gain',
+  warning: 'bg-warn-soft text-warn',
+  danger: 'bg-loss-soft text-loss',
+  info: 'border border-line-strong text-fg-muted',
 }
 
-export function Badge({ children, variant = 'default', className }: {
+export function Badge({ children, variant = 'neutral', className }: {
   children: React.ReactNode
   variant?: BadgeVariant
   className?: string
 }) {
   return (
-    <span className={cn('inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold', VARIANT[variant], className)}>
+    <span className={cn('inline-flex h-[22px] items-center gap-1 whitespace-nowrap rounded-sm px-2 text-micro font-medium', VARIANT[variant], className)}>
       {children}
     </span>
   )

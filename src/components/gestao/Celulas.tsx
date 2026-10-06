@@ -1,5 +1,5 @@
-// Células de tabela no estilo da planilha: números com traço no zero, barras de
-// dados, mapa de calor, badges de situação. Sem hooks: servem em Server Components.
+// Células de tabela: números com traço no zero, barras de dados, mapa de calor,
+// badges de situação. Sem hooks: servem em Server Components.
 import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { fmtBRL2, fmtNum, fmtNum2, fmtPct } from '@/lib/format'
@@ -19,12 +19,14 @@ export const pct = (parte: number, total: number) => (total > 0 ? (parte / total
 export const dataCurta = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}` : TRACO)
 export const dataPt = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : TRACO)
 
-export type Tom = 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'violet'
+// Tom de cor (DESIGN.md §1). Nomes antigos continuam aceitos até as telas migrarem.
+export type Tom = 'accent' | 'gain' | 'loss' | 'warn' | 'neutral' | 'success' | 'danger' | 'warning' | 'info' | 'violet'
 const VAR: Record<Tom, string> = {
-  accent: 'var(--accent)', success: 'var(--success)', warning: 'var(--warning)', danger: 'var(--danger)', info: 'var(--info)', violet: 'var(--violet)',
+  accent: 'var(--accent)', gain: 'var(--gain)', loss: 'var(--loss)', warn: 'var(--warn)', neutral: 'var(--fg-subtle)',
+  success: 'var(--gain)', danger: 'var(--loss)', warning: 'var(--warn)', info: 'var(--accent)', violet: 'var(--fg-muted)',
 }
 
-// Barra de dados dentro da célula (como a formatação condicional do Excel)
+// Barra de dados dentro da célula (só em tabela de ranking, uma coluna)
 export function BarraCelula({ valor, max, tom = 'accent', fmt = n0, largura = 72, className }: {
   valor: number
   max: number
@@ -36,23 +38,23 @@ export function BarraCelula({ valor, max, tom = 'accent', fmt = n0, largura = 72
   const p = max > 0 ? Math.max(0, Math.min(100, (valor / max) * 100)) : 0
   return (
     <span className={cn('inline-flex items-center justify-end gap-2', className)}>
-      <span className="bar-track h-2 shrink-0" style={{ width: largura }}>
-        <span className="bar-fill block" style={{ width: `${p}%`, background: VAR[tom], opacity: 0.75 }} />
+      <span className="bar-track h-1.5 shrink-0" style={{ width: largura }} aria-hidden>
+        <span className="bar-fill block" style={{ width: `${p}%`, background: VAR[tom], opacity: 0.7 }} />
       </span>
       <span className="tabular-nums">{fmt(valor)}</span>
     </span>
   )
 }
 
-// Intensidade do mapa de calor (0..1 → fundo colorido translúcido)
-export function estiloCalor(valor: number, max: number, tom: Tom = 'success'): CSSProperties | undefined {
+// Intensidade do mapa de calor (0..1 → fundo translúcido; raiz quadrada espalha os valores baixos)
+export function estiloCalor(valor: number, max: number, tom: Tom = 'gain'): CSSProperties | undefined {
   if (!valor || max <= 0) return undefined
   const i = Math.sqrt(Math.max(0, Math.min(1, valor / max)))
-  const alpha = Math.round(8 + 52 * i)
+  const alpha = Math.round(8 + 44 * i)
   return { background: `color-mix(in srgb, ${VAR[tom]} ${alpha}%, transparent)` }
 }
 
-export function CelulaCalor({ valor, max, tom = 'success', fmt = n0, className }: {
+export function CelulaCalor({ valor, max, tom = 'gain', fmt = n0, className }: {
   valor: number
   max: number
   tom?: Tom
@@ -67,21 +69,21 @@ export function CelulaCalor({ valor, max, tom = 'success', fmt = n0, className }
 }
 
 const SITUACAO_VARIANT: Record<Situacao, BadgeVariant> = {
-  'Ativo': 'success', 'Inativo': 'warning', 'Nunca girou': 'danger', 'Em processamento': 'info', 'Recusou': 'default',
+  'Ativo': 'gain', 'Inativo': 'warn', 'Nunca girou': 'warn', 'Em processamento': 'neutral', 'Recusou': 'loss',
 }
 export function SituacaoBadge({ situacao, mesesSemGiro }: { situacao: Situacao | string; mesesSemGiro?: number | null }) {
-  const v = SITUACAO_VARIANT[situacao as Situacao] ?? 'default'
+  const v = SITUACAO_VARIANT[situacao as Situacao] ?? 'neutral'
   const texto = situacao === 'Inativo' && mesesSemGiro ? `Inativo há ${mesesSemGiro} m` : situacao
   return <Badge variant={v}>{texto}</Badge>
 }
 
-const STATUS_VARIANT: Record<StatusConta, BadgeVariant> = { 'Migrado': 'success', 'Em processamento': 'warning', 'Recusou': 'danger' }
+const STATUS_VARIANT: Record<StatusConta, BadgeVariant> = { 'Migrado': 'gain', 'Em processamento': 'neutral', 'Recusou': 'loss' }
 export function StatusBadge({ status }: { status: StatusConta | string }) {
-  return <Badge variant={STATUS_VARIANT[status as StatusConta] ?? 'default'}>{status}</Badge>
+  return <Badge variant={STATUS_VARIANT[status as StatusConta] ?? 'neutral'}>{status}</Badge>
 }
 
-export function StatusLeadBadge({ status, tipo }: { status: string; tipo: 'Aberto' | 'Fechado' }) {
-  const v: BadgeVariant = status === 'Ganho' ? 'success' : status === 'Perdido' ? 'danger' : status === 'Novo' ? 'accent' : tipo === 'Aberto' ? 'info' : 'default'
+export function StatusLeadBadge({ status }: { status: string; tipo: 'Aberto' | 'Fechado' }) {
+  const v: BadgeVariant = status === 'Ganho' ? 'gain' : status === 'Perdido' ? 'loss' : status === 'Novo' ? 'accent' : 'neutral'
   return <Badge variant={v}>{status}</Badge>
 }
 
@@ -89,7 +91,7 @@ export function StatusLeadBadge({ status, tipo }: { status: string; tipo: 'Abert
 export function Variacao({ atual, anterior, className }: { atual: number; anterior: number; className?: string }) {
   if (!anterior) return <span className={cn('subtle', className)}>{TRACO}</span>
   const p = ((atual - anterior) / anterior) * 100
-  const cor = p > 0.05 ? 'text-success' : p < -0.05 ? 'text-danger' : 'text-fg-muted'
+  const cor = p > 0.05 ? 'text-gain' : p < -0.05 ? 'text-loss' : 'text-fg-muted'
   return <span className={cn('font-semibold tabular-nums', cor, className)}>{p > 0 ? '+' : p < 0 ? '−' : ''}{Math.abs(p).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>
 }
 
@@ -97,7 +99,7 @@ export function Variacao({ atual, anterior, className }: { atual: number; anteri
 export function LinhaVazia({ colunas, children }: { colunas: number; children?: ReactNode }) {
   return (
     <tr>
-      <td colSpan={colunas} className="py-8 text-center text-sm text-fg-subtle">{children ?? 'Sem dados.'}</td>
+      <td colSpan={colunas} className="py-10 text-center text-dense text-fg-subtle">{children ?? 'Sem dados.'}</td>
     </tr>
   )
 }
@@ -107,11 +109,11 @@ export function Secao({ numero, titulo, descricao, action }: { numero?: number |
   return (
     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
       <div>
-        <h2 className="text-sm font-semibold text-fg">
-          {numero != null && <span className="mr-1.5 text-accent">{numero} ·</span>}
+        <h2 className="text-section font-semibold text-fg">
+          {numero != null && <span className="mr-1.5 text-fg-subtle">{numero} ·</span>}
           {titulo}
         </h2>
-        {descricao && <p className="mt-0.5 text-xs text-fg-muted">{descricao}</p>}
+        {descricao && <p className="mt-0.5 text-dense text-fg-muted">{descricao}</p>}
       </div>
       {action}
     </div>

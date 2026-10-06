@@ -107,7 +107,7 @@ Fora da escala só por exceção documentada aqui. Cabeçalho de tabela deixa de
 | **Barra em célula / Heatmap** | Barra de dados só em tabela de ranking, uma coluna. Heatmap só nas matrizes mês × linha (giro mensal, receita mensal): `gain-soft` para lotes, `accent-soft` para receita, intensidade por raiz quadrada. |
 | **Modal** | Centro, raio lg, `--shadow-float`, título `section`, rodapé com ações à direita, fecha com Esc e clique fora. |
 | **Tabs / Segmentado** | Trilho `--surface-3`, item ativo `--surface` + `--fg`; sem sombra interna. |
-| **Menu lateral** | Mesma superfície do conteúdo, hairline à direita, 232 px; item ativo `--accent-soft` + texto `--fg` + barra 2 px `--accent`; seletor de corretora como segmentado com ponto da cor da corretora. Topo: título da página (não breadcrumb duplicado), tema e sair. |
+| **Menu lateral** | Mesma superfície do conteúdo, hairline à direita, 240 px; item ativo `--accent-soft` + texto `--fg` + barra 2 px `--accent`; seletor de corretora como segmentado com ponto da cor da corretora. Topo: título da página (não breadcrumb duplicado), tema e sair. |
 | **Toast** | Canto inferior direito (mobile: inferior centralizado), superfície, hairline, ícone de estado, some em 4 s. Sem lib. |
 | **Skeleton / Vazio / Erro** | Skeleton segue a forma final (faixa de KPI, tabela de N linhas, gráfico). Vazio: ícone 20 px `--fg-subtle`, frase curta, ação. Erro: mensagem + "Tentar de novo". |
 

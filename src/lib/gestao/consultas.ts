@@ -13,10 +13,32 @@ type Row = Record<string, unknown>
 const bool = (v: unknown) => v === true
 const arr = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
 
+// A API do Supabase devolve no máximo 1.000 linhas por chamada (também nas funções),
+// então toda função que devolve tabela é lida em páginas até acabar.
+const PAGINA = 1000
 async function rpc(db: Admin, fn: string, args: Record<string, unknown>): Promise<Row[]> {
-  const { data, error } = await db.rpc(fn, args)
-  if (error) falha(error, fn)
-  return (data ?? []) as Row[]
+  const out: Row[] = []
+  for (let offset = 0; ; offset += PAGINA) {
+    const { data, error } = await db.rpc(fn, args).range(offset, offset + PAGINA - 1)
+    if (error) falha(error, fn)
+    const rows = (data ?? []) as Row[]
+    out.push(...rows)
+    if (rows.length < PAGINA) break
+  }
+  return out
+}
+
+// Leitura paginada de uma tabela/view (mesmo limite de 1.000 por chamada)
+export async function todasAsLinhas<T>(consulta: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, contexto: string): Promise<T[]> {
+  const out: T[] = []
+  for (let offset = 0; ; offset += PAGINA) {
+    const { data, error } = await consulta(offset, offset + PAGINA - 1)
+    if (error) falha(error, contexto)
+    const rows = data ?? []
+    out.push(...rows)
+    if (rows.length < PAGINA) break
+  }
+  return out
 }
 
 export const mapCliente = (r: Row): ClienteRow => ({

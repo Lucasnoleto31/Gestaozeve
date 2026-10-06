@@ -2,11 +2,11 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { clientesLista, funilMensal, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal, parametrosDaCorretora } from '@/lib/gestao/consultas'
-import { baseStatus, porAssessor, resumoClientes, situacaoMigrados } from '@/lib/gestao/derivados'
+import { funilMensal, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal, painelResumo, parametrosDaCorretora } from '@/lib/gestao/consultas'
 import { calcularRepasse, configBtg } from '@/lib/gestao/btg'
 import { temListaPropria, termosDaCorretora } from '@/lib/corretoras'
 import { janelaMeses, limitesDoMes, mesCurto, mesLongo } from '@/lib/gestao/meses'
+import type { Situacao } from '@/lib/gestao/tipos'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
@@ -17,6 +17,9 @@ import { BarraCelula, LinhaVazia, SituacaoBadge, TRACO, dataCurta, n0, n2, p1, r
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { HeatmapClientes } from './HeatmapClientes'
 
+// Mapa de calor: só os maiores clientes da janela (a lista completa fica na tela Clientes)
+const TOP_HEATMAP = 80
+
 export default async function PainelPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base } = ctx
@@ -24,10 +27,11 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const lim = limitesDoMes(mesRef)
   const termos = termosDaCorretora(corretora)
 
-  const [clientes, mensal, porCliente, naoCad, mix, funil, par] = await Promise.all([
-    clientesLista(corretora, mesRef),
+  // Tudo em paralelo; os agregados da base de clientes vêm prontos do banco (painel_resumo)
+  const [painel, mensal, porCliente, naoCad, mix, funil, par] = await Promise.all([
+    painelResumo(corretora, mesRef),
     painelMensal(corretora, mesRef, 12),
-    painelClientesMensal(corretora, mesRef, 12),
+    painelClientesMensal(corretora, mesRef, 12, TOP_HEATMAP),
     lotesNaoCadastrados(corretora),
     mixPlataforma(corretora, lim.inicio, lim.fim),
     funilMensal(mesRef, 12),
@@ -44,15 +48,27 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const receitaTotal = (m: Mes) => m.receita + (atp ? 0 : m.incentivo)
   const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg)
 
-  const r = resumoClientes(clientes)
-  const bs = baseStatus(clientes)
-  const sit = situacaoMigrados(clientes)
-  const assessores = porAssessor(clientes)
+  const r = painel.resumo
+  const taxaMigracao = r.levados ? (r.migrados / r.levados) * 100 : 0
+  const pctAtivosMigrados = r.migrados ? (r.ativos / r.migrados) * 100 : 0
+  const pctAtivosLevados = r.levados ? (r.ativos / r.levados) * 100 : 0
+  const assessores = painel.grupos.filter(g => g.tipo === 'assessor')
+  const porResponsavel = [...painel.grupos.filter(g => g.tipo === 'responsavel')]
+    .sort((a, b) => (a.grupo === 'Sem responsável' ? 1 : b.grupo === 'Sem responsável' ? -1 : a.grupo.localeCompare(b.grupo, 'pt-BR')))
+  const baseStatus = [
+    { status: 'Migrado', total: r.migrados, por: porResponsavel.map(g => g.migrados) },
+    { status: 'Em processamento', total: r.em_processamento, por: porResponsavel.map(g => g.em_processamento) },
+    { status: 'Recusou', total: r.recusaram, por: porResponsavel.map(g => g.recusaram) },
+  ]
+  const situacoes: { situacao: Situacao; qtde: number }[] = [
+    { situacao: 'Ativo', qtde: r.ativos_sit }, { situacao: 'Inativo', qtde: r.inativos }, { situacao: 'Nunca girou', qtde: r.nunca_giraram },
+  ]
+  const semGiro = painel.sem_giro
+  const totalClientesGiro = porCliente[0]?.total_clientes ?? 0
   const mesAtual = mensal.find(m => m.mes_ref === mesRef)
   const repasseMes = calcularRepasse(mesAtual?.receita ?? 0, cfg)
   const naoCadLinhas = naoCad.reduce((s, l) => s + l.linhas, 0)
   const naoCadLotes = naoCad.reduce((s, l) => s + l.lotes, 0)
-  const semGiro = clientes.filter(c => c.situacao === 'Nunca girou').sort((a, b) => (b.data_migracao ?? '').localeCompare(a.data_migracao ?? '')).slice(0, 15)
   const mixTotal = mix.reduce((s, m) => s + m.lotes, 0)
   const funilPorMes = new Map(funil.map(f => [f.mes_ref, f]))
   const mensalPorMes = new Map(mensal.map(m => [m.mes_ref, m]))
@@ -111,11 +127,11 @@ export default async function PainelPage({ params, searchParams }: { params: Par
       />
       <PageBody>
         <KpiRow cols={6}>
-          <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(r.emProcessamento)} em processamento`} />
-          <KpiCard label="Taxa de migração" value={fmtPct(r.taxaMigracao)} sub={`${fmtNum(r.migrados)} migrados · ${fmtNum(r.recusaram)} recusaram`} />
+          <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(r.em_processamento)} em processamento`} />
+          <KpiCard label="Taxa de migração" value={fmtPct(taxaMigracao)} sub={`${fmtNum(r.migrados)} migrados · ${fmtNum(r.recusaram)} recusaram`} />
           <KpiCard label="Ativos no mês" value={fmtNum(r.ativos)} sub={`giraram em ${mesCurto(mesRef)}`} />
-          <KpiCard label="% ativos da base migrada" value={fmtPct(r.pctAtivosMigrados)} sub={`${fmtPct(r.pctAtivosLevados)} do total levado`} />
-          <KpiCard label="Lotes no mês" value={fmtNum(r.lotesMes)} sub={`${fmtNum(r.zeradosMes)} zerados · ${rCurto(r.receitaMes)}`} />
+          <KpiCard label="% ativos da base migrada" value={fmtPct(pctAtivosMigrados)} sub={`${fmtPct(pctAtivosLevados)} do total levado`} />
+          <KpiCard label="Lotes no mês" value={fmtNum(r.lotes_mes)} sub={`${fmtNum(r.zerados_mes)} zerados · ${rCurto(r.receita_mes)}`} />
           {comRepasse ? (
             <KpiCard label="Receita líquida no mês" value={rCurto(repasseMes.liquido)} sub={`${fmtPct(repasseMes.pctEfetivo)} de repasse${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`} />
           ) : atp ? (
@@ -176,19 +192,19 @@ export default async function PainelPage({ params, searchParams }: { params: Par
               </li>
               <li className="flex items-center justify-between gap-3 py-3">
                 <span>Migrados sem data de migração</span>
-                <Link href={`${base}/clientes?alerta=migrado%20sem%20data`} className={cn('link tabular-nums', r.migradosSemData && 'text-warn')}>{fmtNum(r.migradosSemData)}</Link>
+                <Link href={`${base}/clientes?alerta=migrado%20sem%20data`} className={cn('link tabular-nums', r.migrados_sem_data && 'text-warn')}>{fmtNum(r.migrados_sem_data)}</Link>
               </li>
               <li className="flex items-center justify-between gap-3 py-3">
                 <span>Clientes com mais de uma conta</span>
-                <Link href={`${base}/clientes?alerta=contas`} className="link tabular-nums">{fmtNum(r.multiConta)}</Link>
+                <Link href={`${base}/clientes?alerta=contas`} className="link tabular-nums">{fmtNum(r.multi_conta)}</Link>
               </li>
               <li className="flex items-center justify-between gap-3 py-3">
                 <span>Clientes com algum alerta de cadastro</span>
-                <Link href={`${base}/clientes?alerta=qualquer`} className="link tabular-nums">{fmtNum(r.comAlertas)}</Link>
+                <Link href={`${base}/clientes?alerta=qualquer`} className="link tabular-nums">{fmtNum(r.com_alertas)}</Link>
               </li>
               <li className="flex items-center justify-between gap-3 py-3">
                 <span>Migrados que nunca giraram</span>
-                <Link href={`${base}/clientes?situacao=Nunca%20girou`} className="link tabular-nums">{fmtNum(r.nuncaGiraram)} · {fmtNum(r.inativos)} inativos</Link>
+                <Link href={`${base}/clientes?situacao=Nunca%20girou`} className="link tabular-nums">{fmtNum(r.nunca_giraram)} · {fmtNum(r.inativos)} inativos</Link>
               </li>
             </ul>
           </Panel>
@@ -199,21 +215,21 @@ export default async function PainelPage({ params, searchParams }: { params: Par
                 <thead>
                   <tr>
                     <th>Status</th><th className="num">Clientes</th><th className="num">% da base</th>
-                    {bs.responsaveis.map(x => <th key={x} className="num col-p2">{x}</th>)}
+                    {porResponsavel.map(g => <th key={g.grupo} className="num col-p2">{g.grupo}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {bs.linhas.map(l => (
+                  {baseStatus.map(l => (
                     <tr key={l.status}>
                       <td>{l.status}</td>
                       <td className="num">{n0(l.total)}</td>
-                      <td className="num">{bs.total ? fmtPct((l.total / bs.total) * 100) : TRACO}</td>
-                      {l.porResponsavel.map((v, i) => <td key={i} className={cn('num col-p2', !v && 'subtle')}>{n0(v)}</td>)}
+                      <td className="num">{r.levados ? fmtPct((l.total / r.levados) * 100) : TRACO}</td>
+                      {l.por.map((v, i) => <td key={i} className={cn('num col-p2', !v && 'subtle')}>{n0(v)}</td>)}
                     </tr>
                   ))}
                   <tr className="total">
-                    <td>Total levado</td><td className="num">{fmtNum(bs.total)}</td><td className="num">100,0%</td>
-                    {bs.totalPorResponsavel.map((v, i) => <td key={i} className="num col-p2">{n0(v)}</td>)}
+                    <td>Total levado</td><td className="num">{fmtNum(r.levados)}</td><td className="num">100,0%</td>
+                    {porResponsavel.map(g => <td key={g.grupo} className="num col-p2">{n0(g.levados)}</td>)}
                   </tr>
                 </tbody>
               </table>
@@ -225,14 +241,14 @@ export default async function PainelPage({ params, searchParams }: { params: Par
               <table className="tbl tbl-dense">
                 <thead><tr><th>Situação</th><th className="num">Clientes</th><th className="num">% dos migrados</th></tr></thead>
                 <tbody>
-                  {sit.linhas.map(l => (
+                  {situacoes.map(l => (
                     <tr key={l.situacao}>
                       <td><SituacaoBadge situacao={l.situacao} /></td>
                       <td className="num">{n0(l.qtde)}</td>
-                      <td className="num">{sit.total ? fmtPct((l.qtde / sit.total) * 100) : TRACO}</td>
+                      <td className="num">{r.migrados ? fmtPct((l.qtde / r.migrados) * 100) : TRACO}</td>
                     </tr>
                   ))}
-                  <tr className="total"><td>Migrados</td><td className="num">{fmtNum(sit.total)}</td><td className="num">100,0%</td></tr>
+                  <tr className="total"><td>Migrados</td><td className="num">{fmtNum(r.migrados)}</td><td className="num">100,0%</td></tr>
                 </tbody>
               </table>
             </div>
@@ -271,8 +287,8 @@ export default async function PainelPage({ params, searchParams }: { params: Par
               <tbody>
                 <tr className="total">
                   <td>Total</td><td className="col-p3"></td><td className="num col-p2">{fmtNum(r.levados)}</td><td className="num col-p2">{fmtNum(r.migrados)}</td><td className="num">{fmtNum(r.ativos)}</td>
-                  <td className="num col-p3">{fmtPct(r.pctAtivosMigrados)}</td><td className="num">{fmtNum(r.lotesMes)}</td><td className="num col-p2">{r0(r.receitaMes)}</td>
-                  <td className="num col-p3">{fmtNum(r.lotes12m)}</td><td className="num col-p3">{r0(r.receita12m)}</td>
+                  <td className="num col-p3">{fmtPct(pctAtivosMigrados)}</td><td className="num">{fmtNum(r.lotes_mes)}</td><td className="num col-p2">{r0(r.receita_mes)}</td>
+                  <td className="num col-p3">{fmtNum(r.lotes_12m)}</td><td className="num col-p3">{r0(r.receita_12m)}</td>
                 </tr>
                 {assessores.map(a => (
                   <tr key={a.grupo}>
@@ -280,8 +296,8 @@ export default async function PainelPage({ params, searchParams }: { params: Par
                     <td className="muted col-p3">{a.responsavel ?? TRACO}</td>
                     <td className="num col-p2">{n0(a.levados)}</td><td className="num col-p2">{n0(a.migrados)}</td><td className="num">{n0(a.ativos)}</td>
                     <td className={cn('num col-p3', !a.ativos && 'subtle')}>{a.migrados ? fmtPct((a.ativos / a.migrados) * 100) : TRACO}</td>
-                    <td className="num"><BarraCelula valor={a.lotesMes} max={assessores[0]?.lotesMes ?? 0} /></td>
-                    <td className="num col-p2">{r0(a.receitaMes)}</td><td className="num col-p3">{n0(a.lotes12m)}</td><td className="num col-p3">{r0(a.receita12m)}</td>
+                    <td className="num"><BarraCelula valor={a.lotes_mes} max={assessores[0]?.lotes_mes ?? 0} /></td>
+                    <td className="num col-p2">{r0(a.receita_mes)}</td><td className="num col-p3">{n0(a.lotes_12m)}</td><td className="num col-p3">{r0(a.receita_12m)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -291,7 +307,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
 
         <div className="grid gap-8 xl:grid-cols-5">
           <Panel className="xl:col-span-2" title="Migrados sem giro" subtitle="Priorizar contato · migrações mais recentes primeiro."
-            action={<Link href={`${base}/clientes?situacao=Nunca%20girou`} className="link text-label">ver todos ({fmtNum(r.nuncaGiraram)})</Link>}>
+            action={<Link href={`${base}/clientes?situacao=Nunca%20girou`} className="link text-label">ver todos ({fmtNum(r.nunca_giraram)})</Link>}>
             <div className="tbl-wrap">
               <table className="tbl tbl-dense">
                 <thead><tr><th>Cliente</th><th className="col-p2">Responsável</th><th>Migração</th><th className="num">Telefone</th></tr></thead>
@@ -310,7 +326,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
             </div>
           </Panel>
           <div className="min-w-0 xl:col-span-3">
-            <HeatmapClientes meses={meses} dados={porCliente} base={base} />
+            <HeatmapClientes meses={meses} dados={porCliente} base={base} totalClientes={totalClientesGiro} />
           </div>
         </div>
       </PageBody>

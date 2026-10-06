@@ -121,7 +121,38 @@ export type PainelKpis = {
   linhas_nao_cadastradas: number
   lotes_nao_cadastrados: number
   ultima_data: string | null
+  lotes_12m: number
+  receita_12m: number
 }
+
+// Resumo do Painel calculado no banco (painel_resumo): totais, grupos e migrados sem giro
+export type GrupoPainel = {
+  tipo: 'assessor' | 'responsavel'
+  grupo: string
+  responsavel: string | null
+  levados: number
+  migrados: number
+  em_processamento: number
+  recusaram: number
+  ativos: number
+  lotes_mes: number
+  receita_mes: number
+  lotes_12m: number
+  receita_12m: number
+  com_receita: number
+}
+export type PainelResumo = {
+  resumo: {
+    levados: number; contas: number; migrados: number; em_processamento: number; recusaram: number; ativos: number
+    lotes_mes: number; zerados_mes: number; receita_mes: number; lotes_12m: number; receita_12m: number
+    nunca_giraram: number; inativos: number; ativos_sit: number; com_alertas: number; migrados_sem_data: number; multi_conta: number
+    com_receita: number; media_dias_migrar: number | null
+  }
+  grupos: GrupoPainel[]
+  sem_giro: { cliente_id: string; nome: string; responsavel: string | null; data_migracao: string | null; telefone: string | null }[]
+}
+// Posição do cliente entre os demais (ficha)
+export type ClienteContexto = { posicao: number | null; com_giro: number; receita_total_mes: number; media_lotes_ativos: number }
 
 export type PainelMensalRow = {
   mes_ref: string
@@ -139,7 +170,7 @@ export type PainelMensalRow = {
   clientes_com_faixa: number
 }
 
-export type ClienteMesRow = { cliente_id: string; cliente_nome: string; responsavel: string | null; mes_ref: string; lotes: number }
+export type ClienteMesRow = { cliente_id: string; cliente_nome: string; responsavel: string | null; mes_ref: string; lotes: number; total_clientes: number }
 
 export type LoteNaoCadastradoRow = {
   conta: string | null

@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Download, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, Download, Pencil, Search } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
 import { Button } from '@/components/ui/Button'
+import { ExcluirClienteButton } from './ExcluirClienteButton'
+import type { Corretora } from '@/lib/corretoras'
 import { SituacaoBadge, TRACO, dataCurta, n0, n2, r0 } from '@/components/gestao/Celulas'
 import type { ClienteRow } from '@/lib/gestao/tipos'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
@@ -17,7 +19,7 @@ type Ordem = { col: keyof ClienteRow; dir: 'asc' | 'desc' }
 const SITUACOES = ['Ativo', 'Inativo', 'Nunca girou', 'Em processamento', 'Recusou']
 const STATUS = ['Migrado', 'Em processamento', 'Recusou']
 
-export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais }: { clientes: ClienteRow[]; base: string; mesRef: MesRef; filtrosIniciais: Filtros }) {
+export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais, corretora, comAcoes = false }: { clientes: ClienteRow[]; base: string; mesRef: MesRef; filtrosIniciais: Filtros; corretora: Corretora; comAcoes?: boolean }) {
   const [f, setF] = useState<Filtros>(filtrosIniciais)
   const [ordem, setOrdem] = useState<Ordem>({ col: 'lotes_12m', dir: 'desc' })
   const [limite, setLimite] = useState(100)
@@ -134,10 +136,11 @@ export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais }: { cl
               {th('receita_12m', 'Receita 12 m', { num: true, prio: 'p2' })}
               {th('ultimo_giro', 'Último giro', { prio: 'p3' })}
               <th className="col-p3">Alertas</th>
+              {comAcoes && <th className="w-20"><span className="sr-only">Ações</span></th>}
             </tr>
           </thead>
           <tbody>
-            {visiveis.length === 0 && <tr><td colSpan={18} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente com esses filtros.</td></tr>}
+            {visiveis.length === 0 && <tr><td colSpan={comAcoes ? 19 : 18} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente com esses filtros.</td></tr>}
             {visiveis.map(c => (
               <tr key={c.cliente_id}>
                 <td className="max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link></td>
@@ -162,6 +165,16 @@ export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais }: { cl
                     ? <span className={cn('text-label', c.alertas.some(a => a === 'migrado sem giro' || a === 'migrado sem data') ? 'text-warn' : 'text-fg-muted')} title={c.alertas.join(' · ')}>{c.alertas.length} {c.alertas.length === 1 ? 'alerta' : 'alertas'}</span>
                     : <span className="subtle">{TRACO}</span>}
                 </td>
+                {comAcoes && (
+                  <td>
+                    <div className="flex items-center justify-end gap-1">
+                      <Link href={`${base}/clientes/${c.cliente_id}?editar=1`} className="icon-btn inline-flex h-8 w-8 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-3 hover:text-fg" title="Editar cliente" aria-label={`Editar ${c.nome}`}>
+                        <Pencil className="h-4 w-4" aria-hidden />
+                      </Link>
+                      <ExcluirClienteButton corretora={corretora} clienteId={c.cliente_id} nome={c.nome} base={base} />
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

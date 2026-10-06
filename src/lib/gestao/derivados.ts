@@ -40,6 +40,8 @@ export type GrupoClientes = {
   responsavel: string | null
   levados: number
   migrados: number
+  emProcessamento: number
+  recusaram: number
   ativos: number
   lotesMes: number
   receitaMes: number
@@ -53,9 +55,11 @@ function agrupar(rows: ClienteRow[], chave: (r: ClienteRow) => string): GrupoCli
   for (const r of rows) {
     const k = chave(r)
     let g = m.get(k)
-    if (!g) { g = { grupo: k, responsavel: r.responsavel, levados: 0, migrados: 0, ativos: 0, lotesMes: 0, receitaMes: 0, lotes12m: 0, receita12m: 0, comReceita: 0 }; m.set(k, g) }
+    if (!g) { g = { grupo: k, responsavel: r.responsavel, levados: 0, migrados: 0, emProcessamento: 0, recusaram: 0, ativos: 0, lotesMes: 0, receitaMes: 0, lotes12m: 0, receita12m: 0, comReceita: 0 }; m.set(k, g) }
     g.levados++
     if (r.status === 'Migrado') g.migrados++
+    if (r.status === 'Em processamento') g.emProcessamento++
+    if (r.status === 'Recusou') g.recusaram++
     if (r.lotes_mes > 0) g.ativos++
     if (r.receita_mes > 0) g.comReceita++
     g.lotesMes += r.lotes_mes; g.receitaMes += r.receita_mes; g.lotes12m += r.lotes_12m; g.receita12m += r.receita_12m

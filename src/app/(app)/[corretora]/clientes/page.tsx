@@ -7,6 +7,7 @@ import { mesCurto, mesLongo, somarDias } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { temListaPropria } from '@/lib/corretoras'
+import { getProfile } from '@/lib/auth/getProfile'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { MesPicker } from '@/components/gestao/Filtros'
@@ -18,7 +19,12 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base, q } = ctx
   const listaPropria = temListaPropria(corretora)
-  const [clientes, responsaveis] = await Promise.all([clientesLista(corretora, mesRef), listaPropria ? responsaveisAtivos() : Promise.resolve([])])
+  const [clientes, responsaveis, profile] = await Promise.all([
+    clientesLista(corretora, mesRef),
+    listaPropria ? responsaveisAtivos() : Promise.resolve([]),
+    getProfile(),
+  ])
+  const admin = profile?.role === 'admin'
   const r = resumoClientes(clientes)
   const hoje = fmtDate(hojeBrasil())
   const d7 = somarDias(hoje, -7), d30 = somarDias(hoje, -30)
@@ -48,7 +54,11 @@ export default async function ClientesPage({ params, searchParams }: { params: P
           <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.ativosSit)} ativos · ${fmtNum(r.inativos)} inativos em ${mesCurto(mesRef)}`} />
           <KpiCard label="Com alertas" value={fmtNum(r.comAlertas)} sub="algo a completar no cadastro" tone={r.comAlertas ? 'warn' : 'neutral'} />
         </KpiRow>
-        <TabelaClientes clientes={clientes} base={base} mesRef={mesRef} filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '' }} />
+        <TabelaClientes
+          clientes={clientes} base={base} mesRef={mesRef} corretora={corretora}
+          comAcoes={listaPropria && admin}
+          filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '' }}
+        />
       </PageBody>
     </>
   )

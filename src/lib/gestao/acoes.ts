@@ -6,9 +6,10 @@ import { revalidatePath } from 'next/cache'
 import { corretoraValida, equipe, falha, num, somenteAdmin, type Admin } from './guard'
 import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './planilhas'
 import { lerFaixas, lerMetas, lerParticipacoes, numeroParam } from './btg'
-import { CORRETORA_SLUG, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from '@/lib/corretoras'
 import { normTexto } from '@/lib/texto'
 import { buscarClientes, lotesNoPeriodo } from './consultas'
+import { esquecerMesReferencia } from './pagina'
 import type { LeadCampos, Resultado } from './tipos'
 
 type Row = Record<string, unknown>
@@ -22,6 +23,7 @@ async function tentar<T>(fn: () => Promise<T>): Promise<Resultado<T>> {
 }
 
 function revalidarCorretora(corretora: Corretora) {
+  esquecerMesReferencia(corretora)
   revalidatePath(`/${CORRETORA_SLUG[corretora]}`, 'layout')
   revalidatePath('/dashboard')
 }
@@ -265,6 +267,39 @@ export async function criarCliente(corretoraIn: string, campos: {
     }
     revalidarCorretora(corretora)
     return { clienteId, novo, casadoPor }
+  })
+}
+
+// Remove o cliente da corretora (só onde a lista é nossa, ex.: BTG): ficha, contas, tarifas e o
+// vínculo dos lotes, que ficam como "não cadastrados". Se ele não existir em outra corretora,
+// o cadastro básico também sai (leads ligados a ele ficam sem vínculo).
+export async function excluirClienteDaCorretora(corretoraIn: string, clienteId: string) {
+  return tentar(async () => {
+    const corretora = await corretoraValida(corretoraIn)
+    const { db } = await somenteAdmin()
+    if (!temListaPropria(corretora)) throw new Error(`Na ${CORRETORA_LABEL[corretora]} o cadastro vem do export da corretora e não pode ser excluído à mão`)
+    if (!/^[0-9a-f-]{36}$/i.test(clienteId)) throw new Error('Cliente inválido')
+    const passo = async (p: PromiseLike<{ error: { message: string } | null }>, contexto: string) => {
+      const { error } = await p
+      if (error) falha(error, contexto)
+    }
+    await passo(db.from('lotes').update({ cliente_id: null, conta_id: null }).eq('corretora', corretora).eq('cliente_id', clienteId), 'lotes')
+    await passo(db.from('contas').delete().eq('corretora', corretora).eq('cliente_id', clienteId), 'contas')
+    await passo(db.from('tarifas_cliente').delete().eq('corretora', corretora).eq('cliente_id', clienteId), 'tarifas_cliente')
+    await passo(db.from('cliente_corretora').delete().eq('corretora', corretora).eq('cliente_id', clienteId), 'cliente_corretora')
+
+    // Ainda existe em outra corretora? Senão, sai do cadastro básico também
+    const [c1, c2, c3] = await Promise.all([
+      db.from('contas').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId),
+      db.from('cliente_corretora').select('cliente_id', { count: 'exact', head: true }).eq('cliente_id', clienteId),
+      db.from('lotes').select('id', { count: 'exact', head: true }).eq('cliente_id', clienteId),
+    ])
+    const emOutras = (c1.count ?? 0) + (c2.count ?? 0) + (c3.count ?? 0)
+    if (emOutras === 0) await passo(db.from('clientes').delete().eq('id', clienteId), 'clientes')
+
+    await recalcular(db, corretora)
+    revalidarCorretora(corretora)
+    return { cadastroRemovido: emOutras === 0 }
   })
 }
 

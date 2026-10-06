@@ -15,7 +15,7 @@ type Manuais = { data_entrada: string | null; parceiro: string | null; observaco
 // Status manual (vazio = automático), responsável interno e data de migração manual
 type Manual = { status: string | null; responsavel: string | null; data_migracao: string | null }
 
-export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, responsaveis, statusAutomatico }: {
+export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, responsaveis, statusAutomatico, abrirInicial = false }: {
   corretora: Corretora
   clienteId: string
   admin: boolean
@@ -24,10 +24,12 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   manual: Manual
   responsaveis: string[]
   statusAutomatico: string | null   // status que vale quando não há manual (pela conta da corretora)
+  abrirInicial?: boolean            // abre já editando (link "editar" da lista, ?editar=1)
 }) {
   const router = useRouter()
   const termos = termosDaCorretora(corretora)
-  const [aberto, setAberto] = useState(false)
+  const listaPropria = temListaPropria(corretora)
+  const [aberto, setAberto] = useState(abrirInicial)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [m, setM] = useState({
@@ -36,6 +38,12 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   })
   const [c, setC] = useState({ nome: cadastro.nome, documento: cadastro.documento ?? '', telefone: cadastro.telefone ?? '', email: cadastro.email ?? '' })
   const opcoesResponsavel = [...new Set([...responsaveis, ...(manual.responsavel ? [manual.responsavel] : [])])]
+
+  // Ao fechar, tira o ?editar=1 da URL para não reabrir numa atualização
+  const fechar = () => {
+    setAberto(false)
+    if (abrirInicial) router.replace(window.location.pathname)
+  }
 
   const salvar = async () => {
     setSalvando(true); setErro(null)
@@ -49,27 +57,27 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
       if (!r2.ok) { setErro(r2.erro); setSalvando(false); return }
     }
     setSalvando(false)
-    setAberto(false)
+    fechar()
     router.refresh()
   }
 
   return (
     <>
       <Button variant="secondary" size="sm" onClick={() => setAberto(true)}><Pencil className="h-3.5 w-3.5" />Editar</Button>
-      <Modal open={aberto} onClose={() => setAberto(false)} title="Editar cliente" subtitle="Status, responsável e campos manuais do controle (e, para o administrador, o cadastro básico)." size="lg"
-        footer={<><Button variant="secondary" onClick={() => setAberto(false)}>Cancelar</Button><Button onClick={salvar} loading={salvando}>Salvar</Button></>}>
+      <Modal open={aberto} onClose={fechar} title="Editar cliente" subtitle="Status, responsável e campos manuais do controle (e, para o administrador, o cadastro básico)." size="lg"
+        footer={<><Button variant="secondary" onClick={fechar}>Cancelar</Button><Button onClick={salvar} loading={salvando}>Salvar</Button></>}>
         <div className="space-y-4">
           {erro && <Alert tone="danger">{erro}</Alert>}
           <div className="grid gap-3 sm:grid-cols-2">
             <Select label="Status" value={m.status} onChange={e => setM({ ...m, status: e.target.value })}
-              hint={temListaPropria(corretora) ? 'Vem da lista de clientes; aqui você muda na hora' : 'Vazio segue a situação da conta no export da corretora'}>
+              hint={listaPropria ? 'Vem da lista de clientes; aqui você muda na hora' : 'Vazio segue a situação da conta no export da corretora'}>
               <option value="">{statusAutomatico ? `Automático · ${statusAutomatico}` : 'Automático'}</option>
               <option value="Migrado">Migrado</option>
               <option value="Em processamento">Em processamento</option>
               <option value="Recusou">Recusou</option>
             </Select>
             <Select label={termos.assessor === 'Responsável' ? 'Responsável' : 'Responsável interno'} value={m.responsavel} onChange={e => setM({ ...m, responsavel: e.target.value })}
-              hint={temListaPropria(corretora) ? 'Quem cuida do cliente; os lotes seguem o responsável' : 'Vazio usa o responsável do assessor'}>
+              hint={listaPropria ? 'Quem cuida do cliente; os lotes seguem o responsável' : 'Vazio usa o responsável do assessor'}>
               <option value="">—</option>
               {opcoesResponsavel.map(r => <option key={r} value={r}>{r}</option>)}
             </Select>

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 
 type Linha = { id: string; nome: string; responsavel: string | null; valores: number[]; total: number }
 
-export function HeatmapClientes({ meses, dados, base }: { meses: MesRef[]; dados: ClienteMesRow[]; base: string }) {
+export function HeatmapClientes({ meses, dados, base, totalClientes }: { meses: MesRef[]; dados: ClienteMesRow[]; base: string; totalClientes?: number }) {
   const [busca, setBusca] = useState('')
   const [limite, setLimite] = useState(40)
 
@@ -37,7 +37,7 @@ export function HeatmapClientes({ meses, dados, base }: { meses: MesRef[]; dados
   return (
     <Panel
       title="Lotes girados por cliente"
-      subtitle={`${fmtNum(linhas.length)} clientes com giro na janela · ordem pelo total de 12 meses`}
+      subtitle={`${fmtNum(totalClientes ?? linhas.length)} clientes com giro na janela${totalClientes && totalClientes > linhas.length ? ` · os ${fmtNum(linhas.length)} maiores aqui` : ""} · ordem pelo total de 12 meses`}
       action={
         <label className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />

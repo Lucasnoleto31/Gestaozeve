@@ -2,10 +2,11 @@
 // RPC da S19 com o client service_role e devolve linhas tipadas.
 import type { Corretora } from '@/lib/corretoras'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
+import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import type {
-  AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, ClienteCadastro, ClienteMensalRow, ClienteMesRow,
-  ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, Importacao, IncentivoHistRow,
-  IncentivoRow, LeadRow, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow,
+  AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
+  ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, GrupoPainel, Importacao, IncentivoHistRow,
+  IncentivoRow, LeadRow, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
   Parametro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
 } from './tipos'
 
@@ -13,20 +14,26 @@ type Row = Record<string, unknown>
 const bool = (v: unknown) => v === true
 const arr = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
 
-// A API do Supabase devolve no máximo 1.000 linhas por chamada (também nas funções),
-// então toda função que devolve tabela é lida em páginas até acabar.
-const PAGINA = 1000
+// A API do Supabase devolve no máximo "Max rows" linhas por chamada (1.000 por padrão,
+// configurável em Settings → API). Pedimos páginas grandes e usamos a contagem total que
+// a API devolve para saber quando parar: com o limite maior, a lista vem numa chamada só.
+const PAGINA = 10000
 async function rpc(db: Admin, fn: string, args: Record<string, unknown>): Promise<Row[]> {
   const out: Row[] = []
-  for (let offset = 0; ; offset += PAGINA) {
-    const { data, error } = await db.rpc(fn, args).range(offset, offset + PAGINA - 1)
+  for (let offset = 0; ; ) {
+    const { data, error, count } = await db.rpc(fn, args, { count: 'exact' }).range(offset, offset + PAGINA - 1)
     if (error) falha(error, fn)
     const rows = (data ?? []) as Row[]
     out.push(...rows)
-    if (rows.length < PAGINA) break
+    offset += rows.length
+    if (rows.length === 0 || (count != null && out.length >= count) || (count == null && rows.length < PAGINA)) break
   }
   return out
 }
+
+// Erro da API quando a função ainda não existe no banco (script SQL não aplicado)
+const funcaoAusente = (e: { code?: string; message: string } | null) =>
+  !!e && (e.code === 'PGRST202' || /could not find the function/i.test(e.message))
 
 // Leitura paginada de uma tabela/view (mesmo limite de 1.000 por chamada)
 export async function todasAsLinhas<T>(consulta: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, contexto: string): Promise<T[]> {
@@ -147,7 +154,7 @@ export const mapKpis = (r: Row): PainelKpis => ({
   zerados_mes: num(r.zerados_mes), receita_mes: num(r.receita_mes), incentivo_mes: num(r.incentivo_mes), clientes_com_faixa: num(r.clientes_com_faixa),
   migrados_sem_giro: num(r.migrados_sem_giro), inativos: num(r.inativos), com_alertas: num(r.com_alertas), migrados_sem_data: num(r.migrados_sem_data),
   multi_conta: num(r.multi_conta), linhas_nao_cadastradas: num(r.linhas_nao_cadastradas), lotes_nao_cadastrados: num(r.lotes_nao_cadastrados),
-  ultima_data: str(r.ultima_data),
+  ultima_data: str(r.ultima_data), lotes_12m: num(r.lotes_12m), receita_12m: num(r.receita_12m),
 })
 
 export async function painelKpis(corretora: Corretora, mesRef: string | null): Promise<PainelKpis | null> {
@@ -168,10 +175,22 @@ export async function painelMensal(corretora: Corretora, mesRef: string | null, 
   return linhas(await rpc(db, 'painel_mensal', { p_corretora: corretora, p_mes_ref: mesRef, p_meses: meses }), mapMensal)
 }
 
-export async function painelClientesMensal(corretora: Corretora, mesRef: string | null, meses = 12): Promise<ClienteMesRow[]> {
+// Lotes por cliente e mês; `top` traz só os N maiores (mapa de calor). Antes da S24 a função
+// não tem p_top: cai no formato antigo e conta os clientes aqui.
+export async function painelClientesMensal(corretora: Corretora, mesRef: string | null, meses = 12, top: number | null = null): Promise<ClienteMesRow[]> {
   const { db } = await equipe()
-  return linhas(await rpc(db, 'painel_clientes_mensal', { p_corretora: corretora, p_mes_ref: mesRef, p_meses: meses }),
-    r => ({ cliente_id: String(r.cliente_id), cliente_nome: String(r.cliente_nome ?? ''), responsavel: str(r.responsavel), mes_ref: String(r.mes_ref), lotes: num(r.lotes) }))
+  const mapa = (total: number | null) => (r: Row): ClienteMesRow => ({
+    cliente_id: String(r.cliente_id), cliente_nome: String(r.cliente_nome ?? ''), responsavel: str(r.responsavel), mes_ref: String(r.mes_ref), lotes: num(r.lotes),
+    total_clientes: total ?? num(r.total_clientes),
+  })
+  try {
+    return linhas(await rpc(db, 'painel_clientes_mensal', { p_corretora: corretora, p_mes_ref: mesRef, p_meses: meses, p_top: top }), mapa(null))
+  } catch (e) {
+    if (!(e instanceof Error && funcaoAusente({ message: e.message }))) throw e
+    const rows = await rpc(db, 'painel_clientes_mensal', { p_corretora: corretora, p_mes_ref: mesRef, p_meses: meses })
+    const total = new Set(rows.map(r => String(r.cliente_id))).size
+    return linhas(rows, mapa(total))
+  }
 }
 
 export async function lotesNaoCadastrados(corretora: Corretora): Promise<LoteNaoCadastradoRow[]> {
@@ -370,4 +389,72 @@ export async function lotesNoPeriodo(corretora: Corretora, inicio: string, fim: 
   const { data } = await db.from('importacoes').select('nome_arquivo, created_at').eq('corretora', corretora).eq('tipo', 'lotes')
     .lte('data_min', fim).gte('data_max', inicio).order('created_at', { ascending: false }).limit(5)
   return { linhas: count ?? 0, importacoes: ((data ?? []) as Row[]).map(r => `${r.nome_arquivo} (${String(r.created_at).slice(0, 10)})`) }
+}
+
+// ── Painel: agregados calculados no banco (S24) ─────────────────────────────
+// Antes da S24 (função ausente) cai no cálculo em memória sobre a lista completa.
+export async function painelResumo(corretora: Corretora, mesRef: string | null): Promise<PainelResumo> {
+  const { db } = await equipe()
+  const { data, error } = await db.rpc('painel_resumo', { p_corretora: corretora, p_mes_ref: mesRef })
+  if (error) {
+    if (!funcaoAusente(error)) falha(error, 'painel_resumo')
+    return resumoPelaLista(await clientesLista(corretora, mesRef))
+  }
+  const j = (data ?? {}) as Row
+  const r = (j.resumo ?? {}) as Row
+  const grupo = (g: Row): GrupoPainel => ({
+    tipo: g.tipo === 'responsavel' ? 'responsavel' : 'assessor', grupo: String(g.grupo ?? ''), responsavel: str(g.responsavel),
+    levados: num(g.levados), migrados: num(g.migrados), em_processamento: num(g.em_processamento), recusaram: num(g.recusaram), ativos: num(g.ativos),
+    lotes_mes: num(g.lotes_mes), receita_mes: num(g.receita_mes), lotes_12m: num(g.lotes_12m), receita_12m: num(g.receita_12m), com_receita: num(g.com_receita),
+  })
+  return {
+    resumo: {
+      levados: num(r.levados), contas: num(r.contas), migrados: num(r.migrados), em_processamento: num(r.em_processamento), recusaram: num(r.recusaram),
+      ativos: num(r.ativos), lotes_mes: num(r.lotes_mes), zerados_mes: num(r.zerados_mes), receita_mes: num(r.receita_mes), lotes_12m: num(r.lotes_12m),
+      receita_12m: num(r.receita_12m), nunca_giraram: num(r.nunca_giraram), inativos: num(r.inativos), ativos_sit: num(r.ativos_sit), com_alertas: num(r.com_alertas),
+      migrados_sem_data: num(r.migrados_sem_data), multi_conta: num(r.multi_conta), com_receita: num(r.com_receita),
+      media_dias_migrar: r.media_dias_migrar == null ? null : num(r.media_dias_migrar),
+    },
+    grupos: linhas<GrupoPainel>(j.grupos, grupo),
+    sem_giro: linhas(j.sem_giro, s => ({ cliente_id: String(s.cliente_id), nome: String(s.nome ?? ''), responsavel: str(s.responsavel), data_migracao: str(s.data_migracao), telefone: str(s.telefone) })),
+  }
+}
+
+function resumoPelaLista(rows: ClienteRow[]): PainelResumo {
+  const r = resumoClientes(rows)
+  const grupo = (tipo: GrupoPainel['tipo']) => (g: GrupoClientes): GrupoPainel => ({
+    tipo, grupo: g.grupo, responsavel: g.responsavel, levados: g.levados, migrados: g.migrados, em_processamento: g.emProcessamento, recusaram: g.recusaram,
+    ativos: g.ativos, lotes_mes: g.lotesMes, receita_mes: g.receitaMes, lotes_12m: g.lotes12m, receita_12m: g.receita12m, com_receita: g.comReceita,
+  })
+  return {
+    resumo: {
+      levados: r.levados, contas: r.contas, migrados: r.migrados, em_processamento: r.emProcessamento, recusaram: r.recusaram, ativos: r.ativos,
+      lotes_mes: r.lotesMes, zerados_mes: r.zeradosMes, receita_mes: r.receitaMes, lotes_12m: r.lotes12m, receita_12m: r.receita12m,
+      nunca_giraram: r.nuncaGiraram, inativos: r.inativos, ativos_sit: r.ativosSit, com_alertas: r.comAlertas, migrados_sem_data: r.migradosSemData,
+      multi_conta: r.multiConta, com_receita: r.comReceita, media_dias_migrar: r.mediaDiasMigrar,
+    },
+    grupos: [...porAssessor(rows).map(grupo('assessor')), ...porResponsavel(rows).map(grupo('responsavel'))],
+    sem_giro: rows.filter(c => c.situacao === 'Nunca girou').sort((a, b) => (b.data_migracao ?? '').localeCompare(a.data_migracao ?? '')).slice(0, 15)
+      .map(c => ({ cliente_id: c.cliente_id, nome: c.nome, responsavel: c.responsavel, data_migracao: c.data_migracao, telefone: c.telefone })),
+  }
+}
+
+// Posição do cliente no ranking de lotes 12 m, receita total do mês e média de lotes dos ativos (ficha)
+export async function clienteContexto(corretora: Corretora, clienteId: string, mesRef: string | null): Promise<ClienteContexto> {
+  const { db } = await equipe()
+  const { data, error } = await db.rpc('cliente_contexto', { p_corretora: corretora, p_cliente_id: clienteId, p_mes_ref: mesRef })
+  if (error) {
+    if (!funcaoAusente(error)) falha(error, 'cliente_contexto')
+    const todos = await clientesLista(corretora, mesRef)
+    const ordenados = todos.filter(c => c.lotes_12m > 0)
+    const i = ordenados.findIndex(c => c.cliente_id === clienteId)
+    const ativos = todos.filter(c => c.lotes_mes > 0)
+    return {
+      posicao: i >= 0 ? i + 1 : null, com_giro: ordenados.length,
+      receita_total_mes: todos.reduce((s, c) => s + c.receita_mes, 0),
+      media_lotes_ativos: ativos.length ? ativos.reduce((s, c) => s + c.lotes_mes, 0) / ativos.length : 0,
+    }
+  }
+  const r = ((data ?? []) as Row[])[0] ?? {}
+  return { posicao: r.posicao == null ? null : num(r.posicao), com_giro: num(r.com_giro), receita_total_mes: num(r.receita_total_mes), media_lotes_ativos: num(r.media_lotes_ativos) }
 }

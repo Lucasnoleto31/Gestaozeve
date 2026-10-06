@@ -9,11 +9,26 @@ import { fmtDate, hojeBrasil } from '@/lib/periodo'
 export type Params = Promise<{ corretora: string; id?: string }>
 export type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
+// O mês de referência só muda quando entram ou saem lotes: fica em cache por um minuto na
+// instância (e é esquecido em qualquer escrita, via revalidarCorretora) para poupar uma ida
+// ao banco antes de cada página.
+const cacheMes = new Map<Corretora, { valor: MesRef; expira: number }>()
+const CACHE_MES_MS = 60_000
+
+export function esquecerMesReferencia(corretora?: Corretora) {
+  if (corretora) cacheMes.delete(corretora)
+  else cacheMes.clear()
+}
+
 export async function mesReferencia(corretora: Corretora): Promise<MesRef> {
+  const guardado = cacheMes.get(corretora)
+  if (guardado && guardado.expira > Date.now()) return guardado.valor
   const { db } = await equipe()
   const { data, error } = await db.rpc('mes_referencia', { p_corretora: corretora })
   if (error) falha(error, 'mes_referencia')
-  return parseMes(String(data ?? '')) ?? parseMes(fmtDate(hojeBrasil()))!
+  const valor = parseMes(String(data ?? '')) ?? parseMes(fmtDate(hojeBrasil()))!
+  cacheMes.set(corretora, { valor, expira: Date.now() + CACHE_MES_MS })
+  return valor
 }
 
 export type Contexto = {

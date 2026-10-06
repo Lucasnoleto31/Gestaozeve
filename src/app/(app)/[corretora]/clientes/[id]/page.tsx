@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AlertTriangle, ArrowLeft, Check, Info, MessageCircle } from 'lucide-react'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { clienteFicha, clientesLista, responsaveisAtivos } from '@/lib/gestao/consultas'
+import { clienteContexto, clienteFicha, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { getProfile } from '@/lib/auth/getProfile'
 import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -17,7 +17,9 @@ import { buttonClasses } from '@/components/ui/buttonStyles'
 import { MesPicker } from '@/components/gestao/Filtros'
 import { CelulaCalor, LinhaVazia, SituacaoBadge, StatusBadge, TRACO, dataCurta, dataPt, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
+import { temListaPropria } from '@/lib/corretoras'
 import { BuscaCliente } from '../BuscaCliente'
+import { ExcluirClienteButton } from '../ExcluirClienteButton'
 import { FichaEditavel } from './FichaEditavel'
 import { TarifasCliente } from './TarifasCliente'
 
@@ -34,7 +36,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   const { id } = await params
   if (!id) notFound()
   const { corretora, mesRef, base } = ctx
-  const [profile, ficha, todos, responsaveis] = await Promise.all([getProfile(), clienteFicha(corretora, id, mesRef), clientesLista(corretora, mesRef), responsaveisAtivos()])
+  const [profile, ficha, contexto360, responsaveis] = await Promise.all([getProfile(), clienteFicha(corretora, id, mesRef), clienteContexto(corretora, id, mesRef), responsaveisAtivos()])
   const { resumo, cadastro, contas, mensal, tarifas, extrato, porAtivo } = ficha
   if (!cadastro) notFound()
   const admin = profile?.role === 'admin'
@@ -42,12 +44,10 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   const mensalPorMes = new Map(mensal.map(m => [m.mes_ref, m]))
   const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
 
-  // Posição do cliente entre os demais (lotes 12m) e comparações do mês
-  const ordenados = todos.filter(c => c.lotes_12m > 0)
-  const posicao = ordenados.findIndex(c => c.cliente_id === id)
-  const receitaTotalMes = todos.reduce((s, c) => s + c.receita_mes, 0)
-  const ativos = todos.filter(c => c.lotes_mes > 0)
-  const mediaAtivos = ativos.length ? ativos.reduce((s, c) => s + c.lotes_mes, 0) / ativos.length : 0
+  // Posição do cliente entre os demais (lotes 12m) e comparações do mês, calculadas no banco
+  const posicao = contexto360.posicao
+  const receitaTotalMes = contexto360.receita_total_mes
+  const mediaAtivos = contexto360.media_lotes_ativos
   const assessoresContas = new Set(contas.map(c => c.assessor_nome ?? ''))
   const total12 = mensal.reduce((a, m) => ({ lotes: a.lotes + m.lotes, zerados: a.zerados + m.zerados, receita: a.receita + m.receita, pontos: a.pontos + m.pontos }), { lotes: 0, zerados: 0, receita: 0, pontos: 0 })
   const maxMes = Math.max(0, ...mensal.map(m => m.lotes))
@@ -112,7 +112,9 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 manual={ficha.manual}
                 responsaveis={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
                 statusAutomatico={ficha.manual.status ? null : (resumo?.status ?? null)}
+                abrirInicial={ctx.q.editar === '1'}
               />
+              {temListaPropria(corretora) && admin && <ExcluirClienteButton corretora={corretora} clienteId={id} nome={cadastro.nome} base={base} variante="botao" />}
             </div>
           </div>
 
@@ -131,7 +133,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
         <KpiRow cols={6}>
           <KpiCard label={`Lotes em ${mesCurto(mesRef)}`} value={n0(resumo?.lotes_mes)} sub={`${n0(resumo?.zerados_mes)} zerados${mediaAtivos && resumo?.lotes_mes ? ` · ${(resumo.lotes_mes / mediaAtivos).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}× a média dos ativos` : ''}`} />
           <KpiCard label={`Receita em ${mesCurto(mesRef)}`} value={rCurto(resumo?.receita_mes)} sub={receitaTotalMes && resumo?.receita_mes ? `${fmtPct((resumo.receita_mes / receitaTotalMes) * 100)} da receita do mês` : undefined} />
-          <KpiCard label="Lotes 12 meses" value={n0(resumo?.lotes_12m)} sub={posicao >= 0 ? `${posicao + 1}º de ${fmtNum(ordenados.length)} clientes` : 'sem giro na janela'} />
+          <KpiCard label="Lotes 12 meses" value={n0(resumo?.lotes_12m)} sub={posicao != null ? `${posicao}º de ${fmtNum(contexto360.com_giro)} clientes` : 'sem giro na janela'} />
           <KpiCard label="Receita 12 meses" value={rCurto(resumo?.receita_12m)} sub={`${n0(total12.pontos)} pontos de incentivo`} />
           <KpiCard label="Lotes no histórico" value={n0(resumo?.lotes_total)} sub={`${n0(total12.zerados)} zerados em 12 m`} />
           <KpiCard label="Tarifa vigente" value={resumo ? `${n2(resumo.tarifa)} R$/lote` : TRACO} sub={tarifas.length ? 'tarifa própria do cliente' : 'tarifa do assessor'} />

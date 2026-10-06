@@ -8,6 +8,7 @@ import { CelulaCalor, TRACO, n0 } from '@/components/gestao/Celulas'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
 import type { ClienteMesRow } from '@/lib/gestao/tipos'
 import { fmtNum } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 type Linha = { id: string; nome: string; responsavel: string | null; valores: number[]; total: number }
 
@@ -31,36 +32,36 @@ export function HeatmapClientes({ meses, dados, base }: { meses: MesRef[]; dados
   const termo = busca.trim().toUpperCase()
   const filtradas = termo ? linhas.filter(l => l.nome.toUpperCase().includes(termo)) : linhas
   const visiveis = filtradas.slice(0, limite)
+  const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
 
   return (
     <Panel
       title="Lotes girados por cliente"
-      subtitle={`${fmtNum(linhas.length)} clientes com giro na janela · ordenado pelo total de 12 meses`}
-      flush
+      subtitle={`${fmtNum(linhas.length)} clientes com giro na janela · ordem pelo total de 12 meses`}
       action={
         <label className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" />
-          <input className="field-sm w-44 pl-7" placeholder="Filtrar cliente" value={busca} onChange={e => setBusca(e.target.value)} />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
+          <input className="field-sm w-44 pl-8" placeholder="Filtrar cliente" value={busca} onChange={e => setBusca(e.target.value)} aria-label="Filtrar cliente" />
         </label>
       }
     >
-      <div className="tbl-wrap max-h-[560px] rounded-none border-0">
+      <div className="tbl-wrap max-h-[560px]">
         <table className="tbl tbl-dense">
           <thead>
             <tr>
-              <th className="sticky-col min-w-[220px]">Cliente</th>
-              <th>Resp.</th>
-              {meses.map(m => <th key={m} className="num">{mesCurto(m)}</th>)}
-              <th className="num">Total 12 m</th>
+              <th className="sticky-col min-w-[180px]">Cliente</th>
+              <th className="col-p3">Resp.</th>
+              {meses.map((m, i) => <th key={m} className={cn('num', colMes(i))}>{mesCurto(m)}</th>)}
+              <th className="num">12 m</th>
             </tr>
           </thead>
           <tbody>
-            {visiveis.length === 0 && <tr><td colSpan={meses.length + 3} className="py-8 text-center text-sm text-fg-subtle">Nenhum cliente com giro.</td></tr>}
+            {visiveis.length === 0 && <tr><td colSpan={meses.length + 3} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente com giro.</td></tr>}
             {visiveis.map(l => (
               <tr key={l.id}>
-                <td className="sticky-col"><Link href={`${base}/clientes/${l.id}`} className="link">{l.nome}</Link></td>
-                <td className="muted">{l.responsavel ?? TRACO}</td>
-                {l.valores.map((v, i) => <CelulaCalor key={i} valor={v} max={max} />)}
+                <td className="sticky-col max-w-[220px] truncate"><Link href={`${base}/clientes/${l.id}`} className="link">{l.nome}</Link></td>
+                <td className="muted col-p3">{l.responsavel ?? TRACO}</td>
+                {l.valores.map((v, i) => <CelulaCalor key={i} valor={v} max={max} className={colMes(i)} />)}
                 <td className="num font-semibold">{n0(l.total)}</td>
               </tr>
             ))}
@@ -68,8 +69,8 @@ export function HeatmapClientes({ meses, dados, base }: { meses: MesRef[]; dados
         </table>
       </div>
       {filtradas.length > visiveis.length && (
-        <div className="border-t border-line px-4 py-2 text-center">
-          <button type="button" className="text-xs font-medium text-accent hover:underline" onClick={() => setLimite(n => n + 60)}>
+        <div className="py-2 text-center">
+          <button type="button" className="link text-label" onClick={() => setLimite(n => n + 60)}>
             mostrar mais ({fmtNum(filtradas.length - visiveis.length)} restantes)
           </button>
         </div>

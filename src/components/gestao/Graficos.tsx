@@ -27,7 +27,7 @@ function corDe(cor: string | undefined, c: ReturnType<typeof useChartColors>, i:
 function useTooltipStyle() {
   const c = useChartColors()
   return {
-    contentStyle: { background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 8, fontSize: 12, color: c.text },
+    contentStyle: { background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 8, fontSize: 13, color: c.text, boxShadow: 'none' },
     labelStyle: { color: c.text, fontWeight: 600 },
     itemStyle: { color: c.text },
   }
@@ -68,8 +68,8 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
         {series.map((s, i) => {
           const cor = corDe(s.cor, c, i)
           return s.tipo === 'line'
-            ? <Line key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} type="monotone" dataKey={s.key} name={s.nome} stroke={cor} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
-            : <Bar key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} dataKey={s.key} name={s.nome} fill={cor} stackId={s.empilhar} radius={s.empilhar ? 0 : [3, 3, 0, 0]} maxBarSize={38} />
+            ? <Line key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} type="monotone" dataKey={s.key} name={s.nome} stroke={cor} strokeWidth={2} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />
+            : <Bar key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} dataKey={s.key} name={s.nome} fill={cor} stackId={s.empilhar} radius={s.empilhar ? 0 : [2, 2, 0, 0]} maxBarSize={36} isAnimationActive={false} />
         })}
       </ComposedChart>
     </ResponsiveContainer>
@@ -90,7 +90,7 @@ export function GraficoRosca({ dados, altura = 240, formato = 'num', cores }: {
   return (
     <ResponsiveContainer width="100%" height={altura}>
       <PieChart>
-        <Pie data={dados} dataKey="valor" nameKey="nome" innerRadius="55%" outerRadius="85%" paddingAngle={1} stroke="none">
+        <Pie data={dados} dataKey="valor" nameKey="nome" innerRadius="55%" outerRadius="85%" paddingAngle={1} stroke="none" isAnimationActive={false}>
           {dados.map((_, i) => <Cell key={i} fill={paleta[i % paleta.length]} />)}
         </Pie>
         <Tooltip {...tt} formatter={(v, nome) => [`${FMT[formato](Number(v))} (${total ? fmtPct((Number(v) / total) * 100, 1) : '0%'})`, String(nome)]} />
@@ -118,7 +118,7 @@ export function GraficoBarrasH({ dados, altura, formato = 'num', cor, larguraRot
         <XAxis type="number" tick={{ fill: c.axis, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={compacto} />
         <YAxis type="category" dataKey="nome" width={larguraRotulo} tick={{ fill: c.text, fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip {...tt} cursor={{ fill: c.grid }} formatter={v => [FMT[formato](Number(v)), '']} />
-        <Bar dataKey="valor" fill={corDe(cor, c, 0)} radius={[0, 3, 3, 0]} maxBarSize={18} label={{ position: 'right', fill: c.text, fontSize: 11, formatter: (v: unknown) => FMT[formato](Number(v)) }} />
+        <Bar dataKey="valor" fill={corDe(cor, c, 0)} radius={[0, 2, 2, 0]} maxBarSize={16} isAnimationActive={false} label={{ position: 'right', fill: c.text, fontSize: 11, formatter: (v: unknown) => FMT[formato](Number(v)) }} />
       </ComposedChart>
     </ResponsiveContainer>
   )

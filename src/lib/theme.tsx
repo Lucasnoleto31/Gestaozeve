@@ -135,7 +135,7 @@ export type ChartColors = {
   acumulado: string
   incentivo: string
   corretora: Record<'GENIAL' | 'XP' | 'BTG', string>
-  // 1ª accent, 2ª gain, 3ª warn, 4ª neutro; depois versões atenuadas (séries empilhadas)
+  // 1ª accent, 2ª âmbar, 3ª neutro; depois versões atenuadas (séries empilhadas). Verde/vermelho só em ganho/perda.
   palette: string[]
 }
 
@@ -149,15 +149,15 @@ export function useChartColors(): ChartColors {
     tooltipBorder: t.lineStrong,
     operados: t.accent,
     zerados: t.loss,
-    clientes: t.fgMuted,
+    clientes: t.warn,
     receita: t.accent,
     acumulado: t.warn,
     incentivo: t.gain,
     corretora: t.corretora,
     palette: [
-      t.accent, t.gain, t.warn, t.fgMuted,
-      comAlpha(t.accent, 0.55), comAlpha(t.gain, 0.55), comAlpha(t.warn, 0.55), comAlpha(t.fgMuted, 0.55),
-      t.fgSubtle,
+      t.accent, t.warn, t.fgMuted,
+      comAlpha(t.accent, 0.6), comAlpha(t.warn, 0.6), comAlpha(t.fgMuted, 0.6),
+      comAlpha(t.accent, 0.35), comAlpha(t.warn, 0.35), t.fgSubtle,
     ],
   }), [t])
 }

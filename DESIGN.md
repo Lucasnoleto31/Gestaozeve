@@ -117,7 +117,8 @@ Fora da escala só por exceção documentada aqui. Cabeçalho de tabela deixa de
   `−4,0%` colorida gain/loss; sem seta se já tem sinal.
 - Gráficos (recharts) leem tokens: grade só horizontal `--line`, eixos `--fg-subtle` 11 px, sem linha de
   eixo, tooltip = `--surface-2` + hairline + `dense`, legenda só com 3+ séries. Cores das séries:
-  1ª `--accent`, 2ª `--gain`, 3ª `--warn`, 4ª `--fg-muted`; ganho/perda sempre gain/loss. Um gráfico
+  1ª `--accent`, 2ª `--warn`, 3ª `--fg-muted`, depois as mesmas atenuadas (60 % e 35 %); verde/vermelho só em
+  séries de ganho/perda. Sem animação de entrada. Um gráfico
   "herói" por página; os demais menores e sem card próprio.
 - Página inteira sem rolagem horizontal; dentro de tabela é permitido só acima de 768 px.
 

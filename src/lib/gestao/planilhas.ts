@@ -231,7 +231,8 @@ export function lerClientes(raw: unknown[][]): Leitura<ClienteImport> {
       corretagem: texto(g(row, 'corretagem')) === '' ? null : numeroBR(g(row, 'corretagem')),
     })
   }
-  const faltando = (Object.keys(MAPA_CLIENTES) as (keyof ClienteImport)[])
+  // lista própria (tem Status): as colunas do export da corretora não existem mesmo, não avisa
+  const faltando = idx.status !== undefined ? [] : (Object.keys(MAPA_CLIENTES) as (keyof ClienteImport)[])
     .filter(c => idx[c] === undefined && !MANUAIS_CLIENTE.includes(c))
   return { ok: true, linhas, faltando, cabecalhos: cab.map(texto) }
 }

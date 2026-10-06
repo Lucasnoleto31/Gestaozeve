@@ -9,7 +9,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
-import { CORRETORAS, CORRETORA_COLOR, CORRETORA_LABEL, CORRETORA_SLUG, corretoraDoSlug, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_COLOR, CORRETORA_LABEL, CORRETORA_SLUG, corretoraDoSlug, termosDaCorretora, type Corretora } from '@/lib/corretoras'
 
 type NavItem = { label: string; href: string; icon: React.ElementType; exact?: boolean }
 type NavSection = { label: string; roles: Role[]; items: NavItem[] }
@@ -47,7 +47,7 @@ const ROLE_LABELS: Record<Role, string> = {
   influenciador: 'Influenciador',
 }
 
-export function Sidebar({ role, nome, corretoraPadrao }: { role: Role; nome: string; corretoraPadrao: Corretora }) {
+export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Role; nome: string; corretoraPadrao: Corretora; corretoras: Corretora[] }) {
   const pathname = usePathname()
   const { isOpen, close } = useSidebar()
 
@@ -58,6 +58,7 @@ export function Sidebar({ role, nome, corretoraPadrao }: { role: Role; nome: str
   const naRota = corretoraDoSlug(segmentos[0])
   const corretora = naRota ?? corretoraPadrao
   const slug = CORRETORA_SLUG[corretora]
+  const termos = termosDaCorretora(corretora)
   // Ao trocar de corretora, fica na mesma página (ou vai pro painel)
   const paginaAtual = naRota && segmentos[1] && PAGINAS.some(p => p.id === segmentos[1]) ? segmentos[1] : 'painel'
 
@@ -126,7 +127,7 @@ export function Sidebar({ role, nome, corretoraPadrao }: { role: Role; nome: str
           <div>
             <Secao label="Corretora" />
             <div className="mb-2 flex rounded-md bg-surface-3 p-0.5" role="tablist" aria-label="Corretora">
-              {CORRETORAS.map(c => {
+              {corretoras.map(c => {
                 const ativa = c === corretora
                 return (
                   <Link
@@ -146,7 +147,7 @@ export function Sidebar({ role, nome, corretoraPadrao }: { role: Role; nome: str
               })}
             </div>
             <ul className="space-y-0.5">
-              {paginas.map(p => renderItem({ label: p.label, href: `/${slug}/${p.id}`, icon: p.icon }))}
+              {paginas.map(p => renderItem({ label: p.id === 'assessores' ? termos.assessores : p.label, href: `/${slug}/${p.id}`, icon: p.icon }))}
             </ul>
           </div>
         )}

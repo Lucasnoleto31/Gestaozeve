@@ -2,9 +2,17 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import type { Role } from '@/types'
+import { CORRETORAS, isCorretora } from '@/lib/corretoras'
 
 const ROLES: Role[] = ['admin', 'vendedor', 'influenciador']
 const isRole = (v: unknown): v is Role => typeof v === 'string' && (ROLES as string[]).includes(v)
+
+// Corretoras que o usuário vê: lista de GENIAL/XP/BTG; todas as três (ou nada informado) = NULL (sem restrição)
+function corretorasValidas(v: unknown): string[] | null {
+  if (!Array.isArray(v)) return null
+  const lista = CORRETORAS.filter(c => v.includes(c))
+  return lista.length === CORRETORAS.length ? null : lista
+}
 
 function getAdminClient() {
   return createAdminClient(
@@ -29,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
-  const { nome, email, senha, role } = await req.json()
+  const { nome, email, senha, role, corretoras } = await req.json()
   if (!nome || !email || !senha || !isRole(role)) {
     return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
   }
@@ -48,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   const { error: profileError } = await supabaseAdmin
     .from('profiles')
-    .upsert({ user_id: authUser.user.id, name: nome, nome, email, role, ativo: true }, { onConflict: 'user_id' })
+    .upsert({ user_id: authUser.user.id, name: nome, nome, email, role, ativo: true, corretoras: corretorasValidas(corretoras) }, { onConflict: 'user_id' })
   if (profileError) {
     return NextResponse.json({ error: profileError.message }, { status: 400 })
   }
@@ -61,9 +69,12 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
-  const { id, userId, nome, email, role } = await req.json()
+  const { id, userId, nome, email, role, corretoras } = await req.json()
   if (!id || !userId || !nome || !email || !isRole(role)) {
     return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
+  }
+  if (corretoras !== undefined && corretoras !== null && !(Array.isArray(corretoras) && corretoras.every(isCorretora))) {
+    return NextResponse.json({ error: 'Corretoras inválidas' }, { status: 400 })
   }
 
   const supabaseAdmin = getAdminClient()
@@ -74,9 +85,11 @@ export async function PATCH(req: NextRequest) {
     .eq('id', id)
     .single()
 
+  const campos: Record<string, unknown> = { name: nome, nome, email, role }
+  if (corretoras !== undefined) campos.corretoras = corretorasValidas(corretoras)
   const { error: profileError } = await supabaseAdmin
     .from('profiles')
-    .update({ name: nome, nome, email, role })
+    .update(campos)
     .eq('id', id)
   if (profileError) {
     return NextResponse.json({ error: profileError.message }, { status: 400 })

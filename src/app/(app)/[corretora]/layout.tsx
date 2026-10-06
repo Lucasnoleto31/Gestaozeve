@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { corretoraDoSlug } from '@/lib/corretoras'
+import { corretoraDoSlug, podeVerCorretora } from '@/lib/corretoras'
 import { getProfile } from '@/lib/auth/getProfile'
 import { CorretoraCookie } from './CorretoraCookie'
 
@@ -10,6 +10,8 @@ export default async function CorretoraLayout({ children, params }: { children: 
   const profile = await getProfile()
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'vendedor') redirect('/dashboard')
+  // Corretora fora da lista do usuário (profiles.corretoras): volta pro início
+  if (!podeVerCorretora(profile, corretora)) redirect('/dashboard')
   return (
     <>
       <CorretoraCookie corretora={corretora} />

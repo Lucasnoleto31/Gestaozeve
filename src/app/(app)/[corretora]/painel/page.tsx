@@ -2,8 +2,10 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { clientesLista, funilMensal, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal } from '@/lib/gestao/consultas'
+import { clientesLista, funilMensal, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal, parametrosDaCorretora } from '@/lib/gestao/consultas'
 import { baseStatus, porAssessor, resumoClientes, situacaoMigrados } from '@/lib/gestao/derivados'
+import { calcularRepasse, configBtg } from '@/lib/gestao/btg'
+import { termosDaCorretora } from '@/lib/corretoras'
 import { janelaMeses, limitesDoMes, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -20,21 +22,34 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const { corretora, mesRef, base } = ctx
   const meses = janelaMeses(mesRef, 12)
   const lim = limitesDoMes(mesRef)
+  const termos = termosDaCorretora(corretora)
 
-  const [clientes, mensal, porCliente, naoCad, mix, funil] = await Promise.all([
+  const [clientes, mensal, porCliente, naoCad, mix, funil, par] = await Promise.all([
     clientesLista(corretora, mesRef),
     painelMensal(corretora, mesRef, 12),
     painelClientesMensal(corretora, mesRef, 12),
     lotesNaoCadastrados(corretora),
     mixPlataforma(corretora, lim.inicio, lim.fim),
     funilMensal(mesRef, 12),
+    parametrosDaCorretora(corretora),
   ])
+
+  // Economia da corretora: no BTG a receita não tem incentivo por pontos e passa pelo
+  // repasse (faixas progressivas), imposto, Delta e divisão entre os sócios
+  const cfg = configBtg(par.parametros)
+  const atp = cfg.modelo === 'ATP'
+  const comRepasse = cfg.faixas.length > 0
+  const listaPropria = corretora === 'BTG'
+  type Mes = typeof mensal[number]
+  const receitaTotal = (m: Mes) => m.receita + (atp ? 0 : m.incentivo)
+  const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg)
 
   const r = resumoClientes(clientes)
   const bs = baseStatus(clientes)
   const sit = situacaoMigrados(clientes)
   const assessores = porAssessor(clientes)
   const mesAtual = mensal.find(m => m.mes_ref === mesRef)
+  const repasseMes = calcularRepasse(mesAtual?.receita ?? 0, cfg)
   const naoCadLinhas = naoCad.reduce((s, l) => s + l.linhas, 0)
   const naoCadLotes = naoCad.reduce((s, l) => s + l.lotes, 0)
   const semGiro = clientes.filter(c => c.situacao === 'Nunca girou').sort((a, b) => (b.data_migracao ?? '').localeCompare(a.data_migracao ?? '')).slice(0, 15)
@@ -46,11 +61,21 @@ export default async function PainelPage({ params, searchParams }: { params: Par
 
   // Indicadores mensais: uma linha por indicador, uma coluna por mês
   type Linha = { label: string; valores: (number | null)[]; fmt: (v: number | null) => string; destaque?: 'bold' | 'total' | 'sub'; total?: boolean }
-  const col = (fn: (m: typeof mensal[number] | undefined, f: typeof funil[number] | undefined) => number | null) =>
+  const col = (fn: (m: Mes | undefined, f: typeof funil[number] | undefined) => number | null) =>
     meses.map(m => fn(mensalPorMes.get(m), funilPorMes.get(m)))
   const nn = (v: number | null) => (v == null ? TRACO : n0(v))
   const rr = (v: number | null) => (v == null ? TRACO : rCurto(v))
   const pp = (v: number | null) => (v == null ? TRACO : p1(v))
+  const linhasRepasse: Linha[] = comRepasse ? [
+    { label: `Repasse ${ctx.label} (% efetivo)`, valores: col(m => (m && m.receita ? repasseDe(m).pctEfetivo : null)), fmt: pp, destaque: 'sub' },
+    { label: `Repasse ${ctx.label}`, valores: col(m => (m ? repasseDe(m).repasse : null)), fmt: rr, total: true },
+    { label: `(–) Retenção ${ctx.label}`, valores: col(m => (m ? repasseDe(m).retencao : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: `(–) Imposto ${fmtPct(cfg.impostoPct)}`, valores: col(m => (m ? repasseDe(m).imposto : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: `(–) Delta ${fmtPct(cfg.deltaPct, 0)}`, valores: col(m => (m ? repasseDe(m).delta : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: 'Receita líquida', valores: col(m => (m ? repasseDe(m).liquido : null)), fmt: rr, destaque: 'total', total: true },
+    ...cfg.participacoes.map((p): Linha => ({ label: `${p.nome} (${fmtPct(p.pct, 0)})`, valores: col(m => (m ? repasseDe(m).partes.find(x => x.nome === p.nome)?.valor ?? null : null)), fmt: rr, destaque: 'sub', total: true })),
+    { label: 'Receita líquida / receita total', valores: col(m => (m && m.receita ? (repasseDe(m).liquido / m.receita) * 100 : null)), fmt: pp, destaque: 'sub' },
+  ] : []
   const linhas: Linha[] = [
     { label: 'Clientes migrados (acumulado)', valores: col(m => m?.migrados_acumulados ?? null), fmt: nn },
     { label: 'Novas migrações', valores: col(m => m?.novas_migracoes ?? null), fmt: nn, total: true },
@@ -63,8 +88,9 @@ export default async function PainelPage({ params, searchParams }: { params: Par
     { label: 'Lotes por cliente ativo', valores: col(m => (m && m.clientes_ativos ? m.lotes / m.clientes_ativos : null)), fmt: v => (v == null ? TRACO : n2(Math.round(v * 10) / 10)) },
     { label: 'Receita de corretagem', valores: col(m => m?.receita_corretagem ?? null), fmt: rr, total: true },
     { label: 'Receita de zeragem', valores: col(m => m?.receita_zeragem ?? null), fmt: rr, total: true },
-    { label: `Incentivo ${ctx.label}`, valores: col(m => m?.incentivo ?? null), fmt: rr, total: true },
-    { label: 'Receita total', valores: col(m => (m ? m.receita + m.incentivo : null)), fmt: rr, destaque: 'total', total: true },
+    ...(atp ? [] : [{ label: `Incentivo ${ctx.label}`, valores: col(m => m?.incentivo ?? null), fmt: rr, total: true } as Linha]),
+    { label: 'Receita total', valores: col(m => (m ? receitaTotal(m) : null)), fmt: rr, destaque: 'total', total: true },
+    ...linhasRepasse,
     { label: 'Leads recebidos', valores: col((_, f) => f?.recebidos ?? null), fmt: nn, total: true },
     { label: 'dos quais já eram clientes', valores: col((_, f) => f?.ja_clientes ?? null), fmt: nn, destaque: 'sub', total: true },
     { label: 'Leads ganhos (data do fechamento)', valores: col((_, f) => f?.ganhos ?? null), fmt: nn, total: true },
@@ -72,7 +98,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
 
   const grafico = meses.map(m => {
     const x = mensalPorMes.get(m)
-    return { label: mesCurto(m), lotes: x?.lotes ?? 0, receita: x ? x.receita + x.incentivo : 0, ativos: x?.clientes_ativos ?? 0 }
+    return { label: mesCurto(m), lotes: x?.lotes ?? 0, receita: x ? receitaTotal(x) : 0, ativos: x?.clientes_ativos ?? 0 }
   })
 
   return (
@@ -90,10 +116,16 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           <KpiCard label="Ativos no mês" value={fmtNum(r.ativos)} sub={`giraram em ${mesCurto(mesRef)}`} />
           <KpiCard label="% ativos da base migrada" value={fmtPct(r.pctAtivosMigrados)} sub={`${fmtPct(r.pctAtivosLevados)} do total levado`} />
           <KpiCard label="Lotes no mês" value={fmtNum(r.lotesMes)} sub={`${fmtNum(r.zeradosMes)} zerados · ${rCurto(r.receitaMes)}`} />
-          <KpiCard label="Incentivo no mês" value={rCurto(mesAtual?.incentivo ?? 0)} sub={`${fmtNum(mesAtual?.clientes_com_faixa ?? 0)} clientes com faixa`} />
+          {comRepasse ? (
+            <KpiCard label="Receita líquida no mês" value={rCurto(repasseMes.liquido)} sub={`${fmtPct(repasseMes.pctEfetivo)} de repasse${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`} />
+          ) : atp ? (
+            <KpiCard label="Receita no mês" value={rCurto(mesAtual?.receita ?? 0)} sub="corretagem + zeragem" />
+          ) : (
+            <KpiCard label="Incentivo no mês" value={rCurto(mesAtual?.incentivo ?? 0)} sub={`${fmtNum(mesAtual?.clientes_com_faixa ?? 0)} clientes com faixa`} />
+          )}
         </KpiRow>
 
-        <Panel title="Lotes, receita e clientes ativos" subtitle="12 meses até o mês de referência · receita = corretagem + zeragem + incentivo">
+        <Panel title="Lotes, receita e clientes ativos" subtitle={`12 meses até o mês de referência · receita = corretagem + zeragem${atp ? '' : ' + incentivo'}`}>
           <GraficoSeries
             dados={grafico}
             series={[
@@ -107,7 +139,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           />
         </Panel>
 
-        <Panel title="Indicadores mensais" subtitle="O último mês pode estar parcial.">
+        <Panel title="Indicadores mensais" subtitle={comRepasse ? 'O último mês pode estar parcial · repasse, imposto e Delta conforme Parâmetros.' : 'O último mês pode estar parcial.'}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>
@@ -161,7 +193,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
             </ul>
           </Panel>
 
-          <Panel title="Base por status" subtitle="Status vem da situação da conta; responsável vem do assessor.">
+          <Panel title="Base por status" subtitle={listaPropria ? 'Status e responsável vêm da lista de clientes.' : 'Status vem da situação da conta; responsável vem do assessor.'}>
             <div className="tbl-wrap">
               <table className="tbl tbl-dense">
                 <thead>
@@ -227,12 +259,12 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           </Panel>
         </div>
 
-        <Panel title="Por assessor" subtitle="Clientes levados e migrados pela conta principal; lotes e receita do mês e dos últimos 12 meses.">
+        <Panel title={`Por ${termos.assessor.toLowerCase()}`} subtitle="Clientes levados e migrados pela conta principal; lotes e receita do mês e dos últimos 12 meses.">
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>
                 <tr>
-                  <th>Assessor</th><th className="col-p3">Responsável</th><th className="num col-p2">Levados</th><th className="num col-p2">Migrados</th><th className="num">Ativos</th>
+                  <th>{termos.assessor}</th><th className="col-p3">Responsável</th><th className="num col-p2">Levados</th><th className="num col-p2">Migrados</th><th className="num">Ativos</th>
                   <th className="num col-p3">% ativação</th><th className="num">Lotes no mês</th><th className="num col-p2">Receita no mês</th><th className="num col-p3">Lotes 12 m</th><th className="num col-p3">Receita 12 m</th>
                 </tr>
               </thead>

@@ -6,7 +6,7 @@ import type {
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, ClienteCadastro, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, Importacao, IncentivoHistRow,
   IncentivoRow, LeadRow, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow,
-  Parametro, PorAtivoRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
+  Parametro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
 } from './tipos'
 
 type Row = Record<string, unknown>
@@ -211,6 +211,15 @@ export async function topClientes(corretora: Corretora, inicio: string, fim: str
   return linhas(await rpc(db, 'top_clientes', { p_corretora: corretora, p_inicio: inicio, p_fim: fim, p_assessor: assessor, p_limit: limite }), r => ({
     cliente_id: str(r.cliente_id), cliente_nome: String(r.cliente_nome ?? 'Não cadastrado'), assessor_nome: str(r.assessor_nome), responsavel: str(r.responsavel),
     lotes: num(r.lotes), zerados: num(r.zerados), receita: num(r.receita), pct_lotes: num(r.pct_lotes),
+  }))
+}
+
+// Série mensal de receita bruta desde uma data (ATP Turbo e repasse do BTG); todo o histórico quando inicio = null
+export async function receitaMensal(corretora: Corretora, inicio: string | null): Promise<ReceitaMensalRow[]> {
+  const { db } = await equipe()
+  return linhas(await rpc(db, 'receita_mensal', { p_corretora: corretora, p_inicio: inicio }), r => ({
+    mes_ref: String(r.mes_ref), lotes: num(r.lotes), zerados: num(r.zerados), receita_corretagem: num(r.receita_corretagem),
+    receita_zeragem: num(r.receita_zeragem), receita: num(r.receita), clientes_ativos: num(r.clientes_ativos),
   }))
 }
 

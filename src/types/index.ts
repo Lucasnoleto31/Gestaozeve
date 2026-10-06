@@ -8,4 +8,5 @@ export interface Profile {
   role: Role
   ativo: boolean
   created_at: string
+  corretoras?: string[] | null   // corretoras que vê (NULL = todas)
 }

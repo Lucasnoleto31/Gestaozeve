@@ -134,9 +134,16 @@ export type ClienteImport = {
   parceiro: string
   observacoes: string
   motivo_recusa: string
+  // lista própria (BTG, vinda do Notion): status já decidido, responsável interno e corretagem por cliente
+  status: string
+  responsavel: string
+  corretagem: number | null
 }
 
 const MAPA_CLIENTES: Mapa<keyof ClienteImport> = {
+  status: ['status', 'status do cliente', 'status cliente', 'status da conta'],
+  responsavel: ['responsavel', 'responsavel interno'],
+  corretagem: ['corretagem r/lote', 'corretagem', 'corretagem por lote', 'tarifa', 'tarifa r/lote'],
   dt_partition: ['dt partition'],
   id_conta: ['id conta'],
   id_cliente: ['id cliente'],
@@ -167,13 +174,15 @@ const MAPA_CLIENTES: Mapa<keyof ClienteImport> = {
   observacoes: ['observacoes', 'observacao', 'obs'],
   motivo_recusa: ['motivo da recusa', 'motivo recusa', 'recusa'],
 }
-const MANUAIS_CLIENTE: (keyof ClienteImport)[] = ['data_entrada', 'parceiro', 'observacoes', 'motivo_recusa', 'conta_digito']
+const MANUAIS_CLIENTE: (keyof ClienteImport)[] = ['data_entrada', 'parceiro', 'observacoes', 'motivo_recusa', 'conta_digito', 'status', 'responsavel', 'corretagem']
 
 export function lerClientes(raw: unknown[][]): Leitura<ClienteImport> {
   if (!raw || raw.length < 2) return { ok: false, erro: 'Planilha vazia ou sem dados.' }
-  const h = acharCabecalho(raw, ['cd conta sem digito', 'nome cliente', 'cpf cnpj'])
+  const h = acharCabecalho(raw, ['cd conta sem digito', 'nome cliente', 'cpf cnpj', 'cpf/cnpj', 'conta btg', 'cliente'])
   const cab = raw[h] ?? []
   const idx = indices(cab, MAPA_CLIENTES)
+  // lista própria: "Status" manda; uma coluna "Situação" solta é a situação calculada do controle, não a da conta
+  if (idx.status !== undefined && idx.situacao_conta !== undefined && chave(cab[idx.situacao_conta]) === 'situacao') delete idx.situacao_conta
   if (idx.nome === undefined && idx.conta === undefined && idx.conta_digito === undefined) {
     return { ok: false, erro: `Não encontrei a coluna do nome (NOME_CLIENTE) nem a da conta (CD_CONTA_SEM_DIGITO). Cabeçalhos lidos: ${cab.map(texto).filter(Boolean).join(', ')}` }
   }
@@ -217,6 +226,9 @@ export function lerClientes(raw: unknown[][]): Leitura<ClienteImport> {
       parceiro: texto(g(row, 'parceiro')),
       observacoes: texto(g(row, 'observacoes')),
       motivo_recusa: texto(g(row, 'motivo_recusa')),
+      status: texto(g(row, 'status')),
+      responsavel: texto(g(row, 'responsavel')),
+      corretagem: texto(g(row, 'corretagem')) === '' ? null : numeroBR(g(row, 'corretagem')),
     })
   }
   const faltando = (Object.keys(MAPA_CLIENTES) as (keyof ClienteImport)[])
@@ -243,42 +255,57 @@ export type LoteImport = {
   plataforma: string
   nome_cliente: string
   tipo_pessoa: string
+  documento: string   // CPF/CNPJ do relatório (BTG), só dígitos
+  parceiro: string    // como veio no relatório (BTG)
 }
 
-const MAPA_LOTES: Mapa<keyof LoteImport> = {
-  data: ['data', 'data contrato', 'data pregao', 'dt', 'dt pregao'],
-  conta: ['sinacor', 'conta', 'cd conta com digito', 'cd conta sem digito', 'numero conta', 'conta genial', 'conta c/ digito'],
+// Colunas lidas: os campos do LoteImport mais as auxiliares do relatório do BTG
+// (Data, Número Conta, CPF, CNPJ, Cliente, Parceiro, Ativo, Plataforma, Lotes Operados,
+// Lotes Zerados, MODO): CPF e CNPJ viram documento; Lotes Zerados vira uma linha de zeragem.
+type CampoLote = keyof LoteImport | 'zerados' | 'cnpj'
+
+const MAPA_LOTES: Mapa<CampoLote> = {
+  data: ['data', 'data contrato', 'data pregao', 'dt', 'dt pregao', 'data operacao'],
+  conta: ['sinacor', 'conta', 'cd conta com digito', 'cd conta sem digito', 'numero conta', 'numero da conta', 'n conta', 'conta genial', 'conta xp', 'conta btg', 'conta c/ digito'],
   id_cliente: ['id cliente'],
   id_assessor: ['id assessor', 'id assessor historico'],
   assessor: ['assessor', 'nome assessor', 'nome assessor historico'],
   filial: ['filial', 'id filial historico', 'nome filial'],
   ativo: ['ativo', 'produto', 'papel'],
   modo: ['modo'],
-  qtd: ['qtd. contratos', 'qtd contratos', 'qtd', 'quantidade', 'contratos', 'lotes'],
+  qtd: ['qtd. contratos', 'qtd contratos', 'qtd', 'quantidade', 'contratos', 'lotes', 'lotes operados', 'operados', 'qtd operados'],
   plataforma: ['plataforma'],
-  nome_cliente: ['nome cliente', 'cliente'],
+  nome_cliente: ['nome cliente', 'nome no relatorio', 'cliente', 'nome'],
   tipo_pessoa: ['tp pessoa', 'tipo pessoa'],
+  documento: ['cpf/cnpj', 'cpf cnpj', 'cpf', 'documento'],
+  cnpj: ['cnpj'],
+  parceiro: ['parceiro'],
+  zerados: ['lotes zerados', 'zerados', 'qtd zerados', 'contratos zerados'],
 }
-const OPCIONAIS_LOTE: (keyof LoteImport)[] = ['id_cliente', 'nome_cliente', 'tipo_pessoa', 'filial', 'id_assessor', 'modo', 'plataforma']
+const OPCIONAIS_LOTE: CampoLote[] = ['id_cliente', 'nome_cliente', 'tipo_pessoa', 'filial', 'id_assessor', 'modo', 'plataforma', 'documento', 'cnpj', 'parceiro', 'zerados']
 
-export function lerLotes(raw: unknown[][]): Leitura<LoteImport> {
+// modoZeragem: texto que marca a zeragem no MODO (parâmetro da corretora). Quando o arquivo
+// traz "Lotes Zerados" numa coluna própria (BTG), cada linha vira até duas: operados e zerados.
+export function lerLotes(raw: unknown[][], modoZeragem = 'ZERAGEM'): Leitura<LoteImport> {
   if (!raw || raw.length < 2) return { ok: false, erro: 'Planilha vazia ou sem dados.' }
-  const h = acharCabecalho(raw, ['sinacor', 'data contrato', 'qtd. contratos', 'qtd contratos', 'ativo'])
+  const h = acharCabecalho(raw, ['sinacor', 'data contrato', 'qtd. contratos', 'qtd contratos', 'lotes operados', 'numero conta', 'ativo'])
   const cab = raw[h] ?? []
   const idx = indices(cab, MAPA_LOTES)
-  const obrig: (keyof LoteImport)[] = ['conta', 'ativo', 'data', 'qtd']
+  const obrig: CampoLote[] = ['conta', 'ativo', 'data', 'qtd']
   const semColuna = obrig.filter(c => idx[c] === undefined)
   if (semColuna.length) {
     return { ok: false, erro: `Faltam colunas obrigatórias (${semColuna.join(', ')}). Cabeçalhos lidos: ${cab.map(texto).filter(Boolean).join(', ')}` }
   }
-  const g = (row: unknown[], c: keyof LoteImport) => (idx[c] === undefined ? undefined : row[idx[c]!])
+  const g = (row: unknown[], c: CampoLote) => (idx[c] === undefined ? undefined : row[idx[c]!])
+  const zeragem = modoZeragem.trim().toUpperCase() || 'ZERAGEM'
   const linhas: LoteImport[] = []
   for (const row of raw.slice(h + 1)) {
     if (linhaVazia(row)) continue
     const data = dataBR(g(row, 'data'))
     const conta = digitos(g(row, 'conta'))
     if (!data || !conta) continue
-    linhas.push({
+    const modo = texto(g(row, 'modo')).toUpperCase()
+    const base = {
       data,
       conta,
       id_cliente: texto(g(row, 'id_cliente')),
@@ -286,14 +313,20 @@ export function lerLotes(raw: unknown[][]): Leitura<LoteImport> {
       assessor: texto(g(row, 'assessor')),
       filial: texto(g(row, 'filial')),
       ativo: texto(g(row, 'ativo')).toUpperCase(),
-      modo: texto(g(row, 'modo')).toUpperCase(),
-      qtd: numeroBR(g(row, 'qtd')),
       plataforma: texto(g(row, 'plataforma')).toUpperCase(),
       nome_cliente: texto(g(row, 'nome_cliente')),
       tipo_pessoa: texto(g(row, 'tipo_pessoa')),
-    })
+      documento: digitos(g(row, 'documento')) || digitos(g(row, 'cnpj')),
+      parceiro: texto(g(row, 'parceiro')),
+    }
+    const qtd = numeroBR(g(row, 'qtd'))
+    const zerados = idx.zerados === undefined ? 0 : numeroBR(g(row, 'zerados'))
+    if (qtd > 0 || zerados <= 0) linhas.push({ ...base, modo, qtd })
+    if (zerados > 0) linhas.push({ ...base, modo: modo && !modo.includes(zeragem) ? `${modo}/${zeragem}` : zeragem, qtd: zerados })
   }
-  const faltando = (Object.keys(MAPA_LOTES) as (keyof LoteImport)[]).filter(c => idx[c] === undefined && !OPCIONAIS_LOTE.includes(c))
+  // o relatório do BTG identifica o cliente pelo CPF e não traz assessor: não avisa a falta dele
+  const opcionais = new Set<CampoLote>(idx.documento === undefined ? OPCIONAIS_LOTE : [...OPCIONAIS_LOTE, 'assessor'])
+  const faltando = (Object.keys(MAPA_LOTES) as CampoLote[]).filter(c => idx[c] === undefined && !opcionais.has(c))
   return { ok: true, linhas, faltando, cabecalhos: cab.map(texto) }
 }
 

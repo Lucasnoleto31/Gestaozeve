@@ -9,7 +9,7 @@ import { Panel } from '@/components/ui/Panel'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
 import { Empty } from '@/components/ui/Skeleton'
-import { CORRETORAS, CORRETORA_SLUG, PAGINAS_CORRETORA } from '@/lib/corretoras'
+import { CORRETORA_SLUG, PAGINAS_CORRETORA, corretorasDoPerfil } from '@/lib/corretoras'
 import { leadsLista, painelKpis } from '@/lib/gestao/consultas'
 import { mesCurto } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -27,9 +27,10 @@ export default async function DashboardPage() {
   if (!profile) redirect('/login')
   const equipe = profile.role === 'admin' || profile.role === 'vendedor'
   const firstName = profile.nome.split(' ')[0]
+  const visiveis = corretorasDoPerfil(profile)
 
   const [kpis, leads] = equipe
-    ? await Promise.all([Promise.all(CORRETORAS.map(c => painelKpis(c, null))), leadsLista()])
+    ? await Promise.all([Promise.all(visiveis.map(c => painelKpis(c, null))), leadsLista()])
     : [[], []]
   const abertos = leads.filter(l => l.tipo_status === 'Aberto')
   const comAlerta = abertos.filter(l => l.alerta).length
@@ -39,14 +40,14 @@ export default async function DashboardPage() {
       <PageHeader
         eyebrow="Visão geral"
         title={`${getSaudacao()}, ${firstName}`}
-        description="As três corretoras no último mês com lotes de cada uma."
+        description={`${visiveis.length === 1 ? "Sua corretora" : visiveis.length === 2 ? "As duas corretoras" : "As três corretoras"} no último mês com lotes de cada uma.`}
       />
       <PageBody>
         {!equipe ? (
           <Empty>Seu perfil não tem acesso ao controle de lotes. Fale com o administrador.</Empty>
         ) : (
           <>
-            {CORRETORAS.map((c, i) => {
+            {visiveis.map((c, i) => {
               const k = kpis[i]
               const slug = CORRETORA_SLUG[c]
               const vazio = !k || (k.clientes_levados === 0 && !k.ultima_data)

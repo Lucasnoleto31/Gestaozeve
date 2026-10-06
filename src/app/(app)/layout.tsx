@@ -6,22 +6,23 @@ import { TopBar } from '@/components/layout/TopBar'
 import { MobileOverlay } from '@/components/layout/MobileOverlay'
 import { SidebarProvider } from '@/lib/sidebar-context'
 import { ToastProvider } from '@/components/ui/Toast'
-import { CORRETORA_COOKIE, isCorretora } from '@/lib/corretoras'
+import { CORRETORA_COOKIE, corretorasDoPerfil, isCorretora } from '@/lib/corretoras'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const profile = await getProfile()
   if (!profile) redirect('/login')
 
-  // Última corretora aberta (o menu aponta pra ela fora das rotas de corretora)
+  // Corretoras que este usuário vê e a última aberta (o menu aponta pra ela fora das rotas de corretora)
+  const permitidas = corretorasDoPerfil(profile)
   const cookieStore = await cookies()
   const salva = cookieStore.get(CORRETORA_COOKIE)?.value
-  const corretoraPadrao = isCorretora(salva) ? salva : 'GENIAL'
+  const corretoraPadrao = isCorretora(salva) && permitidas.includes(salva) ? salva : (permitidas[0] ?? 'GENIAL')
 
   return (
     <SidebarProvider>
       <ToastProvider>
       <div className="min-h-screen bg-bg">
-        <Sidebar role={profile.role} nome={profile.nome} corretoraPadrao={corretoraPadrao} />
+        <Sidebar role={profile.role} nome={profile.nome} corretoraPadrao={corretoraPadrao} corretoras={permitidas} />
         <MobileOverlay />
         <div className="flex min-h-screen flex-col lg:pl-60">
           <TopBar />

@@ -1,7 +1,7 @@
 // Contexto comum das páginas de corretora (Server Components): valida o segmento
 // da URL, resolve o mês de referência e lê os parâmetros de filtro.
 import { notFound } from 'next/navigation'
-import { CORRETORA_LABEL, CORRETORA_SLUG, corretoraDoSlug, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_LABEL, CORRETORA_SLUG, corretoraDoSlug, podeVerCorretora, type Corretora } from '@/lib/corretoras'
 import { equipe, falha } from './guard'
 import { ehIso, parseMes, somarDias, type MesRef } from './meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
@@ -31,6 +31,8 @@ export async function contexto(params: Params, searchParams?: SearchParams): Pro
   const { corretora: slug } = await params
   const corretora = corretoraDoSlug(slug)
   if (!corretora) notFound()
+  const { profile } = await equipe()
+  if (!podeVerCorretora(profile, corretora)) notFound()
   const sp = searchParams ? await searchParams : {}
   const q: Record<string, string> = {}
   for (const [k, v] of Object.entries(sp)) if (typeof v === 'string') q[k] = v

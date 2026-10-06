@@ -261,6 +261,15 @@ export type FunilPorRow = {
 
 // Parâmetros
 export type Parametro = { chave: string; valor: string; descricao: string | null }
+export type ReceitaMensalRow = {
+  mes_ref: string
+  lotes: number
+  zerados: number
+  receita_corretagem: number
+  receita_zeragem: number
+  receita: number
+  clientes_ativos: number
+}
 export type AssessorParam = {
   id: string
   corretora: Corretora

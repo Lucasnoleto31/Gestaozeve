@@ -2,8 +2,10 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { incentivoHistorico, incentivoMes, parametrosDaCorretora } from '@/lib/gestao/consultas'
+import { incentivoHistorico, incentivoMes, parametrosDaCorretora, receitaMensal } from '@/lib/gestao/consultas'
+import { configBtg } from '@/lib/gestao/btg'
 import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
+import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
@@ -13,12 +15,33 @@ import { MesPicker } from '@/components/gestao/Filtros'
 import { BarraCelula, LinhaVazia, TRACO, n0, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { TabelaIncentivo } from './TabelaIncentivo'
+import { IncentivoAtp } from './IncentivoAtp'
 
 export default async function IncentivoPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base } = ctx
+  const par = await parametrosDaCorretora(corretora)
+  const cfg = configBtg(par.parametros)
+
+  // BTG: programa ATP Turbo Receita (metas de comissão acumulada), não pontos por lote
+  if (cfg.modelo === 'ATP') {
+    const serie = await receitaMensal(corretora, null)
+    return (
+      <>
+        <PageHeader
+          eyebrow={ctx.eyebrow}
+          title="Incentivo"
+          description={`ATP Turbo Receita: prêmios pagos pelo ${ctx.label} quando a comissão acumulada bate cada meta dentro do prazo, contado da assinatura do termo.`}
+        />
+        <PageBody>
+          <IncentivoAtp cfg={cfg} serie={serie} hoje={fmtDate(hojeBrasil())} base={base} label={ctx.label} />
+        </PageBody>
+      </>
+    )
+  }
+
   const meses = janelaMeses(mesRef, 12)
-  const [linhas, hist, par] = await Promise.all([incentivoMes(corretora, mesRef), incentivoHistorico(corretora, mesRef, 12), parametrosDaCorretora(corretora)])
+  const [linhas, hist] = await Promise.all([incentivoMes(corretora, mesRef), incentivoHistorico(corretora, mesRef, 12)])
 
   const total = linhas.reduce((s, l) => s + l.valor_incentivo, 0)
   const comFaixa = linhas.filter(l => l.valor_incentivo > 0)

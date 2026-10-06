@@ -47,6 +47,7 @@ export function Parametros({ corretora, label, dados }: { corretora: Corretora; 
       <div className="grid gap-5 xl:grid-cols-2">
         <SecaoGerais corretora={corretora} label={label} parametros={dados.parametros} gerais={dados.gerais} />
         <SecaoManutencao corretora={corretora} />
+        {corretora === 'BTG' && <SecaoBtg corretora={corretora} label={label} parametros={dados.parametros} />}
       </div>
       <SecaoAssessores corretora={corretora} assessores={dados.assessores} naoCadastrados={dados.assessoresNaoCadastrados} responsaveis={dados.responsaveis.filter(r => r.ativo && r.atende_clientes).map(r => r.nome)} />
       <div className="grid gap-5 xl:grid-cols-2">
@@ -68,6 +69,7 @@ function SecaoGerais({ corretora, label, parametros, gerais }: { corretora: Corr
     { corr: corretora as string, chave: 'zeragem_padrao', label: 'ZeragemRS — R$ por contrato zerado (assessores com zeragem padrão)', tipo: 'numero' },
     { corr: corretora as string, chave: 'meses_inativo', label: 'MesesInativo — meses sem giro para o cliente virar inativo', tipo: 'numero' },
     { corr: corretora as string, chave: 'modo_zeragem', label: 'ModoZeragem — texto no campo MODO que marca a linha como zeragem', tipo: 'texto' },
+    { corr: corretora as string, chave: 'modelo_incentivo', label: 'Modelo do incentivo — PONTOS (faixas por pontos) ou ATP (metas de comissão acumulada, BTG)', tipo: 'modelo' },
     { corr: 'GERAL', chave: 'dias_alerta_lead', label: 'Dias sem contato para alertar um lead em aberto (todas as corretoras)', tipo: 'numero' },
   ]
   const valorDe = (corr: string, chave: string) => (corr === 'GERAL' ? gerais : parametros).find(p => p.chave === chave)?.valor ?? ''
@@ -93,6 +95,38 @@ function CampoParametro({ label, valor, tipo, onSalvar }: { label: string; valor
       </label>
       <Button size="sm" variant={mudou ? 'primary' : 'secondary'} disabled={!mudou} loading={salvando} onClick={async () => { setSalvando(true); await onSalvar(v); setSalvando(false) }}>Salvar</Button>
     </div>
+  )
+}
+
+// ── Economia do BTG: repasse, impostos, sócios e ATP Turbo ─────────────────
+function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; label: string; parametros: Dados['parametros'] }) {
+  const { erro, rodar } = useAcao()
+  const valorDe = (chave: string) => parametros.find(p => p.chave === chave)?.valor ?? ''
+  const repasse = [
+    { chave: 'repasse_faixas', label: 'Repasse sobre o faturamento bruto — faixas progressivas "a partir de R$:%" separadas por ;', tipo: 'texto' },
+    { chave: 'imposto_pct', label: 'Imposto sobre o repasse (%)', tipo: 'numero' },
+    { chave: 'delta_pct', label: 'Delta sobre o valor depois do imposto (%)', tipo: 'numero' },
+    { chave: 'participacoes', label: 'Divisão do que sobra — "nome:%" separados por ;', tipo: 'texto' },
+  ]
+  const atp = [
+    { chave: 'atp_assinatura', label: 'Data de assinatura do termo (vazio = primeiro mês com lotes)', tipo: 'data' },
+    { chave: 'atp_metas', label: 'Metas — "prazo em meses:comissão acumulada:prêmio:observação" separadas por ;', tipo: 'texto' },
+  ]
+  const salvar = (chave: string) => (v: string) => rodar(() => salvarParametro(corretora, chave, v), undefined, 'Parâmetro salvo')
+  return (
+    <>
+      <Panel variant="card" title={`Repasse · ${label}`} subtitle="Faturamento bruto → repasse → (–) imposto → (–) Delta → receita líquida dividida entre os sócios. Aparece nos Indicadores mensais do Painel.">
+        {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
+        <div className="space-y-4">
+          {repasse.map(c => <CampoParametro key={c.chave} label={c.label} valor={valorDe(c.chave)} tipo={c.tipo} onSalvar={salvar(c.chave)} />)}
+        </div>
+      </Panel>
+      <Panel variant="card" title="ATP Turbo Receita" subtitle="Prêmios por comissão acumulada dentro do prazo, contado da assinatura. A tela Incentivo acompanha cada meta.">
+        <div className="space-y-4">
+          {atp.map(c => <CampoParametro key={c.chave} label={c.label} valor={valorDe(c.chave)} tipo={c.tipo} onSalvar={salvar(c.chave)} />)}
+        </div>
+      </Panel>
+    </>
   )
 }
 

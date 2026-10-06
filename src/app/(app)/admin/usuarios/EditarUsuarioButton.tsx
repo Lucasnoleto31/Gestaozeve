@@ -7,6 +7,8 @@ import { Button, IconButton } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Alert } from '@/components/ui/Alert'
+import { corretorasDoPerfil, type Corretora } from '@/lib/corretoras'
+import { CorretorasCampo } from './CorretorasCampo'
 
 interface Usuario {
   id: string
@@ -15,6 +17,7 @@ interface Usuario {
   email: string
   role: string
   ativo: boolean
+  corretoras?: string[] | null
 }
 
 export function EditarUsuarioButton({ usuario }: { usuario: Usuario }) {
@@ -27,6 +30,7 @@ export function EditarUsuarioButton({ usuario }: { usuario: Usuario }) {
     email: usuario.email,
     role: usuario.role,
   })
+  const [corretoras, setCorretoras] = useState<Corretora[]>(corretorasDoPerfil(usuario))
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,7 +40,7 @@ export function EditarUsuarioButton({ usuario }: { usuario: Usuario }) {
     const res = await fetch('/api/admin/usuarios', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: usuario.id, userId: usuario.user_id, ...form }),
+      body: JSON.stringify({ id: usuario.id, userId: usuario.user_id, ...form, corretoras }),
     })
 
     const data = await res.json()
@@ -74,6 +78,7 @@ export function EditarUsuarioButton({ usuario }: { usuario: Usuario }) {
             <option value="vendedor">Assessor</option>
             <option value="admin">Administrador</option>
           </Select>
+          <CorretorasCampo valor={corretoras} onChange={setCorretoras} />
           {error && <Alert tone="danger">{error}</Alert>}
         </form>
       </Modal>

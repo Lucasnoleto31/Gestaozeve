@@ -6,6 +6,8 @@ import { getProfile } from '@/lib/auth/getProfile'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Panel } from '@/components/ui/Panel'
 import { Badge } from '@/components/ui/Badge'
+import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
+import { corretorasDoPerfil } from '@/lib/corretoras'
 import { formatDate } from '@/lib/utils'
 import { NovoUsuarioButton } from './NovoUsuarioButton'
 import { EditarUsuarioButton } from './EditarUsuarioButton'
@@ -56,6 +58,7 @@ export default async function UsuariosPage() {
                   <th>Nome</th>
                   <th className="col-p2">E-mail</th>
                   <th>Função</th>
+                  <th>Corretoras</th>
                   <th className="col-p2">Status</th>
                   <th className="col-p3">Criado em</th>
                   <th className="w-20"><span className="sr-only">Ações</span></th>
@@ -64,7 +67,7 @@ export default async function UsuariosPage() {
               <tbody>
                 {!usuarios?.length && (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-dense text-fg-subtle">Nenhum usuário cadastrado.</td>
+                    <td colSpan={7} className="py-10 text-center text-dense text-fg-subtle">Nenhum usuário cadastrado.</td>
                   </tr>
                 )}
                 {usuarios?.map((u) => (
@@ -79,6 +82,13 @@ export default async function UsuariosPage() {
                     </td>
                     <td className="muted col-p2">{u.email}</td>
                     <td><Badge variant={u.role === 'admin' ? 'accent' : 'neutral'}>{ROLE_LABEL[u.role] ?? u.role}</Badge></td>
+                    <td>
+                      {u.corretoras == null
+                        ? <span className="muted">Todas</span>
+                        : corretorasDoPerfil(u).length === 0
+                          ? <span className="text-warn">Nenhuma</span>
+                          : <span className="inline-flex flex-wrap gap-1">{corretorasDoPerfil(u).map(c => <CorretoraBadge key={c} corretora={c} />)}</span>}
+                    </td>
                     <td className="col-p2"><Badge variant={u.ativo ? 'gain' : 'neutral'}>{u.ativo ? 'Ativo' : 'Inativo'}</Badge></td>
                     <td className="muted whitespace-nowrap col-p3">{formatDate(u.created_at)}</td>
                     <td>

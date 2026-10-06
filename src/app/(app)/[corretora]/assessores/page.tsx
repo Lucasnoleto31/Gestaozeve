@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
+import { termosDaCorretora } from '@/lib/corretoras'
 import { assessoresMensal, assessoresResumo, parametrosDaCorretora, topClientes } from '@/lib/gestao/consultas'
 import { janelaMeses, limitesDoMes, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -55,7 +56,7 @@ export default async function AssessoresPage({ params, searchParams }: { params:
     <>
       <PageHeader
         eyebrow={ctx.eyebrow}
-        title="Assessores"
+        title={termosDaCorretora(corretora).assessores}
         description={`Lotes, receita e clientes por assessor · ${mesLongo(mesRef)} e janela de ${mesCurto(meses[0])} a ${mesCurto(mesRef)}.`}
         actions={<><SelectParam param="assessor" valor={assessorSel} opcoes={opcoesAssessor} label="Rankings" todos="Todos os assessores" /><MesPicker valor={mesRef} /></>}
       />

@@ -4,7 +4,8 @@
 // Importações vão em blocos (o Vercel limita o corpo da requisição a 4,5 MB).
 import { revalidatePath } from 'next/cache'
 import { corretoraValida, equipe, falha, num, somenteAdmin, type Admin } from './guard'
-import type { ClienteImport, LeadImport, LoteImport } from './planilhas'
+import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './planilhas'
+import { lerFaixas, lerMetas, lerParticipacoes, numeroParam } from './btg'
 import { CORRETORA_SLUG, type Corretora } from '@/lib/corretoras'
 import { normTexto } from '@/lib/texto'
 import { buscarClientes, lotesNoPeriodo } from './consultas'
@@ -33,7 +34,7 @@ async function recalcular(db: Admin, corretora: Corretora) {
 // ── Importação de clientes ─────────────────────────────────────────────────
 export async function importarClientes(corretoraIn: string, nomeArquivo: string, linhas: ClienteImport[]) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db, profile } = await somenteAdmin()
     const tot = { clientesNovos: 0, contasNovas: 0, contasAtualizadas: 0, semConta: 0, porCpf: 0, porConta: 0, porTelefone: 0, porNome: 0 }
     for (let i = 0; i < linhas.length; i += 1000) {
@@ -62,7 +63,7 @@ export async function importarClientes(corretoraIn: string, nomeArquivo: string,
 // Antes de importar: o que já existe no período do arquivo
 export async function prepararLotes(corretoraIn: string, dataMin: string, dataMax: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     await somenteAdmin()
     return lotesNoPeriodo(corretora, dataMin, dataMax)
   })
@@ -70,7 +71,7 @@ export async function prepararLotes(corretoraIn: string, dataMin: string, dataMa
 
 export async function iniciarImportacaoLotes(corretoraIn: string, nomeArquivo: string, dataMin: string, dataMax: string, modo: 'substituir' | 'acrescentar') {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db, profile } = await somenteAdmin()
     let removidas = 0
     if (modo === 'substituir') {
@@ -89,7 +90,7 @@ export async function iniciarImportacaoLotes(corretoraIn: string, nomeArquivo: s
 
 export async function enviarLotes(corretoraIn: string, importacaoId: string, linhas: LoteImport[]) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { data, error } = await db.rpc('importar_lotes', { p_corretora: corretora, p_importacao_id: importacaoId, p_linhas: linhas })
     if (error) falha(error, 'importar_lotes')
@@ -99,7 +100,7 @@ export async function enviarLotes(corretoraIn: string, importacaoId: string, lin
 
 export async function concluirImportacaoLotes(corretoraIn: string, importacaoId: string, totais: { linhas: number; inseridas: number; operados: number; zerados: number }) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { data: atual } = await db.from('importacoes').select('detalhes').eq('id', importacaoId).maybeSingle()
     const detalhes = { ...(((atual as Row | null)?.detalhes as Row | null) ?? {}), status: 'concluída', operados: totais.operados, zerados: totais.zerados }
@@ -112,7 +113,7 @@ export async function concluirImportacaoLotes(corretoraIn: string, importacaoId:
 
 export async function cancelarImportacaoLotes(corretoraIn: string, importacaoId: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     // ON DELETE CASCADE apaga os lotes do bloco que já tinha entrado
     const { error } = await db.from('importacoes').delete().eq('id', importacaoId)
@@ -125,7 +126,7 @@ export async function cancelarImportacaoLotes(corretoraIn: string, importacaoId:
 // Desfaz uma importação de lotes concluída (apaga os lotes dela)
 export async function desfazerImportacao(corretoraIn: string, importacaoId: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { data, error: e1 } = await db.from('importacoes').select('tipo, corretora').eq('id', importacaoId).maybeSingle()
     if (e1) falha(e1, 'importacoes')
@@ -165,7 +166,7 @@ export async function importarLeads(nomeArquivo: string, linhas: LeadImport[]) {
 // ── Cliente: campos manuais, tarifas, cadastro ─────────────────────────────
 export async function salvarCamposCliente(corretoraIn: string, clienteId: string, campos: { data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null }) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await equipe()
     const limpo = (v: string | null) => (v && v.trim() !== '' ? v.trim() : null)
     const { error } = await db.from('cliente_corretora').upsert({
@@ -198,7 +199,7 @@ export async function salvarCadastroCliente(clienteId: string, campos: { nome: s
 
 export async function salvarTarifa(corretoraIn: string, clienteId: string, tarifa: { id?: string | null; vigencia: string; corretagem: number; observacao: string | null }) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     if (!/^\d{4}-\d{2}-\d{2}$/.test(tarifa.vigencia)) throw new Error('Vigência inválida')
     if (!Number.isFinite(tarifa.corretagem) || tarifa.corretagem < 0) throw new Error('Corretagem inválida')
@@ -215,7 +216,7 @@ export async function salvarTarifa(corretoraIn: string, clienteId: string, tarif
 
 export async function excluirTarifa(corretoraIn: string, tarifaId: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { error } = await db.from('tarifas_cliente').delete().eq('id', tarifaId).eq('corretora', corretora)
     if (error) falha(error, 'tarifas_cliente')
@@ -228,7 +229,7 @@ export async function excluirTarifa(corretoraIn: string, tarifaId: string) {
 // Liga uma conta de lotes não cadastrada a um cliente existente (cria a conta no cadastro)
 export async function vincularContaNaoCadastrada(corretoraIn: string, conta: string, clienteId: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { data: l } = await db.from('lotes').select('assessor_nome, assessor_norm, id_assessor, filial, id_cliente').eq('corretora', corretora).eq('conta', conta).limit(1).maybeSingle()
     const lote = (l as Row | null) ?? {}
@@ -306,15 +307,51 @@ export async function registrarContatoLead(leadId: string, status?: string) {
 }
 
 // ── Parâmetros ─────────────────────────────────────────────────────────────
+// Valida e normaliza o valor de cada parâmetro (nomes da aba Premissas e da economia do BTG)
+function validarParametro(chave: string, valor: string): string {
+  const v = valor.trim()
+  const numero = () => {
+    const n = numeroParam(v)
+    if (n == null || n < 0) throw new Error('Informe um número')
+    return String(n)
+  }
+  switch (chave) {
+    case 'zeragem_padrao': case 'meses_inativo': case 'dias_alerta_lead': case 'imposto_pct': case 'delta_pct':
+      return numero()
+    case 'modo_zeragem':
+      if (!v) throw new Error('Informe o texto que marca a zeragem')
+      return v.toUpperCase()
+    case 'modelo_incentivo': {
+      const m = v.toUpperCase()
+      if (m !== 'PONTOS' && m !== 'ATP') throw new Error('Modelo: PONTOS ou ATP')
+      return m
+    }
+    case 'repasse_faixas':
+      if (v && lerFaixas(v).length === 0) throw new Error('Faixas no formato "a partir de:%; …", ex.: 0:75;100000:80;250000:85')
+      return v
+    case 'participacoes':
+      if (v && lerParticipacoes(v).length === 0) throw new Error('Participações no formato "nome:%; …", ex.: Lucas:50;Artur:50')
+      return v
+    case 'atp_assinatura': {
+      if (!v) return ''
+      const d = dataBR(v)
+      if (!d) throw new Error('Data no formato dd/mm/aaaa')
+      return d
+    }
+    case 'atp_metas':
+      if (v && lerMetas(v).length === 0) throw new Error('Metas no formato "prazo em meses:comissão:prêmio[:observação]; …"')
+      return v
+    default:
+      throw new Error('Parâmetro desconhecido')
+  }
+}
+
 export async function salvarParametro(corretoraIn: string, chave: string, valor: string) {
   return tentar(async () => {
-    const corretora = corretoraIn === 'GERAL' ? 'GERAL' : corretoraValida(corretoraIn)
+    const corretora = corretoraIn === 'GERAL' ? 'GERAL' : await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
-    const permitidas = ['zeragem_padrao', 'meses_inativo', 'modo_zeragem', 'dias_alerta_lead']
-    if (!permitidas.includes(chave)) throw new Error('Parâmetro desconhecido')
-    const v = valor.trim()
-    if (chave !== 'modo_zeragem' && !/^\d+([.,]\d+)?$/.test(v)) throw new Error('Informe um número')
-    const { error } = await db.from('parametros').upsert({ corretora, chave, valor: chave === 'modo_zeragem' ? v.toUpperCase() : v.replace(',', '.'), updated_at: new Date().toISOString() }, { onConflict: 'corretora,chave' })
+    const v = validarParametro(chave, valor)
+    const { error } = await db.from('parametros').upsert({ corretora, chave, valor: v, updated_at: new Date().toISOString() }, { onConflict: 'corretora,chave' })
     if (error) falha(error, 'parametros')
     if (corretora !== 'GERAL') { await recalcular(db, corretora); revalidarCorretora(corretora) }
     else { revalidatePath('/leads', 'layout'); revalidatePath('/funil') }
@@ -324,7 +361,7 @@ export async function salvarParametro(corretoraIn: string, chave: string, valor:
 
 export async function salvarAssessor(corretoraIn: string, a: { id?: string | null; nome: string; id_assessor: string | null; corretagem: number; tipo_zeragem: 'PADRAO' | 'FIXA'; zeragem_fixa: number; responsavel: string | null; ativo: boolean }) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const nome = a.nome.trim()
     if (!nome) throw new Error('Informe o nome do assessor')
@@ -346,7 +383,7 @@ export async function salvarAssessor(corretoraIn: string, a: { id?: string | nul
 
 export async function excluirAssessor(corretoraIn: string, id: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { error } = await db.from('assessores').delete().eq('id', id).eq('corretora', corretora)
     if (error) falha(error, 'assessores')
@@ -358,7 +395,7 @@ export async function excluirAssessor(corretoraIn: string, id: string) {
 
 export async function salvarStatusConta(corretoraIn: string, situacao: string, status: 'Migrado' | 'Em processamento' | 'Recusou') {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const s = situacao.trim().toUpperCase()
     if (!s) throw new Error('Informe a situação')
@@ -373,7 +410,7 @@ export async function salvarStatusConta(corretoraIn: string, situacao: string, s
 
 export async function excluirStatusConta(corretoraIn: string, situacao: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { error } = await db.from('status_conta_mapa').delete().eq('corretora', corretora).eq('situacao', situacao)
     if (error) falha(error, 'status_conta_mapa')
@@ -384,7 +421,7 @@ export async function excluirStatusConta(corretoraIn: string, situacao: string) 
 
 export async function salvarMultiplicador(corretoraIn: string, produto: string, pontos: number) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const p = produto.trim().toUpperCase()
     if (!p) throw new Error('Informe o produto')
@@ -399,7 +436,7 @@ export async function salvarMultiplicador(corretoraIn: string, produto: string, 
 
 export async function excluirMultiplicador(corretoraIn: string, produto: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { error } = await db.from('multiplicadores').delete().eq('corretora', corretora).eq('produto', produto)
     if (error) falha(error, 'multiplicadores')
@@ -411,7 +448,7 @@ export async function excluirMultiplicador(corretoraIn: string, produto: string)
 
 export async function salvarFaixa(corretoraIn: string, pontosMin: number, valor: number, pontosMinAnterior?: number | null) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     if (!Number.isFinite(pontosMin) || pontosMin < 0 || !Number.isFinite(valor) || valor < 0) throw new Error('Valores inválidos')
     if (pontosMinAnterior != null && pontosMinAnterior !== pontosMin) {
@@ -426,7 +463,7 @@ export async function salvarFaixa(corretoraIn: string, pontosMin: number, valor:
 
 export async function excluirFaixa(corretoraIn: string, pontosMin: number) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { error } = await db.from('faixas_incentivo').delete().eq('corretora', corretora).eq('pontos_min', pontosMin)
     if (error) falha(error, 'faixas_incentivo')
@@ -437,7 +474,7 @@ export async function excluirFaixa(corretoraIn: string, pontosMin: number) {
 
 export async function salvarConsolidado(corretoraIn: string, nome: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const n = nome.trim()
     if (!n) throw new Error('Informe o nome')
@@ -451,7 +488,7 @@ export async function salvarConsolidado(corretoraIn: string, nome: string) {
 
 export async function excluirConsolidado(corretoraIn: string, nome: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { error } = await db.from('consolidados').delete().eq('corretora', corretora).eq('nome_norm', normTexto(nome))
     if (error) falha(error, 'consolidados')
@@ -509,7 +546,7 @@ export async function excluirResponsavel(nome: string) {
 // Recalcula tudo da corretora (botão de manutenção)
 export async function recalcularTudo(corretoraIn: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const passos: [string, Record<string, unknown>][] = [
       ['marcar_contas_principais', { p_corretora: corretora }],
@@ -532,7 +569,7 @@ export async function recalcularTudo(corretoraIn: string) {
 // Busca de clientes pra vincular (usada em modais)
 export async function buscarClientesAction(corretoraIn: string, termo: string) {
   return tentar(async () => {
-    const corretora = corretoraValida(corretoraIn)
+    const corretora = await corretoraValida(corretoraIn)
     return buscarClientes(corretora, termo)
   })
 }

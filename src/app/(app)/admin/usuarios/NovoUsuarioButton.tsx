@@ -7,18 +7,18 @@ import { Button } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Alert } from '@/components/ui/Alert'
+import { CORRETORAS, type Corretora } from '@/lib/corretoras'
+import { CorretorasCampo } from './CorretorasCampo'
+
+const FORM_VAZIO = { nome: '', email: '', senha: '', role: 'vendedor' }
 
 export function NovoUsuarioButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    nome: '',
-    email: '',
-    senha: '',
-    role: 'vendedor',
-  })
+  const [form, setForm] = useState(FORM_VAZIO)
+  const [corretoras, setCorretoras] = useState<Corretora[]>([...CORRETORAS])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -28,7 +28,7 @@ export function NovoUsuarioButton() {
     const res = await fetch('/api/admin/usuarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, corretoras }),
     })
 
     const data = await res.json()
@@ -41,7 +41,8 @@ export function NovoUsuarioButton() {
 
     setLoading(false)
     setOpen(false)
-    setForm({ nome: '', email: '', senha: '', role: 'vendedor' })
+    setForm(FORM_VAZIO)
+    setCorretoras([...CORRETORAS])
     router.refresh()
   }
 
@@ -66,6 +67,7 @@ export function NovoUsuarioButton() {
             <option value="vendedor">Assessor</option>
             <option value="admin">Administrador</option>
           </Select>
+          <CorretorasCampo valor={corretoras} onChange={setCorretoras} />
           {error && <Alert tone="danger">{error}</Alert>}
         </form>
       </Modal>

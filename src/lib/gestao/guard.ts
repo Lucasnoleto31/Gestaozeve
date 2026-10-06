@@ -2,7 +2,7 @@
 // e o client do Supabase com service_role (as tabelas têm RLS sem políticas).
 import { getProfile } from '@/lib/auth/getProfile'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isCorretora, type Corretora } from '@/lib/corretoras'
+import { isCorretora, podeVerCorretora, type Corretora } from '@/lib/corretoras'
 import type { Profile } from '@/types'
 
 export type Admin = ReturnType<typeof createAdminClient>
@@ -19,8 +19,11 @@ export async function somenteAdmin(): Promise<{ profile: Profile; db: Admin }> {
   return { profile, db: createAdminClient() }
 }
 
-export function corretoraValida(v: unknown): Corretora {
+// Valida a corretora pedida e confere se o usuário logado pode vê-la (profiles.corretoras)
+export async function corretoraValida(v: unknown): Promise<Corretora> {
   if (!isCorretora(v)) throw new Error('Corretora inválida')
+  const profile = await getProfile()
+  if (!podeVerCorretora(profile, v)) throw new Error('Você não tem acesso a esta corretora')
   return v
 }
 

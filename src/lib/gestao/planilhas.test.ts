@@ -102,6 +102,58 @@ describe('lerClientes (export de clientes)', () => {
   })
 })
 
+describe('lerLotes (relatório do BTG)', () => {
+  it('lê CPF/CNPJ e parceiro e separa operados de zerados', () => {
+    const r = lerLotes([
+      ['Data', 'Número Conta', 'CPF', 'CNPJ', 'Cliente', 'Parceiro', 'Ativo', 'Plataforma', 'Lotes Operados', 'Lotes Zerados', 'MODO'],
+      ['02/09/2026', '5184171', '302.723.238-02', null, 'Nilson Caglia', null, 'WINV26', 'Nelogica', 170, 0, 'Daytrade'],
+      ['03/09/2026', '5184171', '302.723.238-02', null, 'Nilson Caglia', 'Atual Capital', 'WINV26', 'Nelogica', 100, 9, 'Daytrade'],
+      ['04/09/2026', '8505666', null, '12.345.678/0001-90', 'Empresa X', null, 'WDOV26', 'Nelogica', 0, 4, 'Daytrade'],
+    ], 'ZERAGEM')
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.linhas).toHaveLength(4)
+    expect(r.linhas[0]).toMatchObject({ data: '2026-09-02', conta: '5184171', documento: '30272323802', nome_cliente: 'Nilson Caglia', qtd: 170, modo: 'DAYTRADE', parceiro: '', assessor: '' })
+    expect(r.linhas[1]).toMatchObject({ qtd: 100, modo: 'DAYTRADE', parceiro: 'Atual Capital' })
+    expect(r.linhas[2]).toMatchObject({ qtd: 9, modo: 'DAYTRADE/ZERAGEM', documento: '30272323802' })
+    expect(r.linhas[3]).toMatchObject({ conta: '8505666', documento: '12345678000190', qtd: 4, modo: 'DAYTRADE/ZERAGEM' })
+    expect(r.faltando).toEqual([])
+    expect(resumoLotes(r.linhas, 'ZERAGEM')).toMatchObject({ linhas: 4, operados: 270, zerados: 13, contas: 2 })
+  })
+  it('lê a aba Lotes da planilha de controle (colunas calculadas ignoradas)', () => {
+    const r = lerLotes([
+      ['Lotes girados · controle'],
+      ['ÚLTIMA DATA LANÇADA', null, 'LOTES NO ÚLTIMO DIA'],
+      [null],
+      ['Data', 'Conta BTG', 'CPF/CNPJ', 'Nome no Relatório', 'Ativo', 'Plataforma', 'Lotes Operados', 'Lotes Zerados', 'Modo', 'Cliente', 'Responsável', 'Mês Ref.', 'Tarifa Aplicada (R$/lote)', 'Receita Corretagem (R$)'],
+      ['02/09/2026', '5184171', '302.723.238-02', 'Nilson Caglia', 'WINV26', 'Nelogica', 170, 0, 'Daytrade', 'Nilson C.', 'Artur', '01/09/2026', 0.25, 42.5],
+    ])
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.linhas).toHaveLength(1)
+    expect(r.linhas[0]).toMatchObject({ conta: '5184171', documento: '30272323802', nome_cliente: 'Nilson Caglia', qtd: 170, assessor: '' })
+  })
+})
+
+describe('lerClientes (lista do BTG)', () => {
+  it('lê status, responsável, corretagem e conta BTG e ignora a Situação calculada', () => {
+    const r = lerClientes([
+      ['Clientes'],
+      ['CLIENTES LEVADOS', 'MIGRADOS'],
+      [null],
+      ['Cliente', 'CPF/CNPJ', 'Telefone', 'Status', 'Responsável', 'Parceiro', 'Corretagem (R$/lote)', 'Data de Entrada', 'Data de Migração', 'Conta BTG', 'Observações', 'Motivo da Recusa', 'Lotes Girados (total)', 'Último Mês com Giro', 'Dias até Migrar', 'Situação', 'Alertas'],
+      ['Nilson Caglia', '302.723.238-02', '15988010423', 'Migrado', 'Artur', null, 0.25, '24/09/2026', '24/09/2026', '5184171', null, null, 5544, '01/10/2026', 0, 'Ativo', ''],
+      ['Thiago Neves', '096.650.977-33', '22999091109', 'Recusou', 'Artur', 'Direto', 0, '23/09/2026', null, null, 'Sem corretagem informada', null, 0, '-', '', 'Recusou', 'recusa sem motivo'],
+    ])
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.linhas).toHaveLength(2)
+    expect(r.linhas[0]).toMatchObject({ nome: 'Nilson Caglia', documento: '30272323802', status: 'Migrado', responsavel: 'Artur', corretagem: 0.25, data_entrada: '2026-09-24', data_habilitacao: '2026-09-24', conta: '5184171', situacao_conta: '' })
+    expect(r.linhas[1]).toMatchObject({ status: 'Recusou', corretagem: 0, conta: '', parceiro: 'Direto', observacoes: 'Sem corretagem informada' })
+    expect(r.faltando).not.toContain('status')
+  })
+})
+
 describe('lerLeads (formulário)', () => {
   it('mapeia o export do formulário e as colunas da equipe', () => {
     const r = lerLeads([

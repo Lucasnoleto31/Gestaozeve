@@ -44,7 +44,7 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
         if (!r.ok) { setEstado({ fase: 'erro', erro: r.erro }); return }
         setEstado({ fase: 'clientes', nome: file.name, linhas: r.linhas, faltando: r.faltando, cabecalhos: r.cabecalhos })
       } else {
-        const r = lerLotes(dados)
+        const r = lerLotes(dados, modoZeragem)
         if (!r.ok) { setEstado({ fase: 'erro', erro: r.erro }); return }
         const resumo = resumoLotes(r.linhas, modoZeragem)
         setEstado({ fase: 'lotes', nome: file.name, linhas: r.linhas, faltando: r.faltando, cabecalhos: r.cabecalhos, resumo, existentes: null })
@@ -169,11 +169,13 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
             <Resumo label="Linhas" valor={fmtNum(estado.resumo.linhas)} />
             <Resumo label="Período" valor={`${dataPt(estado.resumo.dataMin)} a ${dataPt(estado.resumo.dataMax)}`} sub={`${estado.resumo.dias} dias com giro`} />
             <Resumo label="Lotes operados" valor={fmtNum(estado.resumo.operados)} />
-            <Resumo label="Zerados" valor={fmtNum(estado.resumo.zerados)} sub={`MODO contém "${modoZeragem}"`} />
+            <Resumo label="Zerados" valor={fmtNum(estado.resumo.zerados)} sub={estado.cabecalhos.some(c => /zerados/i.test(c)) ? 'coluna "Lotes Zerados"' : `MODO contém "${modoZeragem}"`} />
             <Resumo label="Contas distintas" valor={fmtNum(estado.resumo.contas)} sub={estado.resumo.repetidas ? `${fmtNum(estado.resumo.repetidas)} linhas idênticas` : undefined} />
           </div>
           {estado.faltando.length > 0 && <Alert tone="warn" title="Colunas não encontradas">{estado.faltando.join(', ')}</Alert>}
-          <Previa cabecalhos={['Data', 'Conta', 'Cliente (relatório)', 'Assessor', 'Ativo', 'Modo', 'Qtd', 'Plataforma']} linhas={estado.linhas.slice(0, 5).map(l => [dataPt(l.data), l.conta, l.nome_cliente, l.assessor, l.ativo, l.modo, n0(l.qtd), l.plataforma])} />
+          {estado.linhas.some(l => l.documento)
+            ? <Previa cabecalhos={['Data', 'Conta', 'CPF/CNPJ', 'Cliente (relatório)', 'Ativo', 'Modo', 'Qtd', 'Plataforma']} linhas={estado.linhas.slice(0, 5).map(l => [dataPt(l.data), l.conta, l.documento, l.nome_cliente, l.ativo, l.modo, n0(l.qtd), l.plataforma])} />
+            : <Previa cabecalhos={['Data', 'Conta', 'Cliente (relatório)', 'Assessor', 'Ativo', 'Modo', 'Qtd', 'Plataforma']} linhas={estado.linhas.slice(0, 5).map(l => [dataPt(l.data), l.conta, l.nome_cliente, l.assessor, l.ativo, l.modo, n0(l.qtd), l.plataforma])} />}
 
           {estado.existentes == null ? (
             <p className="text-label text-fg-subtle">Conferindo o que já existe nesse período…</p>

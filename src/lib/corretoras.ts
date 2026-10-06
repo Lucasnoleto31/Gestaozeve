@@ -41,6 +41,23 @@ export function labelCorretora(v: string | null | undefined): string {
   return isCorretora(v) ? CORRETORA_LABEL[v] : v
 }
 
+// Corretoras que o usuário vê (profiles.corretoras): NULL = todas; lista vazia = nenhuma
+export function corretorasDoPerfil(perfil: { corretoras?: string[] | null } | null | undefined): Corretora[] {
+  const lista = perfil?.corretoras
+  if (lista == null) return [...CORRETORAS]
+  return CORRETORAS.filter(c => lista.includes(c))
+}
+
+export function podeVerCorretora(perfil: { corretoras?: string[] | null } | null | undefined, corretora: Corretora): boolean {
+  return corretorasDoPerfil(perfil).includes(corretora)
+}
+
+// Vocabulário por corretora: no BTG quem cuida do cliente é o responsável interno
+// (Artur / Lucas), não um assessor da corretora.
+export function termosDaCorretora(corretora: Corretora): { assessor: string; assessores: string } {
+  return corretora === 'BTG' ? { assessor: 'Responsável', assessores: 'Responsáveis' } : { assessor: 'Assessor', assessores: 'Assessores' }
+}
+
 // Páginas do controle de cada corretora (ordem do menu)
 export const PAGINAS_CORRETORA: { id: string; label: string; hint: string }[] = [
   { id: 'painel',     label: 'Painel',     hint: 'Indicadores do mês, base por status e alertas' },

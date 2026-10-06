@@ -27,17 +27,17 @@ export default async function ClientesPage({ params, searchParams }: { params: P
       <PageHeader
         eyebrow={ctx.eyebrow}
         title="Clientes"
-        description={`Uma linha por cliente (CPF/CNPJ), com as contas agrupadas. Status vem da SITUACAO_CONTA do export; parceiro, data de entrada, observações e motivo da recusa são manuais (na ficha do cliente). Giro e situação no mês de ${mesLongo(mesRef)}.`}
+        description={`Um cliente por CPF/CNPJ, com as contas agrupadas · giro e situação em ${mesLongo(mesRef)}.`}
         actions={<><BuscaCliente corretora={corretora} base={base} /><MesPicker valor={mesRef} /></>}
       />
       <PageBody>
         <KpiRow cols={6}>
-          <KpiCard label="Clientes levados (únicos)" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(entraram30d)} entraram nos últimos 30 dias`} />
-          <KpiCard label="Migrados" value={fmtNum(r.migrados)} sub={`${fmtPct(r.taxaMigracao)} da base · ${fmtNum(migrados7d)} nos últimos 7 dias`} tone="success" />
-          <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)} sub={r.mediaDiasMigrar != null ? `média de ${Math.round(r.mediaDiasMigrar)} dias até migrar` : 'sem data de entrada para medir'} tone="warning" />
-          <KpiCard label="Recusaram" value={fmtNum(r.recusaram)} sub={`${fmtPct(r.levados ? (r.recusaram / r.levados) * 100 : 0)} da base`} tone="danger" />
-          <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.ativosSit)} ativos · ${fmtNum(r.inativos)} inativos em ${mesCurto(mesRef)}`} tone="violet" />
-          <KpiCard label="Com alertas" value={fmtNum(r.comAlertas)} sub="linhas com algo a completar (coluna Alertas)" tone="info" />
+          <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(entraram30d)} entraram em 30 dias`} />
+          <KpiCard label="Migrados" value={fmtNum(r.migrados)} sub={`${fmtPct(r.taxaMigracao)} da base · ${fmtNum(migrados7d)} nos últimos 7 dias`} />
+          <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)} sub={r.mediaDiasMigrar != null ? `média de ${Math.round(r.mediaDiasMigrar)} dias até migrar` : 'sem data de entrada para medir'} />
+          <KpiCard label="Recusaram" value={fmtNum(r.recusaram)} sub={`${fmtPct(r.levados ? (r.recusaram / r.levados) * 100 : 0)} da base`} />
+          <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.ativosSit)} ativos · ${fmtNum(r.inativos)} inativos em ${mesCurto(mesRef)}`} />
+          <KpiCard label="Com alertas" value={fmtNum(r.comAlertas)} sub="algo a completar no cadastro" tone={r.comAlertas ? 'warn' : 'neutral'} />
         </KpiRow>
         <TabelaClientes clientes={clientes} base={base} mesRef={mesRef} filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '' }} />
       </PageBody>

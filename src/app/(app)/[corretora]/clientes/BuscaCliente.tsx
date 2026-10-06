@@ -43,9 +43,9 @@ export function BuscaCliente({ corretora, base, autoFocus, className }: { corret
 
   return (
     <div className={cn('relative', className)}>
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
       <input
-        className="w-64 pl-8 pr-8"
+        className="field-sm w-64 pl-8 pr-8"
         placeholder="Buscar cliente, CPF ou conta…"
         value={termo}
         autoFocus={autoFocus}
@@ -60,9 +60,9 @@ export function BuscaCliente({ corretora, base, autoFocus, className }: { corret
           if (e.key === 'Escape') setAberto(false)
         }}
       />
-      {carregando && <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-fg-subtle" />}
+      {carregando && <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-fg-subtle" aria-hidden />}
       {aberto && (
-        <ul className="panel absolute right-0 z-20 mt-1 max-h-80 w-80 overflow-y-auto py-1 text-[13px] shadow-lg">
+        <ul className="panel absolute right-0 z-20 mt-1 max-h-80 w-80 overflow-y-auto border border-line py-1 text-dense shadow-float" role="listbox">
           {itens.length === 0 && <li className="px-3 py-2 text-fg-subtle">Nenhum cliente encontrado.</li>}
           {itens.map((it, i) => (
             <li key={it.id}>
@@ -73,7 +73,7 @@ export function BuscaCliente({ corretora, base, autoFocus, className }: { corret
                 onClick={() => abrir(it)}
               >
                 <span className="font-medium text-fg">{it.nome}</span>
-                <span className="text-[11px] text-fg-subtle">{it.documento ?? 'sem CPF'}{it.conta ? ` · conta ${it.conta}` : ''}</span>
+                <span className="text-micro text-fg-subtle">{it.documento ?? 'sem CPF'}{it.conta ? ` · conta ${it.conta}` : ''}</span>
               </button>
             </li>
           ))}

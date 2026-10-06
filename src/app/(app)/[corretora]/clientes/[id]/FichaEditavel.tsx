@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Alert } from '@/components/ui/Alert'
 import { Field, Input, Select } from '@/components/ui/Input'
 import { salvarCadastroCliente, salvarCamposCliente } from '@/lib/gestao/acoes'
-import { termosDaCorretora, type Corretora } from '@/lib/corretoras'
+import { temListaPropria, termosDaCorretora, type Corretora } from '@/lib/corretoras'
 import type { ClienteCadastro } from '@/lib/gestao/tipos'
 
 type Manuais = { data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null }
@@ -62,14 +62,14 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
           {erro && <Alert tone="danger">{erro}</Alert>}
           <div className="grid gap-3 sm:grid-cols-2">
             <Select label="Status" value={m.status} onChange={e => setM({ ...m, status: e.target.value })}
-              hint={corretora === 'BTG' ? 'Vem da lista de clientes; aqui você muda na hora' : 'Vazio segue a situação da conta no export da corretora'}>
+              hint={temListaPropria(corretora) ? 'Vem da lista de clientes; aqui você muda na hora' : 'Vazio segue a situação da conta no export da corretora'}>
               <option value="">{statusAutomatico ? `Automático · ${statusAutomatico}` : 'Automático'}</option>
               <option value="Migrado">Migrado</option>
               <option value="Em processamento">Em processamento</option>
               <option value="Recusou">Recusou</option>
             </Select>
             <Select label={termos.assessor === 'Responsável' ? 'Responsável' : 'Responsável interno'} value={m.responsavel} onChange={e => setM({ ...m, responsavel: e.target.value })}
-              hint={corretora === 'BTG' ? 'Quem cuida do cliente; os lotes seguem o responsável' : 'Vazio usa o responsável do assessor'}>
+              hint={temListaPropria(corretora) ? 'Quem cuida do cliente; os lotes seguem o responsável' : 'Vazio usa o responsável do assessor'}>
               <option value="">—</option>
               {opcoesResponsavel.map(r => <option key={r} value={r}>{r}</option>)}
             </Select>

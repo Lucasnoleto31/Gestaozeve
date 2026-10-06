@@ -52,6 +52,12 @@ export function podeVerCorretora(perfil: { corretoras?: string[] | null } | null
   return corretorasDoPerfil(perfil).includes(corretora)
 }
 
+// Corretora sem export de clientes: a base é a nossa lista (Notion / cadastro manual),
+// o status é decidido por nós e os lotes trazem o CPF.
+export function temListaPropria(corretora: Corretora): boolean {
+  return corretora === 'BTG'
+}
+
 // Vocabulário por corretora: no BTG quem cuida do cliente é o responsável interno
 // (Artur / Lucas), não um assessor da corretora.
 export function termosDaCorretora(corretora: Corretora): { assessor: string; assessores: string } {

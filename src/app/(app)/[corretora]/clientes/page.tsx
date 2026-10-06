@@ -1,21 +1,24 @@
 export const dynamic = 'force-dynamic'
 
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { clientesLista } from '@/lib/gestao/consultas'
+import { clientesLista, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { resumoClientes } from '@/lib/gestao/derivados'
 import { mesCurto, mesLongo, somarDias } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum, fmtPct } from '@/lib/format'
+import { temListaPropria } from '@/lib/corretoras'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { MesPicker } from '@/components/gestao/Filtros'
 import { TabelaClientes } from './TabelaClientes'
 import { BuscaCliente } from './BuscaCliente'
+import { NovoClienteButton } from './NovoClienteButton'
 
 export default async function ClientesPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base, q } = ctx
-  const clientes = await clientesLista(corretora, mesRef)
+  const listaPropria = temListaPropria(corretora)
+  const [clientes, responsaveis] = await Promise.all([clientesLista(corretora, mesRef), listaPropria ? responsaveisAtivos() : Promise.resolve([])])
   const r = resumoClientes(clientes)
   const hoje = fmtDate(hojeBrasil())
   const d7 = somarDias(hoje, -7), d30 = somarDias(hoje, -30)
@@ -27,8 +30,14 @@ export default async function ClientesPage({ params, searchParams }: { params: P
       <PageHeader
         eyebrow={ctx.eyebrow}
         title="Clientes"
-        description={`Um cliente por CPF/CNPJ, com as contas agrupadas · giro e situação em ${mesLongo(mesRef)}.`}
-        actions={<><BuscaCliente corretora={corretora} base={base} /><MesPicker valor={mesRef} /></>}
+        description={listaPropria
+          ? `A nossa lista de clientes levados para a ${ctx.label}: status, responsável e tarifa por cliente · giro e situação em ${mesLongo(mesRef)}.`
+          : `Um cliente por CPF/CNPJ, com as contas agrupadas · giro e situação em ${mesLongo(mesRef)}.`}
+        actions={<>
+          {listaPropria && <NovoClienteButton corretora={corretora} base={base} responsaveis={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)} hoje={hoje} />}
+          <BuscaCliente corretora={corretora} base={base} />
+          <MesPicker valor={mesRef} />
+        </>}
       />
       <PageBody>
         <KpiRow cols={6}>

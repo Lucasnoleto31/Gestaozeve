@@ -5,7 +5,7 @@ import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { clientesLista, funilMensal, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal, parametrosDaCorretora } from '@/lib/gestao/consultas'
 import { baseStatus, porAssessor, resumoClientes, situacaoMigrados } from '@/lib/gestao/derivados'
 import { calcularRepasse, configBtg } from '@/lib/gestao/btg'
-import { termosDaCorretora } from '@/lib/corretoras'
+import { temListaPropria, termosDaCorretora } from '@/lib/corretoras'
 import { janelaMeses, limitesDoMes, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -39,7 +39,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const cfg = configBtg(par.parametros)
   const atp = cfg.modelo === 'ATP'
   const comRepasse = cfg.faixas.length > 0
-  const listaPropria = corretora === 'BTG'
+  const listaPropria = temListaPropria(corretora)
   type Mes = typeof mensal[number]
   const receitaTotal = (m: Mes) => m.receita + (atp ? 0 : m.incentivo)
   const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg)

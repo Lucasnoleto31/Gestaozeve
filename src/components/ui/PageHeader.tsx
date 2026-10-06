@@ -16,13 +16,14 @@ export function PageHeader({ eyebrow, title, description, actions, stats, childr
 }) {
   return (
     <div className={cn('px-4 pb-2 pt-6 lg:px-8', className)}>
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="min-w-0">
+      {/* Título com largura mínima: quando as ações não cabem ao lado, descem para a linha de baixo */}
+      <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end md:justify-between">
+        <div className="min-w-0 md:min-w-[18rem] md:flex-1">
           {eyebrow && <p className="eyebrow mb-1">{eyebrow}</p>}
           <h1 className="text-title font-semibold tracking-tight text-fg">{title}</h1>
           {description && <p className="mt-1 max-w-2xl text-dense text-fg-muted">{description}</p>}
         </div>
-        {actions && <div className="flex min-w-0 flex-wrap items-center gap-2 md:shrink-0">{actions}</div>}
+        {actions && <div className="flex min-w-0 flex-wrap items-center gap-2 md:ml-auto md:shrink-0">{actions}</div>}
       </div>
 
       {stats && stats.length > 0 && (

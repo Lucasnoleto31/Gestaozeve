@@ -208,6 +208,66 @@ export async function salvarCamposCliente(corretoraIn: string, clienteId: string
   })
 }
 
+// Cadastro manual de um cliente na corretora (lista própria, ex.: BTG). Passa pela mesma rotina
+// da importação: quem já existe (CPF, conta, telefone ou nome único) é completado, não duplicado.
+export async function criarCliente(corretoraIn: string, campos: {
+  nome: string; documento: string | null; telefone: string | null; email: string | null
+  status: string | null; responsavel: string | null; parceiro: string | null; corretagem: number | null
+  data_entrada: string | null; data_migracao: string | null; conta: string | null; observacoes: string | null; motivo_recusa: string | null
+}) {
+  return tentar(async () => {
+    const corretora = await corretoraValida(corretoraIn)
+    const { db } = await equipe()
+    const limpo = (v: string | null | undefined) => (v && v.trim() !== '' ? v.trim() : null)
+    const nome = limpo(campos.nome)
+    if (!nome) throw new Error('Informe o nome do cliente')
+    const documento = limpo(campos.documento)?.replace(/\D/g, '') || null
+    if (documento && documento.length !== 11 && documento.length !== 14) throw new Error('CPF tem 11 dígitos e CNPJ tem 14')
+    const status = limpo(campos.status) ?? 'Em processamento'
+    if (!['Migrado', 'Em processamento', 'Recusou'].includes(status)) throw new Error('Status inválido')
+    const data = (v: string | null | undefined, rotulo: string) => {
+      const d = limpo(v)
+      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error(`${rotulo} inválida`)
+      return d
+    }
+    const dataEntrada = data(campos.data_entrada, 'Data de entrada')
+    const dataMigracao = data(campos.data_migracao, 'Data de migração')
+    if (campos.corretagem != null && (!Number.isFinite(campos.corretagem) || campos.corretagem < 0)) throw new Error('Corretagem inválida')
+    const conta = limpo(campos.conta)?.replace(/\D/g, '') || null
+
+    const linha: ClienteImport = {
+      conta: conta ?? '', conta_digito: '', id_conta: '', id_cliente: '', nome, documento: documento ?? '', assessor: '', filial: '', situacao_conta: '',
+      tipo_pessoa: documento ? (documento.length === 14 ? 'J' : 'F') : '', sexo: '', estado_civil: '', uf: '', profissao: '', rendimentos: null, patrimonio: null,
+      email: limpo(campos.email)?.toLowerCase() ?? '', telefone: limpo(campos.telefone) ?? '', perfil: '', perfil_suitability: '', dt_nascimento: null,
+      data_habilitacao: dataMigracao, soma_total: null, id_assessor: '', dt_partition: null,
+      data_entrada: dataEntrada, parceiro: limpo(campos.parceiro) ?? '', observacoes: limpo(campos.observacoes) ?? '', motivo_recusa: limpo(campos.motivo_recusa) ?? '',
+      status, responsavel: limpo(campos.responsavel) ?? '', corretagem: campos.corretagem,
+    }
+    const { data: res, error } = await db.rpc('importar_clientes', { p_corretora: corretora, p_linhas: [linha] })
+    if (error) falha(error, 'importar_clientes')
+    const r = ((res ?? []) as Row[])[0] ?? {}
+    const novo = num(r.clientes_novos) > 0
+    const casadoPor = num(r.por_cpf) ? 'CPF/CNPJ' : num(r.por_conta) ? 'conta' : num(r.por_telefone) ? 'telefone' : num(r.por_nome) ? 'nome' : null
+
+    // Acha o cliente para abrir a ficha: pelo CPF ou pelo nome (preferindo quem tem ficha nesta corretora)
+    let clienteId: string | null = null
+    if (documento) {
+      const { data: c } = await db.from('clientes').select('id').eq('documento', documento).maybeSingle()
+      clienteId = c ? String((c as Row).id) : null
+    }
+    if (!clienteId) {
+      const { data: cs } = await db.from('clientes').select('id').eq('nome_norm', normTexto(nome)).limit(20)
+      const ids = ((cs ?? []) as Row[]).map(x => String(x.id))
+      if (ids.length) {
+        const { data: cc } = await db.from('cliente_corretora').select('cliente_id').eq('corretora', corretora).in('cliente_id', ids).limit(1)
+        clienteId = cc && cc.length ? String((cc[0] as Row).cliente_id) : ids[0]
+      }
+    }
+    revalidarCorretora(corretora)
+    return { clienteId, novo, casadoPor }
+  })
+}
+
 export async function salvarCadastroCliente(clienteId: string, campos: { nome: string; documento: string | null; telefone: string | null; email: string | null }) {
   return tentar(async () => {
     const { db } = await somenteAdmin()

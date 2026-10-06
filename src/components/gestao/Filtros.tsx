@@ -34,7 +34,7 @@ export function MesPicker({ valor, param = 'mes', label = 'Mês de referência',
 }) {
   const { set, pending } = useParamNav()
   return (
-    <label className={cn('flex items-center gap-2', className)}>
+    <label className={cn('flex flex-wrap items-center gap-2', className)}>
       <span className="label whitespace-nowrap">{label}</span>
       <input
         type="month"
@@ -83,7 +83,7 @@ export function SelectParam({ param, valor, opcoes, label, todos = 'Todos', clas
 }) {
   const { set, pending } = useParamNav()
   return (
-    <label className={cn('flex items-center gap-2', className)}>
+    <label className={cn('flex flex-wrap items-center gap-2', className)}>
       {label && <span className="label whitespace-nowrap">{label}</span>}
       <select className="field-sm max-w-[240px]" value={valor} onChange={e => set({ [param]: e.target.value })}>
         {todos != null && <option value="">{todos}</option>}

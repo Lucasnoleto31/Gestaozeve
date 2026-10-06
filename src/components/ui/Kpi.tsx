@@ -80,7 +80,7 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, c
   const tom = TOM[tone]
   return (
     <div className={cn('kpi min-w-0 px-5 py-4', className)}>
-      <p className="label truncate">{label}</p>
+      <p className="label">{label}</p>
       {loading ? (
         <div className="mt-2 space-y-2">
           <div className="skeleton h-7 w-28" />
@@ -91,7 +91,7 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, c
           <p className={cn('mt-1.5 truncate text-kpi font-semibold tracking-tight tabular-nums', tom === 'gain' ? 'text-gain' : tom === 'loss' ? 'text-loss' : tom === 'warn' ? 'text-warn' : 'text-fg', valueClassName)}>{value}</p>
           <div className="mt-1.5 flex min-h-[16px] flex-wrap items-center gap-x-2 gap-y-0.5">
             {delta && <DeltaPill delta={delta} />}
-            {sub && <span className="truncate text-micro text-fg-muted">{sub}</span>}
+            {sub && <span className="text-micro text-fg-muted">{sub}</span>}
           </div>
         </>
       )}

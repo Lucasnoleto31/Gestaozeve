@@ -14,7 +14,7 @@ export function CorretoraBadge({ corretora, size = 'sm', className }: {
     <span
       className={cn(
         'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md font-semibold',
-        size === 'md' ? 'px-2 py-0.5 text-[11px]' : 'px-1.5 py-px text-[10px]',
+        size === 'md' ? 'h-[22px] px-2 text-micro' : 'px-1.5 py-px text-micro',
         className,
       )}
       style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}

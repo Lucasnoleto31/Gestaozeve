@@ -1,9 +1,7 @@
 import { redirect } from 'next/navigation'
-import { Calendar, Shield } from 'lucide-react'
 import { getProfile } from '@/lib/auth/getProfile'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Badge } from '@/components/ui/Badge'
-import { Alert } from '@/components/ui/Alert'
 import { PerfilForm } from './PerfilForm'
 
 const ROLE_LABELS: Record<string, string> = {
@@ -25,24 +23,16 @@ export default async function PerfilPage() {
         eyebrow="Conta"
         title={
           <span className="flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent text-base font-bold text-white">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-dense font-semibold text-accent" aria-hidden>
               {iniciais}
             </span>
             {profile.nome}
           </span>
         }
-        description={profile.email}
-        actions={
-          <>
-            <Badge variant="accent"><Shield className="h-3 w-3" /> {ROLE_LABELS[profile.role] ?? profile.role}</Badge>
-            <Badge><Calendar className="h-3 w-3" /> Membro desde {membroDesde}</Badge>
-          </>
-        }
+        description={`${profile.email} · membro desde ${membroDesde}`}
+        actions={<Badge variant="accent">{ROLE_LABELS[profile.role] ?? profile.role}</Badge>}
       />
       <PageBody className="max-w-2xl">
-        <Alert tone="info" title="Gerencie sua conta">
-          Alterações de nome têm efeito imediato. Mudanças de e-mail requerem confirmação. Senhas devem ter no mínimo 8 caracteres.
-        </Alert>
         <PerfilForm profile={profile} />
       </PageBody>
     </>

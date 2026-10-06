@@ -20,7 +20,7 @@ export function PageTabs({ items }: { items: PageTab[] }) {
             title={t.hint}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium',
+              'whitespace-nowrap border-b-2 px-3 py-2.5 text-dense font-medium',
               active ? 'border-accent text-fg' : 'border-transparent text-fg-muted hover:text-fg',
             )}
           >

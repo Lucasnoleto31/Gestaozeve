@@ -5,16 +5,16 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getProfile } from '@/lib/auth/getProfile'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Panel } from '@/components/ui/Panel'
-import { Badge, type BadgeVariant } from '@/components/ui/Badge'
+import { Badge } from '@/components/ui/Badge'
 import { formatDate } from '@/lib/utils'
 import { NovoUsuarioButton } from './NovoUsuarioButton'
 import { EditarUsuarioButton } from './EditarUsuarioButton'
 import { DeletarUsuarioButton } from './DeletarUsuarioButton'
 
-const roleMap: Record<string, { label: string; variant: BadgeVariant }> = {
-  admin: { label: 'Administrador', variant: 'accent' },
-  vendedor: { label: 'Assessor', variant: 'warning' },
-  influenciador: { label: 'Influenciador', variant: 'success' },
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrador',
+  vendedor: 'Assessor',
+  influenciador: 'Influenciador',
 }
 
 export default async function UsuariosPage() {
@@ -40,7 +40,7 @@ export default async function UsuariosPage() {
       <PageHeader
         eyebrow="Sistema"
         title="Usuários"
-        description="Quem acessa o sistema e com qual permissão. Só administradores veem os painéis de lotes."
+        description="Quem acessa o sistema e com qual permissão."
         stats={[
           { label: 'Usuários', value: total },
           { label: 'Ativos', value: ativos },
@@ -48,45 +48,41 @@ export default async function UsuariosPage() {
         actions={<NovoUsuarioButton />}
       />
       <PageBody>
-        <Panel flush>
-          <div className="overflow-x-auto">
+        <Panel>
+          <div className="tbl-wrap">
             <table className="tbl">
               <thead>
                 <tr>
                   <th>Nome</th>
-                  <th>E-mail</th>
+                  <th className="col-p2">E-mail</th>
                   <th>Função</th>
-                  <th>Status</th>
-                  <th>Criado em</th>
-                  <th className="w-20" />
+                  <th className="col-p2">Status</th>
+                  <th className="col-p3">Criado em</th>
+                  <th className="w-20"><span className="sr-only">Ações</span></th>
                 </tr>
               </thead>
               <tbody>
                 {!usuarios?.length && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-fg-subtle">Nenhum usuário cadastrado.</td>
+                    <td colSpan={6} className="py-10 text-center text-dense text-fg-subtle">Nenhum usuário cadastrado.</td>
                   </tr>
                 )}
                 {usuarios?.map((u) => (
                   <tr key={u.id}>
                     <td>
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-micro font-semibold text-accent" aria-hidden>
                           {(u.nome ?? '?').charAt(0).toUpperCase()}
                         </div>
                         <span className="font-medium">{u.nome}</span>
                       </div>
                     </td>
-                    <td className="muted">{u.email}</td>
+                    <td className="muted col-p2">{u.email}</td>
+                    <td><Badge variant={u.role === 'admin' ? 'accent' : 'neutral'}>{ROLE_LABEL[u.role] ?? u.role}</Badge></td>
+                    <td className="col-p2"><Badge variant={u.ativo ? 'gain' : 'neutral'}>{u.ativo ? 'Ativo' : 'Inativo'}</Badge></td>
+                    <td className="muted whitespace-nowrap col-p3">{formatDate(u.created_at)}</td>
                     <td>
-                      <Badge variant={roleMap[u.role]?.variant ?? 'default'}>{roleMap[u.role]?.label ?? u.role}</Badge>
-                    </td>
-                    <td>
-                      <Badge variant={u.ativo ? 'success' : 'danger'}>{u.ativo ? 'Ativo' : 'Inativo'}</Badge>
-                    </td>
-                    <td className="muted whitespace-nowrap">{formatDate(u.created_at)}</td>
-                    <td>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center justify-end gap-1">
                         <EditarUsuarioButton usuario={u} />
                         <DeletarUsuarioButton userId={u.user_id} nome={u.nome} />
                       </div>

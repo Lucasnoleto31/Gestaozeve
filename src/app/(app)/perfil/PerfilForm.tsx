@@ -22,14 +22,14 @@ type Status = { type: 'success' | 'error'; msg: string } | null
 
 function StatusBanner({ status }: { status: Status }) {
   if (!status) return null
-  return <Alert tone={status.type === 'success' ? 'success' : 'danger'} className="animate-fade-in">{status.msg}</Alert>
+  return <Alert tone={status.type === 'success' ? 'gain' : 'loss'}>{status.msg}</Alert>
 }
 
 // Fora dos componentes de seção: criar componentes durante o render reinicia o estado deles.
 function EyeToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
   return (
     <button type="button" onClick={onToggle} className="text-fg-subtle hover:text-fg" aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}>
-      {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      {show ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
     </button>
   )
 }
@@ -72,7 +72,7 @@ function NomeSection({ profileId, nomeInicial }: { profileId: string; nomeInicia
   }
 
   return (
-    <Panel icon={User} title="Informações pessoais">
+    <Panel variant="card" icon={User} title="Informações pessoais">
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Nome completo">
           <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome completo" className="w-full" />
@@ -109,9 +109,9 @@ function EmailSection({ emailAtual }: { emailAtual: string }) {
   }
 
   return (
-    <Panel icon={Mail} title="Endereço de e-mail">
+    <Panel variant="card" icon={Mail} title="Endereço de e-mail" subtitle="A mudança só vale depois da confirmação no novo e-mail.">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="E-mail" hint="Um e-mail de confirmação será enviado para o novo endereço antes da alteração entrar em vigor.">
+        <Field label="E-mail">
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className="w-full" />
         </Field>
         <StatusBanner status={status} />
@@ -154,7 +154,7 @@ function SenhaSection() {
   }
 
   return (
-    <Panel icon={Lock} title="Segurança">
+    <Panel variant="card" icon={Lock} title="Senha" subtitle="Mínimo de 8 caracteres.">
       <form onSubmit={handleSubmit} className="space-y-4">
         <SenhaField label="Nova senha" value={nova} onChange={setNova} placeholder="Mínimo 8 caracteres"
           show={showNova} onToggle={() => setShowNova(!showNova)}

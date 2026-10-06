@@ -16,8 +16,8 @@ export default async function ParametrosPage({ params, searchParams }: { params:
     <>
       <PageHeader
         eyebrow={ctx.eyebrow}
-        title={`Parâmetros · ${ctx.label}`}
-        description="As premissas da planilha: assessores (corretagem e zeragem), mapa de situação da conta, multiplicadores e faixas do incentivo, consolidados, status e responsáveis de leads. Toda mudança recalcula os lotes na hora."
+        title="Parâmetros"
+        description={`Premissas da ${ctx.label}: assessores, status da conta, incentivo, consolidados, leads e responsáveis. Toda mudança recalcula os lotes na hora.`}
       />
       <PageBody>
         <Parametros corretora={ctx.corretora} label={ctx.label} dados={dados} />

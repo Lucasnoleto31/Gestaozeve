@@ -15,7 +15,7 @@ export function Field({ label, hint, error, htmlFor, className, children }: {
     <div className={cn('flex flex-col gap-1.5', className)}>
       {label && <label htmlFor={htmlFor} className="label">{label}</label>}
       {children}
-      {error ? <p className="text-xs text-danger">{error}</p> : hint ? <p className="text-xs text-fg-subtle">{hint}</p> : null}
+      {error ? <p className="text-label text-loss">{error}</p> : hint ? <p className="text-label text-fg-subtle">{hint}</p> : null}
     </div>
   )
 }
@@ -33,7 +33,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         ref={ref}
         id={id}
         aria-invalid={error ? true : undefined}
-        className={cn('w-full', error && 'border-danger', className)}
+        className={cn('w-full', error && 'border-loss', className)}
         {...props}
       />
     </Field>
@@ -50,7 +50,7 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, label, error, hint, id, children, ...props }, ref) => (
     <Field label={label} error={error} hint={hint} htmlFor={id}>
-      <select ref={ref} id={id} className={cn('w-full', error && 'border-danger', className)} {...props}>
+      <select ref={ref} id={id} className={cn('w-full', error && 'border-loss', className)} {...props}>
         {children}
       </select>
     </Field>

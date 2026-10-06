@@ -1,10 +1,10 @@
 export const dynamic = 'force-dynamic'
 
-import { TrendingDown, TrendingUp, Minus } from 'lucide-react'
 import { contexto, periodoDaUrl, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { diario, ultimaData } from '@/lib/gestao/consultas'
 import { diasEntre, inicioSemana, somarDias } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct, fmtDelta } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
@@ -76,69 +76,71 @@ export default async function GiroDiarioPage({ params, searchParams }: { params:
   const receitaMes = atual.reduce((s, d) => s + d.receita, 0)
   const clientesMesMax = Math.max(0, ...atual.map(d => d.clientes))
   const diasUteisMes = atual.length
-  const Icone = tendencia === 'Subindo' ? TrendingUp : tendencia === 'Caindo' ? TrendingDown : Minus
+  const tomTendencia = tendencia === 'Subindo' ? 'gain' : tendencia === 'Caindo' ? 'loss' : 'neutral'
 
   return (
     <>
       <PageHeader
         eyebrow={ctx.eyebrow}
-        title="Giro diário de lotes"
-        description="Lotes operados por dia com giro no período (dias sem lotes ficam de fora), com tendência, média móvel e comparação com o período anterior de mesma duração."
+        title="Giro diário"
+        description="Lotes operados por dia com giro, tendência e comparação com o período anterior de mesma duração."
         actions={<PeriodoPicker inicio={inicio} fim={fim} />}
       />
       <PageBody>
         <KpiRow cols={6}>
-          <KpiCard label="Lotes no período" value={fmtNum(lotes)} sub={`em ${dias.length} dias com giro · ${fmtNum(zerados)} zerados`} />
-          <KpiCard label="Média por dia com giro" value={fmtNum(Math.round(media))} sub={melhor ? `maior dia: ${fmtNum(melhor.lotes)} (${dataCurta(melhor.dia)})` : undefined} tone="info" />
-          <KpiCard label="Dias com giro" value={fmtNum(dias.length)} sub={`${duracao} dias no calendário · ${fmtNum(operacoes)} linhas de operação`} tone="neutral" />
-          <KpiCard label="Receita no período" value={rCurto(receita)} sub={`${n2(lotes ? receita / lotes : 0)} R$/lote`} tone="success" />
-          <KpiCard label="Vs período anterior" value={lotesAnt ? fmtDelta(((lotes - lotesAnt) / lotesAnt) * 100) : TRACO} sub={`anterior: ${fmtNum(lotesAnt)} lotes (${dataCurta(antIni)} a ${dataCurta(antFim)})`} tone={lotes >= lotesAnt ? 'success' : 'danger'} />
-          <KpiCard label="Tendência" value={<span className="inline-flex items-center gap-1.5"><Icone className="h-5 w-5" />{tendencia}</span>} sub={`≈ ${slope >= 0 ? '+' : ''}${fmtNum(Math.round(slope))} lotes/dia a cada dia · limiar ${fmtPct(limiar * 100, 0)}`} tone={tendencia === 'Subindo' ? 'success' : tendencia === 'Caindo' ? 'danger' : 'neutral'} />
+          <KpiCard label="Lotes no período" value={fmtNum(lotes)} sub={`${dias.length} dias com giro · ${fmtNum(zerados)} zerados`} />
+          <KpiCard label="Média por dia" value={fmtNum(Math.round(media))} sub={melhor ? `maior dia ${fmtNum(melhor.lotes)} em ${dataCurta(melhor.dia)}` : undefined} />
+          <KpiCard label="Receita no período" value={rCurto(receita)} sub={`${n2(lotes ? receita / lotes : 0)} R$/lote`} />
+          <KpiCard label="Vs período anterior" value={lotesAnt ? fmtDelta(((lotes - lotesAnt) / lotesAnt) * 100) : TRACO} sub={`${fmtNum(lotesAnt)} lotes de ${dataCurta(antIni)} a ${dataCurta(antFim)}`} tone={lotesAnt ? (lotes >= lotesAnt ? 'gain' : 'loss') : 'neutral'} />
+          <KpiCard label="Tendência" value={tendencia} sub={`${slope >= 0 ? '+' : ''}${fmtNum(Math.round(slope))} lotes/dia a cada dia · limiar ${fmtPct(limiar * 100, 0)}`} tone={tomTendencia} />
+          <KpiCard label="Operações" value={fmtNum(operacoes)} sub={`${duracao} dias no calendário`} />
         </KpiRow>
 
-        <Panel title="Situação atual" subtitle={ultima ? `Última data lançada: ${dataCurta(ultima)}` : 'Nenhum lote lançado ainda.'}>
-          <dl className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-            <div><dt className="label">Lotes no último dia</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{n0(ultimoDia?.lotes)}</dd><p className="text-[11px] text-fg-subtle">{ultimoDia ? `${fmtNum(ultimoDia.operacoes)} operações · ${fmtNum(ultimoDia.clientes)} clientes` : TRACO}</p></div>
-            <div><dt className="label">Lotes na semana</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{n0(lotesSemana)}</dd><p className="text-[11px] text-fg-subtle">{semIni ? `semana de ${dataCurta(semIni)}` : TRACO}</p></div>
-            <div><dt className="label">Lotes no mês</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{n0(lotesMes)}</dd><p className="text-[11px] text-fg-subtle">{mesIni ? `${mesIni.slice(5, 7)}/${mesIni.slice(0, 4)} até ${dataCurta(ultima)}` : TRACO}</p></div>
-            <div><dt className="label">Receita no mês</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{rCurto(receitaMes)}</dd><p className="text-[11px] text-fg-subtle">{lotesMes ? `${n2(receitaMes / lotesMes)} R$/lote` : TRACO}</p></div>
-            <div><dt className="label">Clientes com giro (máx./dia)</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{n0(clientesMesMax)}</dd><p className="text-[11px] text-fg-subtle">no mês atual</p></div>
-            <div><dt className="label">Média por dia útil (mês)</dt><dd className="mt-1 text-lg font-semibold tabular-nums">{diasUteisMes ? fmtNum(Math.round(lotesMes / diasUteisMes)) : TRACO}</dd><p className="text-[11px] text-fg-subtle">{diasUteisMes} dias com giro</p></div>
-          </dl>
-        </Panel>
-
-        <Panel title="Lotes operados por dia com giro" subtitle={`Barras = lotes do dia · linha = média móvel de ${MEDIA_MOVEL} dias`}>
+        <Panel title="Lotes por dia com giro" subtitle={`Barras = lotes do dia · linha = média móvel de ${MEDIA_MOVEL} dias`}>
           <GraficoSeries
             dados={serie.map(d => ({ label: dataCurta(d.dia).slice(0, 5), lotes: d.lotes, mm: Math.round(d.mm) }))}
             series={[{ key: 'lotes', nome: 'Lotes operados', tipo: 'bar' }, { key: 'mm', nome: `Média móvel (${MEDIA_MOVEL})`, tipo: 'line' }]}
-            altura={280}
+            altura={300}
           />
         </Panel>
 
-        <Panel title="Resumo do período">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] md:grid-cols-4">
-            <div><dt className="text-fg-muted">Dias com giro</dt><dd className="num font-semibold">{dias.length}</dd></div>
-            <div><dt className="text-fg-muted">Dias no calendário</dt><dd className="num font-semibold">{duracao}</dd></div>
-            <div><dt className="text-fg-muted">Melhor dia</dt><dd className="num font-semibold">{melhor ? `${dataCurta(melhor.dia)} (${diaSemana(melhor.dia)}) · ${fmtNum(melhor.lotes)} lotes` : TRACO}</dd></div>
-            <div><dt className="text-fg-muted">Lotes zerados</dt><dd className="num font-semibold">{n0(zerados)}</dd></div>
-            <div><dt className="text-fg-muted">1ª metade (lotes/dia)</dt><dd className="num font-semibold">{fmtNum(Math.round(media1))}</dd></div>
-            <div><dt className="text-fg-muted">2ª metade (lotes/dia)</dt><dd className="num font-semibold">{fmtNum(Math.round(media2))}</dd></div>
-            <div><dt className="text-fg-muted">Var. entre metades</dt><dd className="num font-semibold">{varMetades == null ? TRACO : fmtDelta(varMetades)}</dd></div>
-            <div><dt className="text-fg-muted">Inclinação (lotes/dia²)</dt><dd className="num font-semibold">{slope.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</dd></div>
-            <div><dt className="text-fg-muted">Período anterior</dt><dd className="num font-semibold">{fmtNum(lotesAnt)} lotes · {anterior.length} dias</dd></div>
-            <div><dt className="text-fg-muted">Linhas de operação</dt><dd className="num font-semibold">{fmtNum(operacoes)}</dd></div>
-            <div><dt className="text-fg-muted">Clientes por dia (média · máx.)</dt><dd className="num font-semibold">{fmtNum(Math.round(clientesMedia))} · {fmtNum(clientesMax)}</dd></div>
-            <div><dt className="text-fg-muted">Receita (R$)</dt><dd className="num font-semibold">{r0(receita)}</dd></div>
-          </dl>
-        </Panel>
+        <div className="grid gap-8 xl:grid-cols-2">
+          <Panel title="Situação atual" subtitle={ultima ? `Última data lançada: ${dataCurta(ultima)}` : 'Nenhum lote lançado ainda.'}>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-dense sm:grid-cols-3">
+              <div><dt className="label">Lotes no último dia</dt><dd className="mt-1 text-section font-semibold tabular-nums">{n0(ultimoDia?.lotes)}</dd><p className="text-micro text-fg-subtle">{ultimoDia ? `${fmtNum(ultimoDia.operacoes)} operações · ${fmtNum(ultimoDia.clientes)} clientes` : TRACO}</p></div>
+              <div><dt className="label">Lotes na semana</dt><dd className="mt-1 text-section font-semibold tabular-nums">{n0(lotesSemana)}</dd><p className="text-micro text-fg-subtle">{semIni ? `semana de ${dataCurta(semIni)}` : TRACO}</p></div>
+              <div><dt className="label">Lotes no mês</dt><dd className="mt-1 text-section font-semibold tabular-nums">{n0(lotesMes)}</dd><p className="text-micro text-fg-subtle">{mesIni ? `${mesIni.slice(5, 7)}/${mesIni.slice(0, 4)} até ${dataCurta(ultima)}` : TRACO}</p></div>
+              <div><dt className="label">Receita no mês</dt><dd className="mt-1 text-section font-semibold tabular-nums">{rCurto(receitaMes)}</dd><p className="text-micro text-fg-subtle">{lotesMes ? `${n2(receitaMes / lotesMes)} R$/lote` : TRACO}</p></div>
+              <div><dt className="label">Clientes com giro (máx./dia)</dt><dd className="mt-1 text-section font-semibold tabular-nums">{n0(clientesMesMax)}</dd><p className="text-micro text-fg-subtle">no mês atual</p></div>
+              <div><dt className="label">Média por dia útil</dt><dd className="mt-1 text-section font-semibold tabular-nums">{diasUteisMes ? fmtNum(Math.round(lotesMes / diasUteisMes)) : TRACO}</dd><p className="text-micro text-fg-subtle">{diasUteisMes} dias com giro no mês</p></div>
+            </dl>
+          </Panel>
 
-        <Panel title="Lotes por dia com giro" flush>
-          <div className="tbl-wrap max-h-[70vh] rounded-none border-0">
+          <Panel title="Resumo do período">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-dense sm:grid-cols-3">
+              <div><dt className="text-fg-muted">Dias com giro</dt><dd className="num font-semibold">{dias.length}</dd></div>
+              <div><dt className="text-fg-muted">Dias no calendário</dt><dd className="num font-semibold">{duracao}</dd></div>
+              <div><dt className="text-fg-muted">Melhor dia</dt><dd className="num font-semibold">{melhor ? `${dataCurta(melhor.dia)} (${diaSemana(melhor.dia)}) · ${fmtNum(melhor.lotes)}` : TRACO}</dd></div>
+              <div><dt className="text-fg-muted">1ª metade (lotes/dia)</dt><dd className="num font-semibold">{fmtNum(Math.round(media1))}</dd></div>
+              <div><dt className="text-fg-muted">2ª metade (lotes/dia)</dt><dd className="num font-semibold">{fmtNum(Math.round(media2))}</dd></div>
+              <div><dt className="text-fg-muted">Var. entre metades</dt><dd className={cn('num font-semibold', varMetades != null && (varMetades > 0.05 ? 'text-gain' : varMetades < -0.05 ? 'text-loss' : ''))}>{varMetades == null ? TRACO : fmtDelta(varMetades)}</dd></div>
+              <div><dt className="text-fg-muted">Inclinação (lotes/dia²)</dt><dd className="num font-semibold">{slope.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</dd></div>
+              <div><dt className="text-fg-muted">Período anterior</dt><dd className="num font-semibold">{fmtNum(lotesAnt)} lotes · {anterior.length} dias</dd></div>
+              <div><dt className="text-fg-muted">Clientes por dia (média · máx.)</dt><dd className="num font-semibold">{fmtNum(Math.round(clientesMedia))} · {fmtNum(clientesMax)}</dd></div>
+              <div><dt className="text-fg-muted">Lotes zerados</dt><dd className="num font-semibold">{n0(zerados)}</dd></div>
+              <div><dt className="text-fg-muted">Receita</dt><dd className="num font-semibold">{r0(receita)}</dd></div>
+              <div><dt className="text-fg-muted">Linhas de operação</dt><dd className="num font-semibold">{fmtNum(operacoes)}</dd></div>
+            </dl>
+          </Panel>
+        </div>
+
+        <Panel title="Dia a dia" subtitle="Mais recente primeiro.">
+          <div className="tbl-wrap max-h-[70vh]">
             <table className="tbl tbl-dense">
               <thead>
                 <tr>
-                  <th>Data</th><th>Dia</th><th className="num">Lotes operados</th><th className="num">Lotes zerados</th><th className="num">Clientes</th><th className="num">Operações</th>
-                  <th className="num">Receita (R$)</th><th className="num">Var. vs dia anterior</th><th className="num">Média móvel</th><th className="num">Acumulado</th><th className="num">vs média</th>
+                  <th>Data</th><th className="col-p2">Dia</th><th className="num">Lotes</th><th className="num col-p2">Zerados</th><th className="num col-p2">Clientes</th><th className="num col-p3">Operações</th>
+                  <th className="num">Receita</th><th className="num">Var. dia ant.</th><th className="num col-p3">Média móvel</th><th className="num col-p3">Acumulado</th><th className="num col-p2">vs média</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,16 +148,16 @@ export default async function GiroDiarioPage({ params, searchParams }: { params:
                 {[...serie].reverse().map(d => (
                   <tr key={d.dia}>
                     <td className="num font-medium">{dataCurta(d.dia)}</td>
-                    <td className="muted">{diaSemana(d.dia)}</td>
-                    <td className="num"><BarraCelula valor={d.lotes} max={maxLotes} largura={90} /></td>
-                    <td className={`num ${!d.zerados ? 'subtle' : ''}`}>{n0(d.zerados)}</td>
-                    <td className="num">{n0(d.clientes)}</td>
-                    <td className="num">{n0(d.operacoes)}</td>
+                    <td className="muted col-p2">{diaSemana(d.dia)}</td>
+                    <td className="num"><BarraCelula valor={d.lotes} max={maxLotes} largura={80} /></td>
+                    <td className={cn('num col-p2', !d.zerados && 'subtle')}>{n0(d.zerados)}</td>
+                    <td className="num col-p2">{n0(d.clientes)}</td>
+                    <td className="num col-p3">{n0(d.operacoes)}</td>
                     <td className="num">{r0(d.receita)}</td>
                     <td className="num"><Variacao atual={d.lotes} anterior={d.anteriorLotes} /></td>
-                    <td className="num">{fmtNum(Math.round(d.mm))}</td>
-                    <td className="num muted">{fmtNum(d.acumulado)}</td>
-                    <td className={`num ${d.acimaMedia ? 'text-success' : 'text-danger'}`}>{d.acimaMedia ? '▲' : '▼'}</td>
+                    <td className="num col-p3">{fmtNum(Math.round(d.mm))}</td>
+                    <td className="num muted col-p3">{fmtNum(d.acumulado)}</td>
+                    <td className={cn('num col-p2', d.acimaMedia ? 'text-gain' : 'text-loss')}>{d.acimaMedia ? 'acima' : 'abaixo'}</td>
                   </tr>
                 ))}
               </tbody>

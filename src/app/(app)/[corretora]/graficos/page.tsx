@@ -58,13 +58,16 @@ export default async function GraficosPage({ params, searchParams }: { params: P
   const semanas = Array.from({ length: 12 }, (_, i) => somarDias(iniSemanas, i * 7))
   const acumAntes = migr.find(m => m.dia >= iniSemanas)
   const baseAntes = acumAntes ? acumAntes.acumulado - acumAntes.migrados : (migr.length ? migr[migr.length - 1].acumulado : r.migrados)
-  let acum = baseAntes
-  const porSemana = semanas.map(s => {
+  const acumulados = semanas.reduce<number[]>((acc, s) => {
+    const fimS = somarDias(s, 6)
+    const mig = migr.filter(m => m.dia >= s && m.dia <= fimS).reduce((a, m) => a + m.migrados, 0)
+    acc.push((acc[acc.length - 1] ?? baseAntes) + mig)
+    return acc
+  }, [])
+  const porSemana = semanas.map((s, i) => {
     const fimS = somarDias(s, 6)
     const ms = migr.filter(m => m.dia >= s && m.dia <= fimS)
-    const mig = ms.reduce((a, m) => a + m.migrados, 0)
-    acum += mig
-    return { label: `Sem ${dataCurta(s).slice(0, 5)}`, migrados: mig, entradas: ms.reduce((a, m) => a + m.entradas, 0), acumulado: acum,
+    return { label: `Sem ${dataCurta(s).slice(0, 5)}`, migrados: ms.reduce((a, m) => a + m.migrados, 0), entradas: ms.reduce((a, m) => a + m.entradas, 0), acumulado: acumulados[i],
       lotes: dias.filter(d => d.dia >= s && d.dia <= fimS).reduce((a, d) => a + d.lotes, 0) }
   })
 
@@ -98,62 +101,61 @@ export default async function GraficosPage({ params, searchParams }: { params: P
       <PageHeader
         eyebrow={ctx.eyebrow}
         title="Gráficos"
-        description={`Migração e giro ao longo do tempo. Data de referência ${dataCurta(ref)} (última data com dado, pode ser sobrescrita); janela de 12 meses até ${mesCurto(mesRef)}.`}
+        description={`Migração e giro ao longo do tempo · referência ${dataCurta(ref)} · janela de 12 meses até ${mesCurto(mesRef)}.`}
         actions={<><DataRefPicker valor={ref} /><MesPicker valor={mesRef} label="Janela até" /></>}
       />
       <PageBody>
         <KpiRow cols={7}>
-          <KpiCard label="Base migrada" value={fmtNum(r.migrados)} sub={`${fmtNum(r.levados)} levados · ${fmtPct(r.taxaMigracao, 0)} migraram`} tone="success" />
-          <KpiCard label="Migrados · 30 dias" value={fmtNum(migrados30)} sub={`${fmtNum(entradas30)} entradas no período`} />
-          <KpiCard label="Migrados · 12 semanas" value={fmtNum(migrados12s)} sub={`média de ${(migrados12s / 12).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} por semana`} />
-          <KpiCard label="Lotes · 30 dias" value={fmtNum(lotes30)} sub={`${rCurto(receita30)} receita`} tone="info" />
-          <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)} sub={`${fmtNum(r.recusaram)} recusaram`} tone="warning" />
-          <KpiCard label="Concentração top 5" value={lotes12 ? fmtPct((top5 / lotes12) * 100, 0) : TRACO} sub="dos lotes 12 m em 5 clientes" tone="violet" />
-          <KpiCard label="Sem giro (migrados)" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.inativos)} inativos`} tone="danger" />
+          <KpiCard label="Base migrada" value={fmtNum(r.migrados)} sub={`${fmtNum(r.levados)} levados · ${fmtPct(r.taxaMigracao, 0)}`} />
+          <KpiCard label="Migrados · 30 dias" value={fmtNum(migrados30)} sub={`${fmtNum(entradas30)} entradas`} />
+          <KpiCard label="Migrados · 12 semanas" value={fmtNum(migrados12s)} sub={`${(migrados12s / 12).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} por semana`} />
+          <KpiCard label="Lotes · 30 dias" value={fmtNum(lotes30)} sub={rCurto(receita30)} />
+          <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)} sub={`${fmtNum(r.recusaram)} recusaram`} />
+          <KpiCard label="Concentração top 5" value={lotes12 ? fmtPct((top5 / lotes12) * 100, 0) : TRACO} sub="dos lotes 12 m em 5 clientes" />
+          <KpiCard label="Sem giro" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.inativos)} inativos`} />
         </KpiRow>
 
-        <div className="grid gap-5 xl:grid-cols-2">
-          <Panel title="Clientes migrados e entradas · por dia (últimos 30 dias)">
-            <GraficoSeries dados={porDia} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }]} altura={220} />
+        <Panel title="Lotes girados por semana" subtitle="Últimas 12 semanas.">
+          <GraficoSeries dados={porSemana} series={[{ key: 'lotes', nome: 'Lotes', tipo: 'bar' }]} altura={260} legenda={false} />
+        </Panel>
+
+        <div className="grid gap-8 xl:grid-cols-2">
+          <Panel title="Migrados e entradas por dia" subtitle="Últimos 30 dias.">
+            <GraficoSeries dados={porDia} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }]} altura={200} />
           </Panel>
-          <Panel title="Clientes migrados e entradas · por semana (12 semanas)">
-            <GraficoSeries dados={porSemana} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }, { key: 'acumulado', nome: 'Base migrada acumulada', tipo: 'line', eixo: 'dir' }]} formatoDir="num" altura={220} />
+          <Panel title="Migrados e entradas por semana" subtitle="12 semanas, com a base migrada acumulada.">
+            <GraficoSeries dados={porSemana} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }, { key: 'acumulado', nome: 'Base acumulada', tipo: 'line', eixo: 'dir' }]} formatoDir="num" altura={200} />
           </Panel>
-          <Panel title="Clientes migrados e entradas · por mês (12 meses)">
-            <GraficoSeries dados={porMes} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }]} altura={220} />
+          <Panel title="Migrados e entradas por mês" subtitle="12 meses.">
+            <GraficoSeries dados={porMes} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }]} altura={200} />
           </Panel>
-          <Panel title="Clientes ativos (com giro) · por mês">
-            <GraficoSeries dados={porMes} series={[{ key: 'ativos', nome: 'Clientes ativos', tipo: 'bar', cor: 'success' }]} altura={220} legenda={false} />
+          <Panel title="Clientes ativos por mês" subtitle="Com giro no mês.">
+            <GraficoSeries dados={porMes} series={[{ key: 'ativos', nome: 'Clientes ativos', tipo: 'bar' }]} altura={200} legenda={false} />
           </Panel>
-          <Panel title="Lotes girados por mês · por assessor (Top 8 + Outros)">
-            <GraficoSeries dados={lotesAssessorMes} series={seriesAssessor} altura={260} />
+          <Panel title="Lotes por mês por assessor" subtitle="Top 8 + outros.">
+            <GraficoSeries dados={lotesAssessorMes} series={seriesAssessor} altura={240} />
           </Panel>
-          <Panel title="Receita mensal (R$) · corretagem + zeragem">
-            <GraficoSeries dados={porMes} series={[{ key: 'corretagem', nome: 'Rec. corretagem', tipo: 'bar', empilhar: 'r' }, { key: 'zeragem', nome: 'Rec. zeragem', tipo: 'bar', empilhar: 'r' }]} formato="brl" altura={260} />
+          <Panel title="Receita mensal" subtitle="Corretagem + zeragem.">
+            <GraficoSeries dados={porMes} series={[{ key: 'corretagem', nome: 'Corretagem', tipo: 'bar', empilhar: 'r' }, { key: 'zeragem', nome: 'Zeragem', tipo: 'bar', empilhar: 'r' }]} formato="brl" altura={240} />
           </Panel>
-          <Panel title="Top 10 clientes · lotes 12 meses">
+          <Panel title="Top 10 clientes" subtitle="Lotes em 12 meses.">
             <GraficoBarrasH dados={top10.map(c => ({ nome: nomeCurto(c.cliente_nome, 28), valor: c.lotes }))} larguraRotulo={190} />
           </Panel>
-          <Panel title="Funil da base · status">
+          <Panel title="Funil da base" subtitle="Status dos clientes levados.">
             <GraficoRosca dados={[{ nome: 'Migrado', valor: r.migrados }, { nome: 'Em processamento', valor: r.emProcessamento }, { nome: 'Recusou', valor: r.recusaram }]} />
           </Panel>
-          <Panel title="Mix de plataforma · lotes 12 meses">
+          <Panel title="Mix de plataforma" subtitle="Lotes em 12 meses.">
             <GraficoRosca dados={mix.map(m => ({ nome: m.plataforma, valor: m.lotes }))} />
           </Panel>
-          <Panel title="Lotes girados · por semana (12 semanas)">
-            <GraficoSeries dados={porSemana} series={[{ key: 'lotes', nome: 'Lotes', tipo: 'bar' }]} altura={240} legenda={false} />
+          <Panel title="Leads por mês" subtitle="Recebidos, já clientes, ganhos e perdidos.">
+            <GraficoSeries dados={leadsMes} series={[{ key: 'recebidos', nome: 'Recebidos', tipo: 'bar' }, { key: 'clientes', nome: 'Já clientes', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'perdidos', nome: 'Perdidos', tipo: 'bar', cor: 'loss' }]} altura={240} />
           </Panel>
-          <Panel title="Leads · recebidos, já clientes, ganhos e perdidos · por mês">
-            <GraficoSeries dados={leadsMes} series={[{ key: 'recebidos', nome: 'Leads recebidos', tipo: 'bar' }, { key: 'clientes', nome: 'Já clientes', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'success' }, { key: 'perdidos', nome: 'Perdidos', tipo: 'bar', cor: 'danger' }]} altura={240} />
+          <Panel title="Leads por corretora onde já operam">
+            <GraficoBarrasH dados={porCorretora.map(x => ({ nome: x.grupo, valor: x.leads }))} larguraRotulo={110} />
           </Panel>
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-            <Panel title="Leads · por corretora onde já opera">
-              <GraficoBarrasH dados={porCorretora.map(x => ({ nome: x.grupo, valor: x.leads }))} larguraRotulo={110} />
-            </Panel>
-            <Panel title="Leads · funil por status">
-              <GraficoBarrasH dados={porStatus.map(x => ({ nome: x.grupo, valor: x.leads }))} larguraRotulo={110} cor="success" />
-            </Panel>
-          </div>
+          <Panel title="Leads por status">
+            <GraficoBarrasH dados={porStatus.map(x => ({ nome: x.grupo, valor: x.leads }))} larguraRotulo={110} />
+          </Panel>
         </div>
       </PageBody>
     </>

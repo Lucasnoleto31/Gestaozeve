@@ -4,12 +4,13 @@ import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { assessoresMensal, assessoresResumo, parametrosDaCorretora, topClientes } from '@/lib/gestao/consultas'
 import { janelaMeses, limitesDoMes, mesCurto, mesLongo } from '@/lib/gestao/meses'
-import { fmtNum, fmtPct, fmtDelta } from '@/lib/format'
+import { fmtNum, fmtPct } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { MesPicker, SelectParam } from '@/components/gestao/Filtros'
-import { BarraCelula, CelulaCalor, LinhaVazia, Secao, TRACO, Variacao, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
+import { BarraCelula, CelulaCalor, LinhaVazia, TRACO, Variacao, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import type { TopClienteRow } from '@/lib/gestao/tipos'
 
 export default async function AssessoresPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
@@ -48,35 +49,34 @@ export default async function AssessoresPage({ params, searchParams }: { params:
   const maxLotesMes = Math.max(0, ...mensal.map(m => m.lotes))
   const maxReceitaMes = Math.max(0, ...mensal.map(m => m.receita))
   const opcoesAssessor = [...new Set([...resumo.map(a => a.assessor_nome), ...par.assessores.map(a => a.nome)])].sort().map(n => ({ valor: n, label: n }))
+  const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
 
   return (
     <>
       <PageHeader
         eyebrow={ctx.eyebrow}
-        title={`Assessores · ${ctx.label}`}
-        description={`Visão por assessor: lotes, receita e clientes, tudo calculado dos lotes importados. Mês de referência ${mesLongo(mesRef)}; janela de 12 meses de ${mesCurto(meses[0])} a ${mesCurto(mesRef)}.`}
-        actions={<><SelectParam param="assessor" valor={assessorSel} opcoes={opcoesAssessor} label="Assessor (rankings)" todos="Todos" /><MesPicker valor={mesRef} /></>}
+        title="Assessores"
+        description={`Lotes, receita e clientes por assessor · ${mesLongo(mesRef)} e janela de ${mesCurto(meses[0])} a ${mesCurto(mesRef)}.`}
+        actions={<><SelectParam param="assessor" valor={assessorSel} opcoes={opcoesAssessor} label="Rankings" todos="Todos os assessores" /><MesPicker valor={mesRef} /></>}
       />
       <PageBody>
-        <KpiRow cols={7}>
-          <KpiCard label="Lotes operados no mês" value={fmtNum(totalLotes)} />
-          <KpiCard label="Receita total no mês" value={rCurto(totalReceita)} tone="success" />
-          <KpiCard label="Clientes ativos no mês" value={fmtNum(clientesAtivos)} sub="soma por assessor" tone="violet" />
-          <KpiCard label="Assessores com giro" value={`${comGiro} de ${cadastrados}`} sub="cadastrados em Parâmetros" tone="info" />
-          <KpiCard label="Lotes · 12 meses" value={fmtNum(lotes12)} tone="neutral" />
-          <KpiCard label="Receita · 12 meses" value={rCurto(receita12)} tone="neutral" />
-          <KpiCard label="Lotes vs mês anterior" value={totalAnterior ? fmtDelta(((totalLotes - totalAnterior) / totalAnterior) * 100) : TRACO} sub={`anterior: ${fmtNum(totalAnterior)}`} tone={totalLotes >= totalAnterior ? 'success' : 'danger'} />
+        <KpiRow cols={6}>
+          <KpiCard label="Lotes no mês" value={fmtNum(totalLotes)} delta={{ atual: totalLotes, anterior: totalAnterior, rotulo: 'vs mês anterior', fmt: fmtNum }} />
+          <KpiCard label="Receita no mês" value={rCurto(totalReceita)} />
+          <KpiCard label="Clientes ativos" value={fmtNum(clientesAtivos)} sub="soma por assessor" />
+          <KpiCard label="Assessores com giro" value={`${comGiro} de ${cadastrados}`} sub="cadastrados em Parâmetros" />
+          <KpiCard label="Lotes 12 meses" value={fmtNum(lotes12)} />
+          <KpiCard label="Receita 12 meses" value={rCurto(receita12)} />
         </KpiRow>
 
-        <Panel flush>
-          <div className="px-5 pt-4"><Secao numero={1} titulo="Resumo por assessor · mês de referência" descricao="Ordenado do maior para o menor giro no mês. Mesma ordem nas seções 2 e 3." /></div>
-          <div className="tbl-wrap rounded-none border-0 border-t border-line">
+        <Panel title="Resumo por assessor" subtitle="Mês de referência · do maior para o menor giro.">
+          <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>
                 <tr>
-                  <th>Assessor</th><th>Resp.</th><th className="num">Clientes ativos</th><th className="num">Lotes operados</th><th className="num">Lotes zerados</th>
-                  <th className="num">Rec. corretagem</th><th className="num">Rec. zeragem</th><th className="num">Receita total</th><th className="num">% dos lotes</th>
-                  <th className="num">Lotes / cliente</th><th className="num">Tarifa (R$/lote)</th><th className="num">Lotes · 12 m</th><th className="num">Receita · 12 m</th><th className="num">Var. lotes vs mês ant.</th>
+                  <th>Assessor</th><th className="col-p3">Resp.</th><th className="num col-p2">Clientes ativos</th><th className="num">Lotes</th><th className="num col-p2">Zerados</th>
+                  <th className="num col-p3">Rec. corretagem</th><th className="num col-p3">Rec. zeragem</th><th className="num">Receita</th><th className="num col-p2">% dos lotes</th>
+                  <th className="num col-p3">Lotes / cliente</th><th className="num col-p3">Tarifa</th><th className="num col-p2">Lotes 12 m</th><th className="num col-p3">Receita 12 m</th><th className="num col-p2">Var. mês ant.</th>
                 </tr>
               </thead>
               <tbody>
@@ -84,19 +84,19 @@ export default async function AssessoresPage({ params, searchParams }: { params:
                 {resumo.map(a => (
                   <tr key={a.assessor_nome}>
                     <td className="font-medium"><Link href={`${base}/assessores?assessor=${encodeURIComponent(a.assessor_nome)}&mes=${mesRef.slice(0, 7)}`} className="link">{a.assessor_nome}</Link></td>
-                    <td className="muted">{a.responsavel ?? TRACO}</td>
-                    <td className="num">{n0(a.clientes_ativos)}</td>
-                    <td className="num"><BarraCelula valor={a.lotes} max={resumo[0]?.lotes ?? 0} tom="success" largura={80} /></td>
-                    <td className={`num ${!a.zerados ? 'subtle' : ''}`}>{n0(a.zerados)}</td>
-                    <td className="num">{r0(a.receita_corretagem)}</td>
-                    <td className={`num ${!a.receita_zeragem ? 'subtle' : ''}`}>{r0(a.receita_zeragem)}</td>
+                    <td className="muted col-p3">{a.responsavel ?? TRACO}</td>
+                    <td className="num col-p2">{n0(a.clientes_ativos)}</td>
+                    <td className="num"><BarraCelula valor={a.lotes} max={resumo[0]?.lotes ?? 0} largura={80} /></td>
+                    <td className={cn('num col-p2', !a.zerados && 'subtle')}>{n0(a.zerados)}</td>
+                    <td className="num col-p3">{r0(a.receita_corretagem)}</td>
+                    <td className={cn('num col-p3', !a.receita_zeragem && 'subtle')}>{r0(a.receita_zeragem)}</td>
                     <td className="num font-semibold">{r0(a.receita)}</td>
-                    <td className="num">{totalLotes ? fmtPct((a.lotes / totalLotes) * 100) : TRACO}</td>
-                    <td className="num">{a.clientes_ativos ? n2(Math.round((a.lotes / a.clientes_ativos) * 10) / 10) : TRACO}</td>
-                    <td className="num">{a.tarifa == null ? <span className="text-warning" title="Assessor não cadastrado em Parâmetros">?</span> : n2(a.tarifa)}{a.tipo_zeragem === 'FIXA' ? <span className="ml-1 text-[10px] text-fg-subtle">fixa</span> : ''}</td>
-                    <td className="num">{n0(a.lotes_12m)}</td>
-                    <td className="num">{r0(a.receita_12m)}</td>
-                    <td className="num"><Variacao atual={a.lotes} anterior={a.lotes_mes_anterior} /></td>
+                    <td className="num col-p2">{totalLotes ? fmtPct((a.lotes / totalLotes) * 100) : TRACO}</td>
+                    <td className="num col-p3">{a.clientes_ativos ? n2(Math.round((a.lotes / a.clientes_ativos) * 10) / 10) : TRACO}</td>
+                    <td className="num col-p3">{a.tarifa == null ? <span className="text-warn" title="Assessor não cadastrado em Parâmetros">?</span> : n2(a.tarifa)}{a.tipo_zeragem === 'FIXA' ? <span className="ml-1 text-micro text-fg-subtle">fixa</span> : ''}</td>
+                    <td className="num col-p2">{n0(a.lotes_12m)}</td>
+                    <td className="num col-p3">{r0(a.receita_12m)}</td>
+                    <td className="num col-p2"><Variacao atual={a.lotes} anterior={a.lotes_mes_anterior} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -104,19 +104,18 @@ export default async function AssessoresPage({ params, searchParams }: { params:
           </div>
         </Panel>
 
-        <Panel flush>
-          <div className="px-5 pt-4"><Secao numero={2} titulo="Giro mensal por assessor · lotes operados (últimos 12 meses)" descricao="Mapa de calor: quanto mais verde, maior o giro. O último mês pode estar parcial." /></div>
-          <div className="tbl-wrap rounded-none border-0 border-t border-line">
+        <Panel title="Giro mensal por assessor" subtitle="Lotes operados nos últimos 12 meses · o último mês pode estar parcial.">
+          <div className="tbl-wrap">
             <table className="tbl tbl-dense">
-              <thead><tr><th className="sticky-col">Assessor</th>{meses.map(m => <th key={m} className={`num ${m === mesRef ? 'text-accent' : ''}`}>{mesCurto(m)}</th>)}<th className="num">Total</th></tr></thead>
+              <thead><tr><th className="sticky-col">Assessor</th>{meses.map((m, i) => <th key={m} className={cn('num', colMes(i), m === mesRef && 'text-fg')}>{mesCurto(m)}</th>)}<th className="num">Total</th></tr></thead>
               <tbody>
                 {ordem.map(nome => {
                   const linha = porAssessorMes.get(nome)
                   const total = meses.reduce((s, m) => s + (linha?.get(m)?.lotes ?? 0), 0)
                   return (
                     <tr key={nome}>
-                      <td className="sticky-col font-medium">{nome}</td>
-                      {meses.map(m => <CelulaCalor key={m} valor={linha?.get(m)?.lotes ?? 0} max={maxLotesMes} />)}
+                      <td className="sticky-col max-w-[200px] truncate font-medium">{nome}</td>
+                      {meses.map((m, i) => <CelulaCalor key={m} valor={linha?.get(m)?.lotes ?? 0} max={maxLotesMes} className={colMes(i)} />)}
                       <td className="num font-semibold">{n0(total)}</td>
                     </tr>
                   )
@@ -126,19 +125,18 @@ export default async function AssessoresPage({ params, searchParams }: { params:
           </div>
         </Panel>
 
-        <Panel flush>
-          <div className="px-5 pt-4"><Secao numero={3} titulo="Receita mensal por assessor · corretagem + zeragem (R$)" descricao="Mesma ordem e meses da seção 2." /></div>
-          <div className="tbl-wrap rounded-none border-0 border-t border-line">
+        <Panel title="Receita mensal por assessor" subtitle="Corretagem + zeragem · mesma ordem e meses.">
+          <div className="tbl-wrap">
             <table className="tbl tbl-dense">
-              <thead><tr><th className="sticky-col">Assessor</th>{meses.map(m => <th key={m} className={`num ${m === mesRef ? 'text-accent' : ''}`}>{mesCurto(m)}</th>)}<th className="num">Total</th></tr></thead>
+              <thead><tr><th className="sticky-col">Assessor</th>{meses.map((m, i) => <th key={m} className={cn('num', colMes(i), m === mesRef && 'text-fg')}>{mesCurto(m)}</th>)}<th className="num">Total</th></tr></thead>
               <tbody>
                 {ordem.map(nome => {
                   const linha = porAssessorMes.get(nome)
                   const total = meses.reduce((s, m) => s + (linha?.get(m)?.receita ?? 0), 0)
                   return (
                     <tr key={nome}>
-                      <td className="sticky-col font-medium">{nome}</td>
-                      {meses.map(m => <CelulaCalor key={m} valor={linha?.get(m)?.receita ?? 0} max={maxReceitaMes} tom="accent" fmt={rCurto} />)}
+                      <td className="sticky-col max-w-[200px] truncate font-medium">{nome}</td>
+                      {meses.map((m, i) => <CelulaCalor key={m} valor={linha?.get(m)?.receita ?? 0} max={maxReceitaMes} tom="accent" fmt={rCurto} className={colMes(i)} />)}
                       <td className="num font-semibold">{rCurto(total)}</td>
                     </tr>
                   )
@@ -148,11 +146,10 @@ export default async function AssessoresPage({ params, searchParams }: { params:
           </div>
         </Panel>
 
-        <Panel>
-          <Secao numero={4} titulo="Maiores clientes (Top 20)" descricao={`Respeita o filtro de assessor (${assessorSel || 'todos'}). Esquerda: mês de referência · direita: últimos 12 meses.`} />
-          <div className="grid gap-5 2xl:grid-cols-2">
-            <TabelaTop base={base} titulo={`Mês ${mesCurto(mesRef)} · assessor: ${assessorSel || 'todos'}`} dados={topMes} />
-            <TabelaTop base={base} titulo={`12 meses (${mesCurto(meses[0])} a ${mesCurto(mesRef)}) · assessor: ${assessorSel || 'todos'}`} dados={top12} />
+        <Panel title="Maiores clientes" subtitle={`Top 20 · ${assessorSel || 'todos os assessores'}`}>
+          <div className="grid gap-8 2xl:grid-cols-2">
+            <TabelaTop base={base} titulo={`Mês ${mesCurto(mesRef)}`} dados={topMes} />
+            <TabelaTop base={base} titulo={`12 meses · ${mesCurto(meses[0])} a ${mesCurto(mesRef)}`} dados={top12} />
           </div>
         </Panel>
       </PageBody>
@@ -162,21 +159,21 @@ export default async function AssessoresPage({ params, searchParams }: { params:
 
 function TabelaTop({ titulo, dados, base }: { titulo: string; dados: TopClienteRow[]; base: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="label mb-2">{titulo}</p>
       <div className="tbl-wrap">
         <table className="tbl tbl-dense">
-          <thead><tr><th className="num">#</th><th>Cliente</th><th>Assessor</th><th className="num">Lotes operados</th><th className="num">Lotes zerados</th><th className="num">Receita (R$)</th><th className="num">% dos lotes</th></tr></thead>
+          <thead><tr><th className="num">#</th><th>Cliente</th><th className="col-p2">Assessor</th><th className="num">Lotes</th><th className="num col-p3">Zerados</th><th className="num col-p2">Receita</th><th className="num">% lotes</th></tr></thead>
           <tbody>
             {dados.length === 0 && <LinhaVazia colunas={7}>Sem lotes.</LinhaVazia>}
             {dados.map((c, i) => (
               <tr key={`${c.cliente_id ?? c.cliente_nome}-${i}`}>
                 <td className="num muted">{i + 1}</td>
-                <td className="max-w-[220px] truncate">{c.cliente_id ? <Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.cliente_nome}</Link> : <span className="text-warning">{c.cliente_nome}</span>}</td>
-                <td className="max-w-[160px] truncate muted">{c.assessor_nome ?? TRACO}</td>
-                <td className="num"><BarraCelula valor={c.lotes} max={dados[0]?.lotes ?? 0} tom="success" largura={64} /></td>
-                <td className={`num ${!c.zerados ? 'subtle' : ''}`}>{n0(c.zerados)}</td>
-                <td className="num">{r0(c.receita)}</td>
+                <td className="max-w-[220px] truncate">{c.cliente_id ? <Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.cliente_nome}</Link> : <span className="text-warn" title="Conta não cadastrada">{c.cliente_nome}</span>}</td>
+                <td className="max-w-[160px] truncate muted col-p2">{c.assessor_nome ?? TRACO}</td>
+                <td className="num"><BarraCelula valor={c.lotes} max={dados[0]?.lotes ?? 0} largura={64} /></td>
+                <td className={cn('num col-p3', !c.zerados && 'subtle')}>{n0(c.zerados)}</td>
+                <td className="num col-p2">{r0(c.receita)}</td>
                 <td className="num">{fmtPct(c.pct_lotes)}</td>
               </tr>
             ))}

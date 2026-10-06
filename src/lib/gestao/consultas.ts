@@ -64,7 +64,7 @@ export async function clientesLista(corretora: Corretora, mesRef: string | null)
 
 export async function clienteFicha(corretora: Corretora, clienteId: string, mesRef: string | null) {
   const { db } = await equipe()
-  const [lista, cad, contas, mensal, tarifas, extrato, porAtivo] = await Promise.all([
+  const [lista, cad, contas, mensal, tarifas, extrato, porAtivo, manualRes] = await Promise.all([
     rpc(db, 'clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef, p_cliente_id: clienteId }),
     db.from('clientes').select('*').eq('id', clienteId).maybeSingle(),
     rpc(db, 'cliente_contas', { p_corretora: corretora, p_cliente_id: clienteId }),
@@ -72,9 +72,13 @@ export async function clienteFicha(corretora: Corretora, clienteId: string, mesR
     db.from('tarifas_cliente').select('id, vigencia, corretagem, observacao').eq('corretora', corretora).eq('cliente_id', clienteId).order('vigencia', { ascending: false }),
     rpc(db, 'cliente_extrato', { p_corretora: corretora, p_cliente_id: clienteId, p_limit: 400 }),
     rpc(db, 'cliente_por_ativo', { p_corretora: corretora, p_cliente_id: clienteId }),
+    // campos manuais que a ficha edita (status manual, responsável, data de migração)
+    db.from('cliente_corretora').select('status, responsavel, data_migracao').eq('cliente_id', clienteId).eq('corretora', corretora).maybeSingle(),
   ])
   if (cad.error) falha(cad.error, 'clientes')
   if (tarifas.error) falha(tarifas.error, 'tarifas_cliente')
+  if (manualRes.error) falha(manualRes.error, 'cliente_corretora')
+  const manualRow = manualRes.data as Row | null
   const c = cad.data as Row | null
   const cadastro: ClienteCadastro | null = c ? {
     id: String(c.id), nome: String(c.nome ?? ''), documento: str(c.documento), tipo_pessoa: str(c.tipo_pessoa), sexo: str(c.sexo),
@@ -86,6 +90,7 @@ export async function clienteFicha(corretora: Corretora, clienteId: string, mesR
   return {
     resumo: lista.length ? mapCliente(lista[0]) : null,
     cadastro,
+    manual: { status: str(manualRow?.status), responsavel: str(manualRow?.responsavel), data_migracao: str(manualRow?.data_migracao) },
     contas: linhas<ContaRow>(contas, r => ({
       conta_id: String(r.conta_id), conta: String(r.conta ?? ''), conta_digito: str(r.conta_digito), situacao_conta: str(r.situacao_conta),
       status: (str(r.status) ?? 'Em processamento') as ContaRow['status'], assessor_nome: str(r.assessor_nome), filial: str(r.filial),

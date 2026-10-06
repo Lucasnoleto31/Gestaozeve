@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AlertTriangle, ArrowLeft, Check, Info, MessageCircle } from 'lucide-react'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { clienteFicha, clientesLista } from '@/lib/gestao/consultas'
+import { clienteFicha, clientesLista, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { getProfile } from '@/lib/auth/getProfile'
 import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -34,7 +34,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   const { id } = await params
   if (!id) notFound()
   const { corretora, mesRef, base } = ctx
-  const [profile, ficha, todos] = await Promise.all([getProfile(), clienteFicha(corretora, id, mesRef), clientesLista(corretora, mesRef)])
+  const [profile, ficha, todos, responsaveis] = await Promise.all([getProfile(), clienteFicha(corretora, id, mesRef), clientesLista(corretora, mesRef), responsaveisAtivos()])
   const { resumo, cadastro, contas, mensal, tarifas, extrato, porAtivo } = ficha
   if (!cadastro) notFound()
   const admin = profile?.role === 'admin'
@@ -106,7 +106,13 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {whatsapp && <a href={whatsapp} target="_blank" rel="noreferrer" className={buttonClasses('secondary', 'sm')}><MessageCircle className="h-4 w-4" aria-hidden />WhatsApp</a>}
-              <FichaEditavel corretora={corretora} clienteId={id} admin={admin} cadastro={cadastro} manuais={{ data_entrada: resumo?.data_entrada ?? null, parceiro: resumo?.parceiro ?? null, observacoes: resumo?.observacoes ?? null, motivo_recusa: resumo?.motivo_recusa ?? null }} />
+              <FichaEditavel
+                corretora={corretora} clienteId={id} admin={admin} cadastro={cadastro}
+                manuais={{ data_entrada: resumo?.data_entrada ?? null, parceiro: resumo?.parceiro ?? null, observacoes: resumo?.observacoes ?? null, motivo_recusa: resumo?.motivo_recusa ?? null }}
+                manual={ficha.manual}
+                responsaveis={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
+                statusAutomatico={ficha.manual.status ? null : (resumo?.status ?? null)}
+              />
             </div>
           </div>
 

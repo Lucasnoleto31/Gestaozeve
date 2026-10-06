@@ -164,17 +164,45 @@ export async function importarLeads(nomeArquivo: string, linhas: LeadImport[]) {
 }
 
 // ── Cliente: campos manuais, tarifas, cadastro ─────────────────────────────
-export async function salvarCamposCliente(corretoraIn: string, clienteId: string, campos: { data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null }) {
+// Campos manuais do cliente na corretora. Status manual vale sobre o status da conta
+// (vazio = automático); responsável muda também o "assessor" dos lotes que herdaram o anterior.
+export async function salvarCamposCliente(corretoraIn: string, clienteId: string, campos: {
+  data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null
+  status?: string | null; responsavel?: string | null; data_migracao?: string | null
+}) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
     const { db } = await equipe()
-    const limpo = (v: string | null) => (v && v.trim() !== '' ? v.trim() : null)
+    const limpo = (v: string | null | undefined) => (v && v.trim() !== '' ? v.trim() : null)
+    const status = limpo(campos.status)
+    if (status && !['Migrado', 'Em processamento', 'Recusou'].includes(status)) throw new Error('Status inválido')
+    const dataMigracao = limpo(campos.data_migracao)
+    if (dataMigracao && !/^\d{4}-\d{2}-\d{2}$/.test(dataMigracao)) throw new Error('Data de migração inválida')
+    const responsavel = limpo(campos.responsavel)
+
+    const { data: atual } = await db.from('cliente_corretora').select('responsavel').eq('cliente_id', clienteId).eq('corretora', corretora).maybeSingle()
+    const responsavelAntigo = ((atual as Row | null)?.responsavel as string | null) ?? null
+
     const { error } = await db.from('cliente_corretora').upsert({
       cliente_id: clienteId, corretora,
       data_entrada: limpo(campos.data_entrada), parceiro: limpo(campos.parceiro), observacoes: limpo(campos.observacoes), motivo_recusa: limpo(campos.motivo_recusa),
+      status, responsavel, data_migracao: dataMigracao,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'cliente_id,corretora' })
     if (error) falha(error, 'cliente_corretora')
+
+    // Lotes sem assessor da corretora (BTG) seguem o responsável: troca quem herdou o antigo
+    if (responsavel && responsavel !== responsavelAntigo) {
+      const novo = { assessor_nome: responsavel, assessor_norm: normTexto(responsavel) }
+      const base = () => db.from('lotes').update(novo).eq('corretora', corretora).eq('cliente_id', clienteId)
+      const r1 = await base().is('assessor_nome', null)
+      if (r1.error) falha(r1.error, 'lotes')
+      if (responsavelAntigo) {
+        const r2 = await base().eq('assessor_nome', responsavelAntigo)
+        if (r2.error) falha(r2.error, 'lotes')
+      }
+      await recalcular(db, corretora)
+    }
     revalidarCorretora(corretora)
     return { ok: true }
   })

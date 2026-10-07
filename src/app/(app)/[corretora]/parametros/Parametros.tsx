@@ -66,7 +66,9 @@ export function Parametros({ corretora, label, dados }: { corretora: Corretora; 
 function SecaoGerais({ corretora, label, parametros, gerais }: { corretora: Corretora; label: string; parametros: Dados['parametros']; gerais: Dados['gerais'] }) {
   const { erro, rodar } = useAcao()
   const campos = [
-    { corr: corretora as string, chave: 'zeragem_padrao', label: 'ZeragemRS — R$ por contrato zerado (assessores com zeragem padrão)', tipo: 'numero' },
+    { corr: corretora as string, chave: 'zeragem_padrao', label: 'ZeragemRS — R$ por contrato zerado (assessores com zeragem padrão, quando não há tabela regressiva)', tipo: 'numero' },
+    { corr: corretora as string, chave: 'zeragem_faixas', label: 'Zeragem regressiva — "contratos operados no mês:R$ por contrato zerado; …" pelo maior volume do cliente entre o mês anterior e o vigente (vazio = usa ZeragemRS)', tipo: 'texto' },
+    { corr: corretora as string, chave: 'zeragem_faixas_desde', label: 'Zeragem regressiva — vale a partir de (dd/mm/aaaa; vazio = todo o histórico)', tipo: 'texto' },
     { corr: corretora as string, chave: 'meses_inativo', label: 'MesesInativo — meses sem giro para o cliente virar inativo', tipo: 'numero' },
     { corr: corretora as string, chave: 'modo_zeragem', label: 'ModoZeragem — texto no campo MODO que marca a linha como zeragem', tipo: 'texto' },
     { corr: corretora as string, chave: 'modelo_incentivo', label: 'Modelo do incentivo — PONTOS (faixas por pontos) ou ATP (metas de comissão acumulada, BTG)', tipo: 'modelo' },

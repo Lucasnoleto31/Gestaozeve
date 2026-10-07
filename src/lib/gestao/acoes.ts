@@ -592,6 +592,16 @@ function validarParametro(chave: string, valor: string): string {
     case 'repasse_faixas':
       if (v && lerFaixas(v).length === 0) throw new Error('Faixas no formato "a partir de:%; …", ex.: 0:75;100000:80;250000:85')
       return v
+    case 'zeragem_faixas':
+      // mesmo formato "a partir de:valor; …" das faixas de repasse (contratos operados no mês:R$ por contrato zerado)
+      if (v && lerFaixas(v).length === 0) throw new Error('Faixas no formato "contratos no mês:R$; …", ex.: 1:24,50;20:23,25;500:22;1000:20,75;5000:19,50')
+      return v
+    case 'zeragem_faixas_desde': {
+      if (!v) return ''
+      const d = dataBR(v)
+      if (!d) throw new Error('Data no formato dd/mm/aaaa (ou deixe vazio para todo o histórico)')
+      return d
+    }
     case 'participacoes':
       if (v && lerParticipacoes(v).length === 0) throw new Error('Participações no formato "nome:%; …", ex.: Lucas:50;Artur:50')
       return v

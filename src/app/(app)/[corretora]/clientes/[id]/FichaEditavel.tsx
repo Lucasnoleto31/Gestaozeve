@@ -8,14 +8,14 @@ import { Modal } from '@/components/ui/Modal'
 import { Alert } from '@/components/ui/Alert'
 import { Field, Input, Select } from '@/components/ui/Input'
 import { salvarCadastroCliente, salvarCamposCliente } from '@/lib/gestao/acoes'
-import { temListaPropria, termosDaCorretora, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_LABEL, temListaPropria, termosDaCorretora, type Corretora } from '@/lib/corretoras'
 import type { ClienteCadastro } from '@/lib/gestao/tipos'
 
 type Manuais = { data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null }
-// Status manual (vazio = automático), responsável interno e data de migração manual
-type Manual = { status: string | null; responsavel: string | null; data_migracao: string | null }
+// Status manual (vazio = automático), responsável interno, assessor informado à mão e data de migração manual
+type Manual = { status: string | null; responsavel: string | null; assessor: string | null; data_migracao: string | null }
 
-export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, responsaveis, statusAutomatico, abrirInicial = false }: {
+export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, responsaveis, assessores, statusAutomatico, temConta, abrirInicial = false }: {
   corretora: Corretora
   clienteId: string
   admin: boolean
@@ -23,7 +23,9 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   manuais: Manuais
   manual: Manual
   responsaveis: string[]
+  assessores: string[]              // assessores cadastrados na corretora
   statusAutomatico: string | null   // status que vale quando não há manual (pela conta da corretora)
+  temConta: boolean                 // com conta no export, o assessor vem de lá
   abrirInicial?: boolean            // abre já editando (link "editar" da lista, ?editar=1)
 }) {
   const router = useRouter()
@@ -34,10 +36,11 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   const [erro, setErro] = useState<string | null>(null)
   const [m, setM] = useState({
     data_entrada: manuais.data_entrada ?? '', parceiro: manuais.parceiro ?? '', observacoes: manuais.observacoes ?? '', motivo_recusa: manuais.motivo_recusa ?? '',
-    status: manual.status ?? '', responsavel: manual.responsavel ?? '', data_migracao: manual.data_migracao ?? '',
+    status: manual.status ?? '', responsavel: manual.responsavel ?? '', assessor: manual.assessor ?? '', data_migracao: manual.data_migracao ?? '',
   })
   const [c, setC] = useState({ nome: cadastro.nome, documento: cadastro.documento ?? '', telefone: cadastro.telefone ?? '', email: cadastro.email ?? '' })
   const opcoesResponsavel = [...new Set([...responsaveis, ...(manual.responsavel ? [manual.responsavel] : [])])]
+  const opcoesAssessor = [...new Set([...assessores, ...(manual.assessor ? [manual.assessor] : [])])]
 
   // Ao fechar, tira o ?editar=1 da URL para não reabrir numa atualização
   const fechar = () => {
@@ -50,6 +53,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
     const r1 = await salvarCamposCliente(corretora, clienteId, {
       data_entrada: m.data_entrada || null, parceiro: m.parceiro, observacoes: m.observacoes, motivo_recusa: m.motivo_recusa,
       status: m.status || null, responsavel: m.responsavel || null, data_migracao: m.data_migracao || null,
+      ...(listaPropria ? {} : { assessor: m.assessor || null }),
     })
     if (!r1.ok) { setErro(r1.erro); setSalvando(false); return }
     if (admin) {
@@ -81,6 +85,13 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
               <option value="">—</option>
               {opcoesResponsavel.map(r => <option key={r} value={r}>{r}</option>)}
             </Select>
+            {!listaPropria && (
+              <Select label={`Assessor na ${CORRETORA_LABEL[corretora]}`} value={m.assessor} onChange={e => setM({ ...m, assessor: e.target.value })}
+                hint={temConta ? 'A conta no export já define o assessor; este só vale sem conta' : 'Vale até a conta aparecer no export'}>
+                <option value="">—</option>
+                {opcoesAssessor.map(a => <option key={a} value={a}>{a}</option>)}
+              </Select>
+            )}
             <Input label="Data de migração" type="date" value={m.data_migracao} onChange={e => setM({ ...m, data_migracao: e.target.value })} hint="Só conta com status Migrado" />
             <Input label="Data de entrada" type="date" value={m.data_entrada} onChange={e => setM({ ...m, data_entrada: e.target.value })} hint="Quando o cliente foi levado para a corretora" />
             <Input label="Parceiro" value={m.parceiro} onChange={e => setM({ ...m, parceiro: e.target.value })} placeholder="Direto, Aikon…" />

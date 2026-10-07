@@ -3,8 +3,10 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { leadsLista, parametroGeral, responsaveisAtivos, statusLeadLista } from '@/lib/gestao/consultas'
+import { assessoresPorCorretora, leadsLista, parametroGeral, responsaveisAtivos, statusLeadLista } from '@/lib/gestao/consultas'
 import { mesAtual } from '@/lib/gestao/meses'
+import { fmtDate, hojeBrasil } from '@/lib/periodo'
+import { corretorasDoPerfil } from '@/lib/corretoras'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
@@ -16,7 +18,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const profile = await getProfile()
   if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor')) redirect('/dashboard')
   const sp = await searchParams
-  const [leads, responsaveis, status, diasAlerta] = await Promise.all([leadsLista(), responsaveisAtivos(), statusLeadLista(), parametroGeral('dias_alerta_lead', '7')])
+  const [leads, responsaveis, status, diasAlerta, assessores] = await Promise.all([
+    leadsLista(), responsaveisAtivos(), statusLeadLista(), parametroGeral('dias_alerta_lead', '7'), assessoresPorCorretora(),
+  ])
 
   const mes = mesAtual().slice(0, 7)
   const nesteMes = leads.filter(l => l.data_hora.slice(0, 7) === mes).length
@@ -56,8 +60,12 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         <TabelaLeads
           leads={leads}
           responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)}
+          responsaveisClientes={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
           status={status}
           admin={profile.role === 'admin'}
+          corretoras={corretorasDoPerfil(profile)}
+          assessores={assessores}
+          hoje={fmtDate(hojeBrasil())}
           filtrosIniciais={{ busca: f('busca'), status: f('status'), responsavel: f('responsavel'), origem: f('origem'), corretora: f('corretora'), alerta: f('alerta') === '1', clientes: f('clientes') }}
         />
       </PageBody>

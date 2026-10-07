@@ -19,7 +19,7 @@ type Ordem = { col: keyof ClienteRow; dir: 'asc' | 'desc' }
 const SITUACOES = ['Ativo', 'Inativo', 'Nunca girou', 'Em processamento', 'Recusou']
 const STATUS = ['Migrado', 'Em processamento', 'Recusou']
 
-export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais, corretora, comAcoes = false }: { clientes: ClienteRow[]; base: string; mesRef: MesRef; filtrosIniciais: Filtros; corretora: Corretora; comAcoes?: boolean }) {
+export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais, corretora, comAcoes = false, podeExcluir = false }: { clientes: ClienteRow[]; base: string; mesRef: MesRef; filtrosIniciais: Filtros; corretora: Corretora; comAcoes?: boolean; podeExcluir?: boolean }) {
   const [f, setF] = useState<Filtros>(filtrosIniciais)
   const [ordem, setOrdem] = useState<Ordem>({ col: 'lotes_12m', dir: 'desc' })
   const [limite, setLimite] = useState(100)
@@ -171,7 +171,7 @@ export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais, corret
                       <Link href={`${base}/clientes/${c.cliente_id}?editar=1`} className="icon-btn inline-flex h-8 w-8 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-3 hover:text-fg" title="Editar cliente" aria-label={`Editar ${c.nome}`}>
                         <Pencil className="h-4 w-4" aria-hidden />
                       </Link>
-                      <ExcluirClienteButton corretora={corretora} clienteId={c.cliente_id} nome={c.nome} base={base} />
+                      {podeExcluir && <ExcluirClienteButton corretora={corretora} clienteId={c.cliente_id} nome={c.nome} base={base} />}
                     </div>
                   </td>
                 )}

@@ -3,26 +3,34 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PhoneCall, Search } from 'lucide-react'
+import { PhoneCall, Search, Trophy, XCircle } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
-import { IconButton } from '@/components/ui/Button'
+import { Button, IconButton } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
+import { Alert } from '@/components/ui/Alert'
+import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { StatusLeadBadge, TRACO, dataCurta, n0 } from '@/components/gestao/Celulas'
-import { registrarContatoLead } from '@/lib/gestao/acoes'
-import type { LeadRow, StatusLead } from '@/lib/gestao/tipos'
-import { CORRETORA_SLUG, isCorretora } from '@/lib/corretoras'
+import { marcarLeadPerdido, registrarContatoLead } from '@/lib/gestao/acoes'
+import type { AssessoresPorCorretora, LeadRow, StatusLead } from '@/lib/gestao/tipos'
+import { CORRETORA_SLUG, isCorretora, type Corretora } from '@/lib/corretoras'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { LeadForm } from './LeadForm'
+import { GanhoWizard } from './GanhoWizard'
 
 type Filtros = { busca: string; status: string; responsavel: string; origem: string; corretora: string; alerta: boolean; clientes: string }
 
-export function TabelaLeads({ leads, responsaveis, status, admin, filtrosIniciais }: {
+export function TabelaLeads({ leads, responsaveis, responsaveisClientes, status, admin, filtrosIniciais, corretoras, assessores, hoje }: {
   leads: LeadRow[]
-  responsaveis: string[]
+  responsaveis: string[]           // quem trabalha leads
+  responsaveisClientes: string[]   // quem cuida de clientes (ficha do lead ganho)
   status: StatusLead[]
   admin: boolean
   filtrosIniciais: Filtros
+  corretoras: Corretora[]          // corretoras que o usuário vê (destino do lead ganho)
+  assessores: AssessoresPorCorretora
+  hoje: string
 }) {
   const router = useRouter()
   const { avisar } = useToast()
@@ -30,9 +38,14 @@ export function TabelaLeads({ leads, responsaveis, status, admin, filtrosIniciai
   const [limite, setLimite] = useState(100)
   const [editando, setEditando] = useState<LeadRow | null>(null)
   const [registrando, setRegistrando] = useState<string | null>(null)
+  const [ganhando, setGanhando] = useState<LeadRow | null>(null)
+  const [perdendo, setPerdendo] = useState<LeadRow | null>(null)
+  const [motivo, setMotivo] = useState('')
+  const [fechando, setFechando] = useState(false)
+  const [erroPerda, setErroPerda] = useState<string | null>(null)
 
   const origens = useMemo(() => [...new Set(leads.map(l => l.origem ?? ''))].filter(Boolean).sort(), [leads])
-  const corretoras = useMemo(() => [...new Set(leads.map(l => l.corretora ?? ''))].filter(Boolean).sort(), [leads])
+  const corretorasOpera = useMemo(() => [...new Set(leads.map(l => l.corretora ?? ''))].filter(Boolean).sort(), [leads])
   const respOpcoes = useMemo(() => [...new Set([...responsaveis, ...leads.map(l => l.responsavel ?? '')])].filter(Boolean).sort(), [leads, responsaveis])
 
   const filtrados = useMemo(() => {
@@ -61,13 +74,23 @@ export function TabelaLeads({ leads, responsaveis, status, admin, filtrosIniciai
     const r = await registrarContatoLead(l.id, l.status === 'Novo' ? 'Em contato' : undefined)
     setRegistrando(null)
     if (!r.ok) { avisar({ titulo: 'Não consegui registrar o contato', detalhe: r.erro, tom: 'loss' }); return }
-    avisar({ titulo: `Contato registrado · ${l.nome}`, tom: 'gain' })
+    avisar({ titulo: `Contato registrado · ${l.nome}`, detalhe: l.status === 'Novo' ? 'Status passou para Em contato.' : undefined, tom: 'gain' })
+    router.refresh()
+  }
+  const perder = async () => {
+    if (!perdendo) return
+    setFechando(true); setErroPerda(null)
+    const r = await marcarLeadPerdido(perdendo.id, motivo)
+    setFechando(false)
+    if (!r.ok) { setErroPerda(r.erro); return }
+    avisar({ titulo: `Lead perdido · ${perdendo.nome}`, detalhe: motivo.trim() || undefined, tom: 'neutral' })
+    setPerdendo(null); setMotivo('')
     router.refresh()
   }
   const fichaHref = (l: LeadRow) => (l.cliente_id && l.cliente_corretora && isCorretora(l.cliente_corretora) ? `/${CORRETORA_SLUG[l.cliente_corretora]}/clientes/${l.cliente_id}` : null)
 
   return (
-    <Panel title={`${fmtNum(filtrados.length)} de ${fmtNum(leads.length)} leads`} subtitle="Clique na linha para editar; o telefone registra um contato hoje.">
+    <Panel title={`${fmtNum(filtrados.length)} de ${fmtNum(leads.length)} leads`} subtitle="Clique na linha para editar tudo. Ícones: telefone registra contato hoje (Novo vira Em contato), troféu marca Ganho e abre o cadastro do cliente, X marca Perdido.">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
@@ -76,7 +99,7 @@ export function TabelaLeads({ leads, responsaveis, status, admin, filtrosIniciai
         <select className="field-sm" value={f.status} onChange={e => sel('status', e.target.value)} aria-label="Status"><option value="">Status: todos</option>{status.map(s => <option key={s.status}>{s.status}</option>)}</select>
         <select className="field-sm" value={f.responsavel} onChange={e => sel('responsavel', e.target.value)} aria-label="Responsável"><option value="">Responsável: todos</option>{respOpcoes.map(r => <option key={r}>{r}</option>)}</select>
         <select className="field-sm" value={f.origem} onChange={e => sel('origem', e.target.value)} aria-label="Origem"><option value="">Origem: todas</option>{origens.map(o => <option key={o}>{o}</option>)}</select>
-        <select className="field-sm" value={f.corretora} onChange={e => sel('corretora', e.target.value)} aria-label="Corretora onde opera"><option value="">Opera em: todas</option>{corretoras.map(c => <option key={c}>{c}</option>)}</select>
+        <select className="field-sm" value={f.corretora} onChange={e => sel('corretora', e.target.value)} aria-label="Corretora onde opera"><option value="">Opera em: todas</option>{corretorasOpera.map(c => <option key={c}>{c}</option>)}</select>
         <select className="field-sm" value={f.clientes} onChange={e => sel('clientes', e.target.value)} aria-label="Já é cliente"><option value="">Base: todos</option><option value="sim">já são clientes</option><option value="nao">não são clientes</option></select>
         <label className="flex items-center gap-1.5 text-label text-fg-muted"><input type="checkbox" checked={f.alerta} onChange={e => sel('alerta', e.target.checked)} />só com alerta</label>
       </div>
@@ -117,9 +140,17 @@ export function TabelaLeads({ leads, responsaveis, status, admin, filtrosIniciai
                   </td>
                   <td className={cn('num', l.alerta && 'font-semibold text-warn')} title={l.alerta ? 'Sem contato há mais tempo que o limite' : undefined}>{l.dias ?? TRACO}</td>
                   <td onClick={e => e.stopPropagation()}>
-                    {l.tipo_status === 'Aberto' && (
-                      <IconButton tone="success" aria-label="Registrar contato hoje" title="Registrar contato hoje" disabled={registrando === l.id} onClick={() => contato(l)}><PhoneCall className="h-4 w-4" aria-hidden /></IconButton>
-                    )}
+                    <div className="flex items-center justify-end gap-0.5">
+                      {l.tipo_status === 'Aberto' && (
+                        <IconButton tone="success" aria-label={`Registrar contato hoje · ${l.nome}`} title="Registrar contato hoje" disabled={registrando === l.id} onClick={() => contato(l)}><PhoneCall className="h-4 w-4" aria-hidden /></IconButton>
+                      )}
+                      {l.status !== 'Ganho' && (
+                        <IconButton tone="accent" aria-label={`Marcar ${l.nome} como ganho`} title="Ganho: cadastrar como cliente" onClick={() => setGanhando(l)}><Trophy className="h-4 w-4" aria-hidden /></IconButton>
+                      )}
+                      {l.tipo_status === 'Aberto' && (
+                        <IconButton tone="danger" aria-label={`Marcar ${l.nome} como perdido`} title="Perdido" onClick={() => { setPerdendo(l); setMotivo(l.motivo_perda ?? ''); setErroPerda(null) }}><XCircle className="h-4 w-4" aria-hidden /></IconButton>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )
@@ -133,6 +164,12 @@ export function TabelaLeads({ leads, responsaveis, status, admin, filtrosIniciai
         </div>
       )}
       {editando && <LeadForm key={editando.id} lead={editando} aberto onClose={() => setEditando(null)} responsaveis={responsaveis} status={status} admin={admin} />}
+      {ganhando && <GanhoWizard key={ganhando.id} lead={ganhando} aberto onClose={() => setGanhando(null)} corretoras={corretoras} responsaveis={responsaveisClientes} assessores={assessores} hoje={hoje} />}
+      <Modal open={!!perdendo} onClose={() => setPerdendo(null)} title="Marcar como perdido" subtitle={perdendo?.nome}
+        footer={<><Button variant="secondary" onClick={() => setPerdendo(null)}>Cancelar</Button><Button variant="danger" onClick={perder} loading={fechando}>Marcar perdido</Button></>}>
+        {erroPerda && <Alert tone="danger" className="mb-3">{erroPerda}</Alert>}
+        <Input label="Motivo da perda" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Sem interesse, outra corretora, não respondeu…" autoFocus hint="Fecha o lead hoje. Dá para reabrir editando o status na linha." />
+      </Modal>
     </Panel>
   )
 }

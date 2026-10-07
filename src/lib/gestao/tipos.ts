@@ -154,6 +154,26 @@ export type PainelResumo = {
 // Posição do cliente entre os demais (ficha)
 export type ClienteContexto = { posicao: number | null; com_giro: number; receita_total_mes: number; media_lotes_ativos: number }
 
+// Cadastro manual de um cliente numa corretora (botão Novo cliente e lead ganho)
+export type NovoClienteCampos = {
+  nome: string
+  documento: string | null
+  telefone: string | null
+  email: string | null
+  status: string | null          // Migrado / Em processamento / Recusou (vazio = Em processamento)
+  responsavel: string | null     // responsável interno (Artur, Lucas…)
+  assessor: string | null        // assessor da corretora (Genial/XP), quando já se sabe
+  parceiro: string | null
+  corretagem: number | null      // R$/lote → tarifa inicial do cliente
+  data_entrada: string | null
+  data_migracao: string | null
+  conta: string | null
+  observacoes: string | null
+  motivo_recusa: string | null
+}
+// Nomes dos assessores cadastrados, por corretora (para os selects de cadastro)
+export type AssessoresPorCorretora = Record<Corretora, string[]>
+
 export type PainelMensalRow = {
   mes_ref: string
   migrados_acumulados: number

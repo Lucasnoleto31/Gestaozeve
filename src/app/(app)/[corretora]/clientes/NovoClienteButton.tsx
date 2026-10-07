@@ -1,7 +1,7 @@
 'use client'
 
-// Cadastro manual de um cliente (corretoras com lista própria, ex.: BTG). Mesmos campos da
-// lista de clientes; passa pela rotina da importação, então quem já existe é completado.
+// Cadastro manual de um cliente na corretora. Mesmos campos da lista de clientes; passa pela
+// rotina da importação, então quem já existe é completado em vez de duplicado.
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
@@ -12,14 +12,21 @@ import { Field, Input, Select } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { criarCliente } from '@/lib/gestao/acoes'
 import { numeroBR } from '@/lib/gestao/planilhas'
-import { CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_LABEL, temListaPropria, type Corretora } from '@/lib/corretoras'
 
-export function NovoClienteButton({ corretora, base, responsaveis, hoje }: { corretora: Corretora; base: string; responsaveis: string[]; hoje: string }) {
+export function NovoClienteButton({ corretora, base, responsaveis, assessores, hoje }: {
+  corretora: Corretora
+  base: string
+  responsaveis: string[]
+  assessores: string[]
+  hoje: string
+}) {
   const router = useRouter()
   const { avisar } = useToast()
+  const listaPropria = temListaPropria(corretora)
   const vazio = {
-    nome: '', documento: '', telefone: '', email: '', status: 'Em processamento', responsavel: responsaveis[0] ?? '', parceiro: '',
-    corretagem: '0,25', data_entrada: hoje, data_migracao: '', conta: '', observacoes: '', motivo_recusa: '',
+    nome: '', documento: '', telefone: '', email: '', status: 'Em processamento', responsavel: responsaveis[0] ?? '', assessor: '', parceiro: '',
+    corretagem: listaPropria ? '0,25' : '', data_entrada: hoje, data_migracao: '', conta: '', observacoes: '', motivo_recusa: '',
   }
   const [aberto, setAberto] = useState(false)
   const [salvando, setSalvando] = useState(false)
@@ -32,7 +39,7 @@ export function NovoClienteButton({ corretora, base, responsaveis, hoje }: { cor
     setSalvando(true); setErro(null)
     const r = await criarCliente(corretora, {
       nome: f.nome, documento: f.documento || null, telefone: f.telefone || null, email: f.email || null,
-      status: f.status || null, responsavel: f.responsavel || null, parceiro: f.parceiro || null,
+      status: f.status || null, responsavel: f.responsavel || null, assessor: f.assessor || null, parceiro: f.parceiro || null,
       corretagem: f.corretagem.trim() === '' ? null : numeroBR(f.corretagem),
       data_entrada: f.data_entrada || null, data_migracao: f.data_migracao || null, conta: f.conta || null,
       observacoes: f.observacoes || null, motivo_recusa: f.motivo_recusa || null,
@@ -57,7 +64,7 @@ export function NovoClienteButton({ corretora, base, responsaveis, hoje }: { cor
           {erro && <Alert tone="danger">{erro}</Alert>}
           <div className="grid gap-3 sm:grid-cols-2">
             <Input id="nc-nome" label="Nome" value={f.nome} onChange={campo('nome')} required autoFocus className="sm:col-span-2" />
-            <Input id="nc-doc" label="CPF/CNPJ" value={f.documento} onChange={campo('documento')} inputMode="numeric" hint="Liga os lotes do relatório ao cliente" />
+            <Input id="nc-doc" label="CPF/CNPJ" value={f.documento} onChange={campo('documento')} inputMode="numeric" hint="Liga os lotes e o export da corretora ao cliente" />
             <Input id="nc-tel" label="Telefone" value={f.telefone} onChange={campo('telefone')} inputMode="tel" placeholder="DDD + número" />
             <Select id="nc-status" label="Status" value={f.status} onChange={campo('status')}>
               <option value="Em processamento">Em processamento</option>
@@ -68,10 +75,16 @@ export function NovoClienteButton({ corretora, base, responsaveis, hoje }: { cor
               <option value="">—</option>
               {responsaveis.map(r => <option key={r} value={r}>{r}</option>)}
             </Select>
+            {!listaPropria && (
+              <Select id="nc-assessor" label={`Assessor na ${CORRETORA_LABEL[corretora]}`} value={f.assessor} onChange={campo('assessor')} hint="Vale até a conta aparecer no export">
+                <option value="">—</option>
+                {assessores.map(a => <option key={a} value={a}>{a}</option>)}
+              </Select>
+            )}
             <Input id="nc-entrada" label="Data de entrada" type="date" value={f.data_entrada} onChange={campo('data_entrada')} />
             <Input id="nc-migracao" label="Data de migração" type="date" value={f.data_migracao} onChange={campo('data_migracao')} hint="Só para status Migrado" />
-            <Input id="nc-corretagem" label="Corretagem (R$/lote)" value={f.corretagem} onChange={campo('corretagem')} inputMode="decimal" hint="Vira a tarifa inicial do cliente" />
-            <Input id="nc-conta" label={`Conta ${CORRETORA_LABEL[corretora]}`} value={f.conta} onChange={campo('conta')} inputMode="numeric" hint="Se já souber; senão vem do relatório de lotes" />
+            <Input id="nc-corretagem" label="Corretagem (R$/lote)" value={f.corretagem} onChange={campo('corretagem')} inputMode="decimal" hint={listaPropria ? 'Vira a tarifa inicial do cliente' : 'Vazio usa a tarifa do assessor'} />
+            <Input id="nc-conta" label={`Conta ${CORRETORA_LABEL[corretora]}`} value={f.conta} onChange={campo('conta')} inputMode="numeric" hint="Se já souber; senão vem do export ou do relatório de lotes" />
             <Input id="nc-parceiro" label="Parceiro" value={f.parceiro} onChange={campo('parceiro')} placeholder="Direto, Atual Capital…" />
             <Input id="nc-email" label="E-mail" type="email" value={f.email} onChange={campo('email')} />
             <Field label="Observações" className="sm:col-span-2">

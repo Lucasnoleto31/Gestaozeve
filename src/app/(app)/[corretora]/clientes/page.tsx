@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { clientesLista, responsaveisAtivos } from '@/lib/gestao/consultas'
+import { assessoresPorCorretora, clientesLista, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { resumoClientes } from '@/lib/gestao/derivados'
 import { mesCurto, mesLongo, somarDias } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
@@ -19,10 +19,8 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base, q } = ctx
   const listaPropria = temListaPropria(corretora)
-  const [clientes, responsaveis, profile] = await Promise.all([
-    clientesLista(corretora, mesRef),
-    listaPropria ? responsaveisAtivos() : Promise.resolve([]),
-    getProfile(),
+  const [clientes, responsaveis, assessores, profile] = await Promise.all([
+    clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(),
   ])
   const admin = profile?.role === 'admin'
   const r = resumoClientes(clientes)
@@ -40,7 +38,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
           ? `A nossa lista de clientes levados para a ${ctx.label}: status, responsável e tarifa por cliente · giro e situação em ${mesLongo(mesRef)}.`
           : `Um cliente por CPF/CNPJ, com as contas agrupadas · giro e situação em ${mesLongo(mesRef)}.`}
         actions={<>
-          {listaPropria && <NovoClienteButton corretora={corretora} base={base} responsaveis={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)} hoje={hoje} />}
+          <NovoClienteButton corretora={corretora} base={base} responsaveis={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)} assessores={assessores[corretora]} hoje={hoje} />
           <BuscaCliente corretora={corretora} base={base} />
           <MesPicker valor={mesRef} />
         </>}
@@ -56,7 +54,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
         </KpiRow>
         <TabelaClientes
           clientes={clientes} base={base} mesRef={mesRef} corretora={corretora}
-          comAcoes={listaPropria && admin}
+          comAcoes podeExcluir={listaPropria && admin}
           filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '' }}
         />
       </PageBody>

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AlertTriangle, ArrowLeft, Check, Info, MessageCircle } from 'lucide-react'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { clienteContexto, clienteFicha, responsaveisAtivos } from '@/lib/gestao/consultas'
+import { assessoresPorCorretora, clienteContexto, clienteFicha, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { getProfile } from '@/lib/auth/getProfile'
 import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -36,7 +36,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   const { id } = await params
   if (!id) notFound()
   const { corretora, mesRef, base } = ctx
-  const [profile, ficha, contexto360, responsaveis] = await Promise.all([getProfile(), clienteFicha(corretora, id, mesRef), clienteContexto(corretora, id, mesRef), responsaveisAtivos()])
+  const [profile, ficha, contexto360, responsaveis, assessoresTodos] = await Promise.all([getProfile(), clienteFicha(corretora, id, mesRef), clienteContexto(corretora, id, mesRef), responsaveisAtivos(), assessoresPorCorretora()])
   const { resumo, cadastro, contas, mensal, tarifas, extrato, porAtivo } = ficha
   if (!cadastro) notFound()
   const admin = profile?.role === 'admin'
@@ -111,7 +111,9 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 manuais={{ data_entrada: resumo?.data_entrada ?? null, parceiro: resumo?.parceiro ?? null, observacoes: resumo?.observacoes ?? null, motivo_recusa: resumo?.motivo_recusa ?? null }}
                 manual={ficha.manual}
                 responsaveis={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
+                assessores={assessoresTodos[corretora]}
                 statusAutomatico={ficha.manual.status ? null : (resumo?.status ?? null)}
+                temConta={(resumo?.n_contas ?? 0) > 0}
                 abrirInicial={ctx.q.editar === '1'}
               />
               {temListaPropria(corretora) && admin && <ExcluirClienteButton corretora={corretora} clienteId={id} nome={cadastro.nome} base={base} variante="botao" />}

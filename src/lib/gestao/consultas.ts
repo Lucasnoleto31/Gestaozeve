@@ -4,7 +4,7 @@ import type { Corretora } from '@/lib/corretoras'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import type {
-  AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
+  AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, GrupoPainel, Importacao, IncentivoHistRow,
   IncentivoRow, LeadRow, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
   Parametro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
@@ -80,7 +80,7 @@ export async function clienteFicha(corretora: Corretora, clienteId: string, mesR
     rpc(db, 'cliente_extrato', { p_corretora: corretora, p_cliente_id: clienteId, p_limit: 400 }),
     rpc(db, 'cliente_por_ativo', { p_corretora: corretora, p_cliente_id: clienteId }),
     // campos manuais que a ficha edita (status manual, responsável, data de migração)
-    db.from('cliente_corretora').select('status, responsavel, data_migracao').eq('cliente_id', clienteId).eq('corretora', corretora).maybeSingle(),
+    db.from('cliente_corretora').select('*').eq('cliente_id', clienteId).eq('corretora', corretora).maybeSingle(),
   ])
   if (cad.error) falha(cad.error, 'clientes')
   if (tarifas.error) falha(tarifas.error, 'tarifas_cliente')
@@ -97,7 +97,7 @@ export async function clienteFicha(corretora: Corretora, clienteId: string, mesR
   return {
     resumo: lista.length ? mapCliente(lista[0]) : null,
     cadastro,
-    manual: { status: str(manualRow?.status), responsavel: str(manualRow?.responsavel), data_migracao: str(manualRow?.data_migracao) },
+    manual: { status: str(manualRow?.status), responsavel: str(manualRow?.responsavel), assessor: str(manualRow?.assessor), data_migracao: str(manualRow?.data_migracao) },
     contas: linhas<ContaRow>(contas, r => ({
       conta_id: String(r.conta_id), conta: String(r.conta ?? ''), conta_digito: str(r.conta_digito), situacao_conta: str(r.situacao_conta),
       status: (str(r.status) ?? 'Em processamento') as ContaRow['status'], assessor_nome: str(r.assessor_nome), filial: str(r.filial),
@@ -457,4 +457,17 @@ export async function clienteContexto(corretora: Corretora, clienteId: string, m
   }
   const r = ((data ?? []) as Row[])[0] ?? {}
   return { posicao: r.posicao == null ? null : num(r.posicao), com_giro: num(r.com_giro), receita_total_mes: num(r.receita_total_mes), media_lotes_ativos: num(r.media_lotes_ativos) }
+}
+
+// Assessores ativos de cada corretora (selects de cadastro de cliente e do lead ganho)
+export async function assessoresPorCorretora(): Promise<AssessoresPorCorretora> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('assessores').select('corretora, nome').eq('ativo', true).order('nome')
+  if (error) falha(error, 'assessores')
+  const out: AssessoresPorCorretora = { GENIAL: [], XP: [], BTG: [] }
+  for (const r of (data ?? []) as Row[]) {
+    const c = String(r.corretora) as keyof AssessoresPorCorretora
+    if (out[c]) out[c].push(String(r.nome))
+  }
+  return out
 }

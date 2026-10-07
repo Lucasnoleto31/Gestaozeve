@@ -1,3 +1,4 @@
+import { somarDias } from './meses'
 // Economia do BTG (aba Premissas da planilha): repasse progressivo sobre o faturamento
 // bruto, imposto, Delta e divisão entre os sócios; metas do programa ATP Turbo Receita.
 // Só funções puras, sobre os parâmetros da corretora (testes em btg.test.ts).
@@ -166,4 +167,82 @@ export function avaliarMetas(metas: MetaAtp[], assinatura: string, serie: { mes_
       ritmoMensal: !batida && !vencida && faltam > 0 ? faltam / Math.max(mesesRestantes, 0.25) : 0,
     }
   })
+}
+
+// ── Previsão das metas (ATP) ──────────────────────────────────────────────────
+// Dias úteis (segunda a sexta) entre duas datas ISO, inclusive. Feriados não entram.
+export function diasUteis(inicio: string, fim: string): number {
+  if (!inicio || !fim || fim < inicio) return 0
+  let n = 0
+  const d = new Date(Date.UTC(+inicio.slice(0, 4), +inicio.slice(5, 7) - 1, +inicio.slice(8, 10)))
+  const f = Date.UTC(+fim.slice(0, 4), +fim.slice(5, 7) - 1, +fim.slice(8, 10))
+  while (d.getTime() <= f) {
+    const w = d.getUTCDay()
+    if (w !== 0 && w !== 6) n++
+    d.setUTCDate(d.getUTCDate() + 1)
+  }
+  return n
+}
+const fimDoMes = (mes: string) => {
+  const y = +mes.slice(0, 4), m = +mes.slice(5, 7)
+  return `${mes.slice(0, 7)}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`
+}
+
+export type RitmoBase = 'atual' | '3m' | 'ultimo' | 'tudo'
+export const RITMOS: { base: RitmoBase; label: string }[] = [
+  { base: 'atual', label: 'Mês atual projetado' },
+  { base: '3m', label: 'Últimos 3 meses' },
+  { base: 'ultimo', label: 'Último mês completo' },
+  { base: 'tudo', label: 'Desde a assinatura' },
+]
+export type Ritmo = {
+  base: RitmoBase
+  valor: number              // R$ por mês
+  meses: number              // meses completos usados na média (0 no mês atual projetado)
+  disponivel: boolean
+  receitaParcial?: number    // mês atual: receita já lançada
+  diasDecorridos?: number    // mês atual: dias úteis já lançados
+  diasTotal?: number         // mês atual: dias úteis do mês
+}
+
+// Ritmos de receita (R$/mês) para projetar as metas, só com o que já aconteceu desde a assinatura:
+// mês atual projetado pelos dias úteis já lançados, média dos últimos 3 meses completos,
+// último mês completo e média de todos os meses completos.
+export function ritmosReceita(serie: { mes_ref: string; receita: number }[], assinatura: string, ultimaData: string | null, hoje: string): Record<RitmoBase, Ritmo> {
+  const mesHoje = `${hoje.slice(0, 7)}-01`
+  const desde = [...serie].filter(m => m.mes_ref >= `${assinatura.slice(0, 7)}-01`).sort((a, b) => a.mes_ref.localeCompare(b.mes_ref))
+  const completos = desde.filter(m => m.mes_ref < mesHoje)
+  const mediaDe = (base: RitmoBase, xs: { receita: number }[]): Ritmo =>
+    ({ base, valor: xs.length ? xs.reduce((s, m) => s + m.receita, 0) / xs.length : 0, meses: xs.length, disponivel: xs.length > 0 })
+  const mesAtual = desde.find(m => m.mes_ref === mesHoje)
+  const noMes = !!ultimaData && ultimaData.slice(0, 7) === hoje.slice(0, 7)
+  const decorridos = mesAtual && ultimaData && noMes ? diasUteis(mesHoje, ultimaData) : 0
+  const total = diasUteis(mesHoje, fimDoMes(mesHoje))
+  const receitaAtual = mesAtual?.receita ?? 0
+  return {
+    atual: {
+      base: 'atual', valor: decorridos > 0 ? (receitaAtual / decorridos) * total : 0, meses: 0,
+      disponivel: decorridos > 0 && receitaAtual > 0, receitaParcial: receitaAtual, diasDecorridos: decorridos, diasTotal: total,
+    },
+    '3m': mediaDe('3m', completos.slice(-3)),
+    ultimo: mediaDe('ultimo', completos.slice(-1)),
+    tudo: mediaDe('tudo', completos),
+  }
+}
+
+export type Previsao = {
+  mesesParaAtingir: number | null   // no ritmo dado (null: não atinge)
+  dataPrevista: string | null       // 'YYYY-MM-DD'
+  folgaMeses: number | null         // positivo = antes do prazo; negativo = depois
+  alcanca: boolean                  // dentro do prazo
+}
+// Quando a meta seria atingida mantendo um ritmo de receita (R$/mês) a partir de hoje
+export function preverMeta(meta: MetaAvaliada, ritmo: number, hoje: string): Previsao {
+  if (meta.status === 'atingida') {
+    return { mesesParaAtingir: 0, dataPrevista: meta.atingidaEm, folgaMeses: meta.atingidaEm ? mesesEntre(meta.atingidaEm, meta.prazoFim) : null, alcanca: true }
+  }
+  if (meta.status === 'vencida' || ritmo <= 0) return { mesesParaAtingir: null, dataPrevista: null, folgaMeses: null, alcanca: false }
+  const meses = meta.faltam / ritmo
+  const dataPrevista = somarDias(hoje, Math.ceil(meses * 30.4375))
+  return { mesesParaAtingir: meses, dataPrevista, folgaMeses: mesesEntre(dataPrevista, meta.prazoFim), alcanca: dataPrevista <= meta.prazoFim }
 }

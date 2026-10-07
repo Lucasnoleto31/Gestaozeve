@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { avaliarMetas, calcularRepasse, configBtg, lerFaixas, lerMetas, lerParticipacoes, numeroParam, repasseProgressivo, somarMesesData } from './btg'
+import { avaliarMetas, calcularRepasse, configBtg, diasUteis, lerFaixas, lerMetas, lerParticipacoes, numeroParam, preverMeta, repasseProgressivo, ritmosReceita, somarMesesData } from './btg'
 
 const FAIXAS = lerFaixas('0:75;100000:80;250000:85')
 
@@ -78,5 +78,38 @@ describe('ATP Turbo Receita', () => {
     const r = avaliarMetas(lerMetas('6:1000:100'), '2026-10-05', [{ mes_ref: '2026-09-01', receita: 900 }, { mes_ref: '2026-10-01', receita: 300 }], '2026-10-20')
     expect(r[0].acumulado).toBe(300)
     expect(r[0].status).toBe('em andamento')
+  })
+})
+
+describe('previsão das metas (ATP)', () => {
+  const serie = [{ mes_ref: '2026-08-01', receita: 1000 }, { mes_ref: '2026-09-01', receita: 1390 }, { mes_ref: '2026-10-01', receita: 2357 }]
+  it('conta dias úteis', () => {
+    expect(diasUteis('2026-10-01', '2026-10-06')).toBe(4)   // qui, sex, seg, ter
+    expect(diasUteis('2026-10-01', '2026-10-31')).toBe(22)
+    expect(diasUteis('2026-10-06', '2026-10-01')).toBe(0)
+  })
+  it('calcula os ritmos só com meses desde a assinatura', () => {
+    const r = ritmosReceita(serie, '2026-09-01', '2026-10-06', '2026-10-07')
+    expect(r.ultimo).toMatchObject({ valor: 1390, meses: 1, disponivel: true })
+    expect(r['3m'].valor).toBe(1390)
+    expect(r.tudo.valor).toBe(1390)
+    expect(r.atual.valor).toBeCloseTo((2357 / 4) * 22, 2)
+    expect(r.atual).toMatchObject({ disponivel: true, diasDecorridos: 4, diasTotal: 22, receitaParcial: 2357 })
+    // sem lotes no mês corrente, o mês atual não serve de base
+    expect(ritmosReceita(serie, '2026-09-01', '2026-09-30', '2026-10-07').atual.disponivel).toBe(false)
+  })
+  it('prevê quando cada meta seria atingida', () => {
+    const [meta] = avaliarMetas(lerMetas('18:50000:50000'), '2026-09-01', serie.slice(1), '2026-10-07')
+    expect(meta.faltam).toBe(50000 - 1390 - 2357)
+    const boa = preverMeta(meta, 5000, '2026-10-07')
+    expect(boa.alcanca).toBe(true)
+    expect(boa.mesesParaAtingir).toBeCloseTo(46253 / 5000, 3)
+    expect(boa.dataPrevista).toBe('2027-07-16')
+    expect(boa.folgaMeses ?? 0).toBeGreaterThan(7)
+    const ruim = preverMeta(meta, 1390, '2026-10-07')
+    expect(ruim.alcanca).toBe(false)
+    expect(ruim.dataPrevista?.startsWith('2029')).toBe(true)
+    expect((ruim.folgaMeses ?? 0) < 0).toBe(true)
+    expect(preverMeta(meta, 0, '2026-10-07')).toEqual({ mesesParaAtingir: null, dataPrevista: null, folgaMeses: null, alcanca: false })
   })
 })

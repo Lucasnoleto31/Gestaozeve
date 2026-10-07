@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { incentivoHistorico, incentivoMes, parametrosDaCorretora, receitaMensal } from '@/lib/gestao/consultas'
+import { incentivoHistorico, incentivoMes, parametrosDaCorretora, receitaMensal, ultimaData } from '@/lib/gestao/consultas'
 import { configBtg } from '@/lib/gestao/btg'
 import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
@@ -21,8 +21,8 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base } = ctx
   // Tudo em paralelo; cada modelo usa a sua parte (antes eram três idas ao banco em sequência)
-  const [par, serie, linhas, hist] = await Promise.all([
-    parametrosDaCorretora(corretora), receitaMensal(corretora, null), incentivoMes(corretora, mesRef), incentivoHistorico(corretora, mesRef, 12),
+  const [par, serie, linhas, hist, ultima] = await Promise.all([
+    parametrosDaCorretora(corretora), receitaMensal(corretora, null), incentivoMes(corretora, mesRef), incentivoHistorico(corretora, mesRef, 12), ultimaData(corretora),
   ])
   const cfg = configBtg(par.parametros)
 
@@ -36,7 +36,7 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
           description={`ATP Turbo Receita: prêmios pagos pelo ${ctx.label} quando a comissão acumulada bate cada meta dentro do prazo, contado da assinatura do termo.`}
         />
         <PageBody>
-          <IncentivoAtp cfg={cfg} serie={serie} hoje={fmtDate(hojeBrasil())} base={base} label={ctx.label} />
+          <IncentivoAtp cfg={cfg} serie={serie} hoje={fmtDate(hojeBrasil())} ultimaData={ultima} ritmoBase={ctx.q.ritmo} base={base} label={ctx.label} />
         </PageBody>
       </>
     )

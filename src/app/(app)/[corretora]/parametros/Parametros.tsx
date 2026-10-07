@@ -69,6 +69,7 @@ function SecaoGerais({ corretora, label, parametros, gerais }: { corretora: Corr
     { corr: corretora as string, chave: 'zeragem_padrao', label: 'ZeragemRS — R$ por contrato zerado (assessores com zeragem padrão, quando não há tabela regressiva)', tipo: 'numero' },
     { corr: corretora as string, chave: 'zeragem_faixas', label: 'Zeragem regressiva — "contratos operados no mês:R$ por contrato zerado; …" pelo maior volume do cliente entre o mês anterior e o vigente (vazio = usa ZeragemRS)', tipo: 'texto' },
     { corr: corretora as string, chave: 'zeragem_faixas_desde', label: 'Zeragem regressiva — vale a partir de (dd/mm/aaaa; vazio = todo o histórico)', tipo: 'texto' },
+    { corr: corretora as string, chave: 'receita_desde_migracao', label: 'Receita só a partir da data de migração do cliente (SIM/NAO) — o BTG paga desde o dia em que a conta passou para o escritório', tipo: 'texto' },
     { corr: corretora as string, chave: 'meses_inativo', label: 'MesesInativo — meses sem giro para o cliente virar inativo', tipo: 'numero' },
     { corr: corretora as string, chave: 'modo_zeragem', label: 'ModoZeragem — texto no campo MODO que marca a linha como zeragem', tipo: 'texto' },
     { corr: corretora as string, chave: 'modelo_incentivo', label: 'Modelo do incentivo — PONTOS (faixas por pontos) ou ATP (metas de comissão acumulada, BTG)', tipo: 'modelo' },
@@ -105,10 +106,13 @@ function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; labe
   const { erro, rodar } = useAcao()
   const valorDe = (chave: string) => parametros.find(p => p.chave === chave)?.valor ?? ''
   const repasse = [
-    { chave: 'repasse_faixas', label: 'Repasse sobre o faturamento bruto — faixas progressivas "a partir de R$:%" separadas por ;', tipo: 'texto' },
-    { chave: 'imposto_pct', label: 'Imposto sobre o repasse (%)', tipo: 'numero' },
-    { chave: 'delta_pct', label: 'Delta sobre o valor depois do imposto (%)', tipo: 'numero' },
-    { chave: 'participacoes', label: 'Divisão do que sobra — "nome:%" separados por ;', tipo: 'texto' },
+    { chave: 'impostos_embutidos_pct', label: 'Impostos embutidos no preço cobrado do cliente (%) — receita bruta do BTG = lotes × tarifa ÷ (1 − isso)', tipo: 'numero' },
+    { chave: 'imposto_btg_pct', label: 'Impostos que o BTG desconta da receita bruta (%) — sobra a receita líquida', tipo: 'numero' },
+    { chave: 'repasse_faixas', label: 'Comissão do BTG sobre a receita líquida — faixas progressivas "a partir de R$:%" separadas por ;', tipo: 'texto' },
+    { chave: 'delta_pct', label: 'Delta sobre a comissão (%)', tipo: 'numero' },
+    { chave: 'imposto_pct', label: 'Imposto do escritório sobre a comissão depois da Delta (%)', tipo: 'numero' },
+    { chave: 'participacoes', label: 'Divisão da comissão líquida — "nome:%" separados por ;', tipo: 'texto' },
+    { chave: 'atp_base', label: 'Base das metas do ATP: receita (lotes × tarifa), bruta, liquida ou comissao (valores do BTG)', tipo: 'texto' },
   ]
   const atp = [
     { chave: 'atp_assinatura', label: 'Data de assinatura do termo (vazio = primeiro mês com lotes)', tipo: 'data' },

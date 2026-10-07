@@ -580,7 +580,18 @@ function validarParametro(chave: string, valor: string): string {
   }
   switch (chave) {
     case 'zeragem_padrao': case 'meses_inativo': case 'dias_alerta_lead': case 'imposto_pct': case 'delta_pct':
+    case 'impostos_embutidos_pct': case 'imposto_btg_pct':
       return numero()
+    case 'receita_desde_migracao': {
+      const s = v.toUpperCase()
+      if (s !== 'SIM' && s !== 'NAO' && s !== 'NÃO') throw new Error('Informe SIM ou NAO')
+      return s === 'NÃO' ? 'NAO' : s
+    }
+    case 'atp_base': {
+      const b = v.toLowerCase()
+      if (!['receita', 'bruta', 'liquida', 'comissao'].includes(b)) throw new Error('Base: receita, bruta, liquida ou comissao')
+      return b
+    }
     case 'modo_zeragem':
       if (!v) throw new Error('Informe o texto que marca a zeragem')
       return v.toUpperCase()

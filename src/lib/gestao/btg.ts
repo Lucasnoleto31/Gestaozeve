@@ -1,6 +1,12 @@
 import { somarDias } from './meses'
-// Economia do BTG (aba Premissas da planilha): repasse progressivo sobre o faturamento
-// bruto, imposto, Delta e divisão entre os sócios; metas do programa ATP Turbo Receita.
+// Economia do BTG, na ordem do fechamento mensal que o BTG manda (planilha "Artur Fonseca"):
+//   receita (lotes × tarifa + zeragem)
+//   → receita bruta BTG: o preço cobrado do cliente embute 9,65 % de impostos (÷ (1 − 9,65 %))
+//   → (–) impostos que o BTG desconta (6,65 %) = receita líquida BTG
+//   → comissão BTG: faixas progressivas (75 % até 100 mil…) sobre a líquida
+//   → (–) Delta 30 % = comissão do escritório
+//   → (–) imposto do escritório 16,5 % = comissão líquida → divisão entre os sócios
+// Metas do programa ATP Turbo Receita sobre a base escolhida (atp_base).
 // Só funções puras, sobre os parâmetros da corretora (testes em btg.test.ts).
 import type { Parametro } from './tipos'
 
@@ -8,12 +14,22 @@ export type FaixaRepasse = { de: number; pct: number }        // a partir de R$ 
 export type Participacao = { nome: string; pct: number }
 export type MetaAtp = { prazoMeses: number; comissao: number; premio: number; observacao: string }
 
+export type BaseAtp = 'receita' | 'bruta' | 'liquida' | 'comissao'
+export const BASES_ATP: { base: BaseAtp; label: string }[] = [
+  { base: 'receita', label: 'receita (lotes × tarifa)' },
+  { base: 'bruta', label: 'receita bruta do BTG' },
+  { base: 'liquida', label: 'receita líquida do BTG' },
+  { base: 'comissao', label: 'comissão paga pelo BTG' },
+]
 export type ConfigBtg = {
   modelo: 'PONTOS' | 'ATP'
   faixas: FaixaRepasse[]
-  impostoPct: number
-  deltaPct: number
+  impostosEmbutidosPct: number   // impostos embutidos no preço cobrado do cliente (9,65 %)
+  impostoBtgPct: number          // o que o BTG desconta da receita bruta (6,65 %)
+  deltaPct: number               // Delta, sobre a comissão
+  impostoPct: number             // imposto do escritório, sobre a comissão depois da Delta
   participacoes: Participacao[]
+  atpBase: BaseAtp
   atpAssinatura: string | null   // 'YYYY-MM-DD'
   atpMetas: MetaAtp[]
 }
@@ -75,12 +91,16 @@ export function lerMetas(s: string | null | undefined): MetaAtp[] {
 export function configBtg(parametros: Parametro[]): ConfigBtg {
   const v = (chave: string) => parametros.find(p => p.chave === chave)?.valor?.trim() ?? ''
   const assinatura = v('atp_assinatura')
+  const base = v('atp_base').toLowerCase()
   return {
     modelo: v('modelo_incentivo').toUpperCase() === 'ATP' ? 'ATP' : 'PONTOS',
     faixas: lerFaixas(v('repasse_faixas')),
-    impostoPct: numeroParam(v('imposto_pct')) ?? 0,
+    impostosEmbutidosPct: numeroParam(v('impostos_embutidos_pct')) ?? 0,
+    impostoBtgPct: numeroParam(v('imposto_btg_pct')) ?? 0,
     deltaPct: numeroParam(v('delta_pct')) ?? 0,
+    impostoPct: numeroParam(v('imposto_pct')) ?? 0,
     participacoes: lerParticipacoes(v('participacoes')),
+    atpBase: BASES_ATP.some(b => b.base === base) ? (base as BaseAtp) : 'receita',
     atpAssinatura: /^\d{4}-\d{2}-\d{2}$/.test(assinatura) ? assinatura : null,
     atpMetas: lerMetas(v('atp_metas')),
   }
@@ -100,26 +120,43 @@ export function repasseProgressivo(bruto: number, faixas: FaixaRepasse[]): { val
 }
 
 export type Repasse = {
-  bruto: number
-  pctEfetivo: number
-  repasse: number
-  retencao: number    // o que o BTG retém
-  imposto: number
-  delta: number
-  liquido: number
+  receita: number             // nossa receita: lotes × tarifa + zeragem
+  bruta: number               // receita bruta do BTG (impostos embutidos no preço)
+  impostoBtg: number          // impostos que o BTG desconta
+  liquida: number             // receita líquida do BTG
+  pctEfetivo: number          // % de comissão efetivo sobre a líquida
+  comissao: number            // comissão paga pelo BTG (repasse)
+  retencao: number            // o que o BTG retém da líquida
+  delta: number               // parte da Delta
+  comissaoEscritorio: number  // comissão depois da Delta
+  imposto: number             // imposto do escritório
+  liquido: number             // comissão líquida
   partes: { nome: string; valor: number }[]
 }
 
-// Bruto → repasse → (–) imposto → (–) Delta → líquido → sócios (linhas 22–30 do Painel da planilha)
-export function calcularRepasse(bruto: number, cfg: Pick<ConfigBtg, 'faixas' | 'impostoPct' | 'deltaPct' | 'participacoes'>): Repasse {
-  const { valor: repasse, pctEfetivo } = repasseProgressivo(bruto, cfg.faixas)
-  const imposto = (repasse * cfg.impostoPct) / 100
-  const delta = ((repasse - imposto) * cfg.deltaPct) / 100
-  const liquido = repasse - imposto - delta
+export type ConfigRepasse = Pick<ConfigBtg, 'faixas' | 'impostosEmbutidosPct' | 'impostoBtgPct' | 'deltaPct' | 'impostoPct' | 'participacoes'>
+
+// Receita → bruta BTG → (–) impostos BTG → líquida → comissão (faixas) → (–) Delta → (–) imposto → líquida → sócios
+export function calcularRepasse(receita: number, cfg: ConfigRepasse): Repasse {
+  const bruta = cfg.impostosEmbutidosPct > 0 && cfg.impostosEmbutidosPct < 100 ? receita / (1 - cfg.impostosEmbutidosPct / 100) : receita
+  const impostoBtg = (bruta * cfg.impostoBtgPct) / 100
+  const liquida = bruta - impostoBtg
+  const { valor: comissao, pctEfetivo } = repasseProgressivo(liquida, cfg.faixas)
+  const delta = (comissao * cfg.deltaPct) / 100
+  const comissaoEscritorio = comissao - delta
+  const imposto = (comissaoEscritorio * cfg.impostoPct) / 100
+  const liquido = comissaoEscritorio - imposto
   return {
-    bruto, pctEfetivo, repasse, retencao: bruto - repasse, imposto, delta, liquido,
+    receita, bruta, impostoBtg, liquida, pctEfetivo, comissao, retencao: liquida - comissao, delta, comissaoEscritorio, imposto, liquido,
     partes: cfg.participacoes.map(p => ({ nome: p.nome, valor: (liquido * p.pct) / 100 })),
   }
+}
+
+// Valor de um mês na base que as metas do ATP usam
+export function baseAtp(receita: number, cfg: ConfigRepasse & Pick<ConfigBtg, 'atpBase'>): number {
+  if (cfg.atpBase === 'receita') return receita
+  const r = calcularRepasse(receita, cfg)
+  return cfg.atpBase === 'bruta' ? r.bruta : cfg.atpBase === 'liquida' ? r.liquida : r.comissao
 }
 
 // Soma meses a uma data ISO mantendo o dia (31/01 + 1 mês = 28/02)

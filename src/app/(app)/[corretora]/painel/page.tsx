@@ -82,15 +82,19 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const nn = (v: number | null) => (v == null ? TRACO : n0(v))
   const rr = (v: number | null) => (v == null ? TRACO : rCurto(v))
   const pp = (v: number | null) => (v == null ? TRACO : p1(v))
+  // A mesma ordem do fechamento mensal do BTG: bruta → líquida → comissão → Delta → imposto → líquida
   const linhasRepasse: Linha[] = comRepasse ? [
-    { label: `Repasse ${ctx.label} (% efetivo)`, valores: col(m => (m && m.receita ? repasseDe(m).pctEfetivo : null)), fmt: pp, destaque: 'sub' },
-    { label: `Repasse ${ctx.label}`, valores: col(m => (m ? repasseDe(m).repasse : null)), fmt: rr, total: true },
-    { label: `(–) Retenção ${ctx.label}`, valores: col(m => (m ? repasseDe(m).retencao : null)), fmt: rr, destaque: 'sub', total: true },
-    { label: `(–) Imposto ${fmtPct(cfg.impostoPct)}`, valores: col(m => (m ? repasseDe(m).imposto : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: `Receita bruta ${ctx.label} (impostos de ${fmtPct(cfg.impostosEmbutidosPct, 2)} no preço)`, valores: col(m => (m ? repasseDe(m).bruta : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: `(–) Impostos ${ctx.label} ${fmtPct(cfg.impostoBtgPct, 2)}`, valores: col(m => (m ? repasseDe(m).impostoBtg : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: `Receita líquida ${ctx.label}`, valores: col(m => (m ? repasseDe(m).liquida : null)), fmt: rr, total: true },
+    { label: `Comissão ${ctx.label} (% efetivo)`, valores: col(m => (m && m.receita ? repasseDe(m).pctEfetivo : null)), fmt: pp, destaque: 'sub' },
+    { label: `Comissão ${ctx.label}`, valores: col(m => (m ? repasseDe(m).comissao : null)), fmt: rr, destaque: 'bold', total: true },
     { label: `(–) Delta ${fmtPct(cfg.deltaPct, 0)}`, valores: col(m => (m ? repasseDe(m).delta : null)), fmt: rr, destaque: 'sub', total: true },
-    { label: 'Receita líquida', valores: col(m => (m ? repasseDe(m).liquido : null)), fmt: rr, destaque: 'total', total: true },
+    { label: 'Comissão do escritório', valores: col(m => (m ? repasseDe(m).comissaoEscritorio : null)), fmt: rr, total: true },
+    { label: `(–) Imposto ${fmtPct(cfg.impostoPct, 1)}`, valores: col(m => (m ? repasseDe(m).imposto : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: 'Comissão líquida', valores: col(m => (m ? repasseDe(m).liquido : null)), fmt: rr, destaque: 'total', total: true },
     ...cfg.participacoes.map((p): Linha => ({ label: `${p.nome} (${fmtPct(p.pct, 0)})`, valores: col(m => (m ? repasseDe(m).partes.find(x => x.nome === p.nome)?.valor ?? null : null)), fmt: rr, destaque: 'sub', total: true })),
-    { label: 'Receita líquida / receita total', valores: col(m => (m && m.receita ? (repasseDe(m).liquido / m.receita) * 100 : null)), fmt: pp, destaque: 'sub' },
+    { label: 'Comissão líquida / receita', valores: col(m => (m && m.receita ? (repasseDe(m).liquido / m.receita) * 100 : null)), fmt: pp, destaque: 'sub' },
   ] : []
   const linhas: Linha[] = [
     { label: 'Clientes migrados (acumulado)', valores: col(m => m?.migrados_acumulados ?? null), fmt: nn },
@@ -133,7 +137,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           <KpiCard label="% ativos da base migrada" value={fmtPct(pctAtivosMigrados)} sub={`${fmtPct(pctAtivosLevados)} do total levado`} />
           <KpiCard label="Lotes no mês" value={fmtNum(r.lotes_mes)} sub={`${fmtNum(r.zerados_mes)} zerados · ${rCurto(r.receita_mes)}`} />
           {comRepasse ? (
-            <KpiCard label="Receita líquida no mês" value={rCurto(repasseMes.liquido)} sub={`${fmtPct(repasseMes.pctEfetivo)} de repasse${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`} />
+            <KpiCard label="Comissão líquida no mês" value={rCurto(repasseMes.liquido)} sub={`comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`} />
           ) : atp ? (
             <KpiCard label="Receita no mês" value={rCurto(mesAtual?.receita ?? 0)} sub="corretagem + zeragem" />
           ) : (
@@ -155,7 +159,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           />
         </Panel>
 
-        <Panel title="Indicadores mensais" subtitle={comRepasse ? 'O último mês pode estar parcial · repasse, imposto e Delta conforme Parâmetros.' : 'O último mês pode estar parcial.'}>
+        <Panel title="Indicadores mensais" subtitle={comRepasse ? 'O último mês pode estar parcial · a cadeia de impostos, comissão e Delta segue o fechamento mensal do BTG (Parâmetros).' : 'O último mês pode estar parcial.'}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>

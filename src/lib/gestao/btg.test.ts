@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { avaliarMetas, calcularRepasse, configBtg, diasUteis, lerFaixas, lerMetas, lerParticipacoes, numeroParam, preverMeta, repasseProgressivo, ritmosReceita, somarMesesData } from './btg'
+import { avaliarMetas, baseAtp, calcularRepasse, configBtg, diasUteis, lerFaixas, lerMetas, lerParticipacoes, numeroParam, preverMeta, repasseProgressivo, ritmosReceita, somarMesesData } from './btg'
 
 const FAIXAS = lerFaixas('0:75;100000:80;250000:85')
 
@@ -24,14 +24,20 @@ describe('parâmetros do BTG', () => {
     const cfg = configBtg([
       { chave: 'modelo_incentivo', valor: 'ATP', descricao: null },
       { chave: 'repasse_faixas', valor: '0:75;100000:80;250000:85', descricao: null },
-      { chave: 'imposto_pct', valor: '16.6', descricao: null },
+      { chave: 'imposto_pct', valor: '16.5', descricao: null },
+      { chave: 'impostos_embutidos_pct', valor: '9,65', descricao: null },
+      { chave: 'imposto_btg_pct', valor: '6.65', descricao: null },
+      { chave: 'atp_base', valor: 'comissao', descricao: null },
       { chave: 'delta_pct', valor: '30', descricao: null },
       { chave: 'participacoes', valor: 'Lucas:50;Artur:50', descricao: null },
       { chave: 'atp_assinatura', valor: '2026-09-01', descricao: null },
       { chave: 'atp_metas', valor: '18:50000:50000', descricao: null },
     ])
     expect(cfg.modelo).toBe('ATP')
-    expect(cfg.impostoPct).toBe(16.6)
+    expect(cfg.impostoPct).toBe(16.5)
+    expect(cfg.impostosEmbutidosPct).toBe(9.65)
+    expect(cfg.impostoBtgPct).toBe(6.65)
+    expect(cfg.atpBase).toBe('comissao')
     expect(cfg.atpAssinatura).toBe('2026-09-01')
     expect(cfg.atpMetas).toHaveLength(1)
     expect(configBtg([]).modelo).toBe('PONTOS')
@@ -46,16 +52,29 @@ describe('repasse do BTG', () => {
     expect(repasseProgressivo(300000, FAIXAS).valor).toBe(75000 + 120000 + 42500)
     expect(repasseProgressivo(0, FAIXAS)).toEqual({ valor: 0, pctEfetivo: 0 })
   })
-  it('reproduz o Painel da planilha (set/26)', () => {
-    const r = calcularRepasse(1459.95, { faixas: FAIXAS, impostoPct: 16.6, deltaPct: 30, participacoes: lerParticipacoes('Lucas:50;Artur:50') })
+  // Fechamento do BTG de set/26 (planilha "Artur Fonseca"): bruta 978,03 → líquida 912,99 →
+  // comissão 684,74 → Delta 30 % → 479,32 → imposto 16,5 % → 400,23. Nossa receita (lotes × tarifa): 883,75
+  const CFG = { faixas: FAIXAS, impostosEmbutidosPct: 9.65, impostoBtgPct: 6.65, deltaPct: 30, impostoPct: 16.5, participacoes: lerParticipacoes('Lucas:50;Artur:50') }
+  it('reproduz o fechamento do BTG (set/26)', () => {
+    const r = calcularRepasse(883.75, CFG)
+    expect(r.bruta).toBeCloseTo(978.14, 1)
+    expect(r.impostoBtg).toBeCloseTo(65.05, 1)
+    expect(r.liquida).toBeCloseTo(913.09, 1)
     expect(r.pctEfetivo).toBeCloseTo(75, 6)
-    expect(r.repasse).toBeCloseTo(1094.9625, 4)
-    expect(r.retencao).toBeCloseTo(364.9875, 4)
-    expect(r.imposto).toBeCloseTo(181.763775, 4)
-    expect(r.delta).toBeCloseTo(273.9596175, 4)
-    expect(r.liquido).toBeCloseTo(639.2391075, 4)
+    expect(r.comissao).toBeCloseTo(684.82, 1)
+    expect(r.retencao).toBeCloseTo(228.27, 1)
+    expect(r.delta).toBeCloseTo(205.45, 1)
+    expect(r.comissaoEscritorio).toBeCloseTo(479.37, 1)
+    expect(r.imposto).toBeCloseTo(79.10, 1)
+    expect(r.liquido).toBeCloseTo(400.28, 1)
     expect(r.partes.map(p => p.nome)).toEqual(['Lucas', 'Artur'])
-    expect(r.partes[0].valor).toBeCloseTo(319.61955375, 4)
+    expect(r.partes[0].valor).toBeCloseTo(200.14, 1)
+  })
+  it('escolhe a base das metas do ATP', () => {
+    expect(baseAtp(883.75, { ...CFG, atpBase: 'receita' })).toBe(883.75)
+    expect(baseAtp(883.75, { ...CFG, atpBase: 'bruta' })).toBeCloseTo(978.14, 1)
+    expect(baseAtp(883.75, { ...CFG, atpBase: 'liquida' })).toBeCloseTo(913.09, 1)
+    expect(baseAtp(883.75, { ...CFG, atpBase: 'comissao' })).toBeCloseTo(684.82, 1)
   })
 })
 

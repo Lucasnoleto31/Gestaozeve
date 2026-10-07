@@ -9,7 +9,7 @@ import { Alert } from '@/components/ui/Alert'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { SegParam } from '@/components/gestao/Filtros'
 import { BarraCelula, LinhaVazia, TRACO, dataPt, n0, r0, rCurto } from '@/components/gestao/Celulas'
-import { RITMOS, avaliarMetas, mesesEntre, preverMeta, ritmosReceita, somarMesesData, type ConfigBtg, type Previsao, type RitmoBase } from '@/lib/gestao/btg'
+import { BASES_ATP, RITMOS, avaliarMetas, baseAtp, mesesEntre, preverMeta, ritmosReceita, somarMesesData, type ConfigBtg, type Previsao, type RitmoBase } from '@/lib/gestao/btg'
 import type { ReceitaMensalRow } from '@/lib/gestao/tipos'
 import { mesCurto } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -43,7 +43,9 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
 }) {
   const primeiroMes = serie[0]?.mes_ref ?? null
   const assinatura = cfg.atpAssinatura ?? primeiroMes ?? `${hoje.slice(0, 7)}-01`
-  const desde = serie.filter(m => m.mes_ref >= `${assinatura.slice(0, 7)}-01`)
+  // cada mês entra na base que as metas usam (atp_base): receita, bruta/líquida do BTG ou comissão
+  const rotuloBase = BASES_ATP.find(b => b.base === cfg.atpBase)?.label ?? 'receita'
+  const desde = serie.filter(m => m.mes_ref >= `${assinatura.slice(0, 7)}-01`).map(m => ({ ...m, receita: baseAtp(m.receita, cfg) }))
   const metas = avaliarMetas(cfg.atpMetas, assinatura, desde, hoje)
   const acumulado = desde.reduce((s, m) => s + m.receita, 0)
   const corretagem = desde.reduce((s, m) => s + m.receita_corretagem, 0)
@@ -88,7 +90,7 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
       )}
 
       <KpiRow cols={6}>
-        <KpiCard label="Comissão acumulada" value={rCurto(acumulado)} sub={`corretagem ${rCurto(corretagem)} · zeragem ${rCurto(zeragem)}`} />
+        <KpiCard label="Comissão acumulada" value={rCurto(acumulado)} sub={cfg.atpBase === 'receita' ? `corretagem ${rCurto(corretagem)} · zeragem ${rCurto(zeragem)}` : `base: ${rotuloBase}`} />
         <KpiCard label="Próxima meta" value={proxima ? rCurto(proxima.comissao) : TRACO} sub={proxima ? `prêmio ${rCurto(proxima.premio)} · até ${dataPt(proxima.prazoFim)}` : metas.length ? 'nenhuma meta em aberto' : 'sem metas cadastradas'} />
         <KpiCard label="Faltam" value={proxima ? rCurto(proxima.faltam) : TRACO} sub={proxima ? `${rCurto(proxima.ritmoMensal)} por mês em ${fmtNum(Math.ceil(proxima.mesesRestantes))} meses` : undefined} tone={proxima && proxima.ritmoMensal > mediaMensal * 1.5 ? 'warn' : 'neutral'} />
         <KpiCard
@@ -122,7 +124,7 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
             <li>Permanência mínima de <span className="text-fg">48 meses</span>: saindo antes, devolve os prêmios recebidos corrigidos pelo CDI desde a assinatura.</li>
             <li>O {label} paga todos os prêmios, inclusive o upfront.</li>
             <li>Mínimo de <span className="text-fg">{rCurto(metas[0]?.comissao ?? 50000)}</span> de comissão acumulada em {fmtNum(metas[0]?.prazoMeses ?? 18)} meses; abaixo disso o upfront é devolvido proporcionalmente.</li>
-            <li>Comissão acumulada = receita bruta gerada no {label} (corretagem + zeragem) desde a assinatura.</li>
+            <li>Comissão acumulada = {rotuloBase} desde a assinatura (base escolhida em Parâmetros, atp_base).</li>
           </ul>
         </Panel>
       </div>

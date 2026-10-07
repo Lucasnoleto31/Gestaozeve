@@ -5,12 +5,15 @@ import { useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
 import { SituacaoBadge, TRACO, dataCurta, n0, n2, r0 } from '@/components/gestao/Celulas'
-import type { ClienteRow } from '@/lib/gestao/tipos'
+import type { ReceitaLinha } from '@/lib/gestao/tipos'
+import { expandir, type Compacto } from '@/lib/compacto'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-export function TabelaReceita({ clientes, base, mesRef }: { clientes: ClienteRow[]; base: string; mesRef: MesRef }) {
+export function TabelaReceita({ clientes: compacto, base, mesRef }: { clientes: Compacto<ReceitaLinha>; base: string; mesRef: MesRef }) {
+  // a lista chega compacta (colunas + arrays) e vira objetos aqui
+  const clientes = useMemo(() => expandir(compacto), [compacto])
   const [busca, setBusca] = useState('')
   const [soComGiro, setSoComGiro] = useState(true)
   const [limite, setLimite] = useState(100)

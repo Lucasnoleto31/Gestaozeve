@@ -1,8 +1,9 @@
 'use client'
 
-import { usePathname, useRouter } from 'next/navigation'
-import { LogOut, Menu } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
+import { useTransition } from 'react'
+import { LogOut, Loader2, Menu } from 'lucide-react'
+import { sair } from '@/lib/auth/sair'
 import { useSidebar } from '@/lib/sidebar-context'
 import { ThemeToggle } from '@/lib/theme'
 import { CORRETORA_LABEL, PAGINAS_CORRETORA, corretoraDoSlug } from '@/lib/corretoras'
@@ -29,15 +30,9 @@ function crumbFor(pathname: string) {
 
 export function TopBar() {
   const pathname = usePathname()
-  const router = useRouter()
   const { toggle } = useSidebar()
   const crumb = crumbFor(pathname)
-
-  async function sair() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+  const [saindo, iniciarSaida] = useTransition()
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-bg/90 px-4 backdrop-blur lg:px-8">
@@ -52,8 +47,8 @@ export function TopBar() {
 
       <div className="flex items-center gap-2">
         <ThemeToggle />
-        <button onClick={sair} className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-label font-medium text-fg-muted hover:bg-surface-3 hover:text-fg">
-          <LogOut className="h-4 w-4" aria-hidden />
+        <button onClick={() => iniciarSaida(() => sair())} disabled={saindo} className="inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-label font-medium text-fg-muted hover:bg-surface-3 hover:text-fg disabled:opacity-60">
+          {saindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <LogOut className="h-4 w-4" aria-hidden />}
           <span className="hidden sm:inline">Sair</span>
         </button>
       </div>

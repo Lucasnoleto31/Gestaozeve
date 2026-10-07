@@ -13,6 +13,8 @@ import { Panel } from '@/components/ui/Panel'
 import { MesPicker } from '@/components/gestao/Filtros'
 import { BarraCelula, LinhaVazia, SituacaoBadge, TRACO, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { TabelaReceita } from './TabelaReceita'
+import { compactar } from '@/lib/compacto'
+import { CAMPOS_RECEITA_LINHA } from '@/lib/gestao/tipos'
 
 export default async function ReceitaPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
@@ -58,7 +60,7 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
         </KpiRow>
 
         <div className="grid gap-8 2xl:grid-cols-[1fr_380px]">
-          <TabelaReceita clientes={clientes} base={base} mesRef={mesRef} />
+          <TabelaReceita clientes={compactar(clientes, CAMPOS_RECEITA_LINHA)} base={base} mesRef={mesRef} />
           <div className="space-y-8">
             <Panel title="Ranking · lotes 12 meses">
               <div className="tbl-wrap max-h-[420px]">

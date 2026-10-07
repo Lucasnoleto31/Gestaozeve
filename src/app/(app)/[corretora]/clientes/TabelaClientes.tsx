@@ -8,18 +8,21 @@ import { Button } from '@/components/ui/Button'
 import { ExcluirClienteButton } from './ExcluirClienteButton'
 import type { Corretora } from '@/lib/corretoras'
 import { SituacaoBadge, TRACO, dataCurta, n0, n2, r0 } from '@/components/gestao/Celulas'
-import type { ClienteRow } from '@/lib/gestao/tipos'
+import type { ClienteLinha } from '@/lib/gestao/tipos'
+import { expandir, type Compacto } from '@/lib/compacto'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 type Filtros = { busca: string; status: string; situacao: string; responsavel: string; assessor: string; alerta: string }
-type Ordem = { col: keyof ClienteRow; dir: 'asc' | 'desc' }
+type Ordem = { col: keyof ClienteLinha; dir: 'asc' | 'desc' }
 
 const SITUACOES = ['Ativo', 'Inativo', 'Nunca girou', 'Em processamento', 'Recusou']
 const STATUS = ['Migrado', 'Em processamento', 'Recusou']
 
-export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais, corretora, comAcoes = false, podeExcluir = false }: { clientes: ClienteRow[]; base: string; mesRef: MesRef; filtrosIniciais: Filtros; corretora: Corretora; comAcoes?: boolean; podeExcluir?: boolean }) {
+export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosIniciais, corretora, comAcoes = false, podeExcluir = false }: { clientes: Compacto<ClienteLinha>; base: string; mesRef: MesRef; filtrosIniciais: Filtros; corretora: Corretora; comAcoes?: boolean; podeExcluir?: boolean }) {
+  // a lista chega compacta (colunas + arrays) e vira objetos aqui
+  const clientes = useMemo(() => expandir(compacto), [compacto])
   const [f, setF] = useState<Filtros>(filtrosIniciais)
   const [ordem, setOrdem] = useState<Ordem>({ col: 'lotes_12m', dir: 'desc' })
   const [limite, setLimite] = useState(100)
@@ -61,9 +64,9 @@ export function TabelaClientes({ clientes, base, mesRef, filtrosIniciais, corret
 
   const visiveis = filtrados.slice(0, limite)
 
-  const ordenar = (col: keyof ClienteRow) => setOrdem(o => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: typeof clientes[0]?.[col] === 'number' ? 'desc' : 'asc' }))
+  const ordenar = (col: keyof ClienteLinha) => setOrdem(o => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: typeof clientes[0]?.[col] === 'number' ? 'desc' : 'asc' }))
   // Cabeçalho ordenável (função, não componente: evita remontar a cada render)
-  const th = (col: keyof ClienteRow, titulo: React.ReactNode, opts: { num?: boolean; prio?: 'p2' | 'p3' } = {}) => (
+  const th = (col: keyof ClienteLinha, titulo: React.ReactNode, opts: { num?: boolean; prio?: 'p2' | 'p3' } = {}) => (
     <th key={String(col)} className={cn(opts.num && 'num', opts.prio && `col-${opts.prio}`, 'cursor-pointer select-none hover:text-fg')} onClick={() => ordenar(col)} aria-sort={ordem.col === col ? (ordem.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
       <span className="inline-flex items-center gap-1">{titulo}{ordem.col === col && (ordem.dir === 'asc' ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />)}</span>
     </th>

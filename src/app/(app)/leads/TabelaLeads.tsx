@@ -15,6 +15,7 @@ import { marcarLeadPerdido, registrarContatoLead } from '@/lib/gestao/acoes'
 import type { AssessoresPorCorretora, LeadRow, StatusLead } from '@/lib/gestao/tipos'
 import { CORRETORA_SLUG, isCorretora, type Corretora } from '@/lib/corretoras'
 import { fmtNum, labelMesCurto } from '@/lib/format'
+import { expandir, type Compacto } from '@/lib/compacto'
 import { mesBrasil } from '@/lib/periodo'
 import { cn } from '@/lib/utils'
 import { LeadForm } from './LeadForm'
@@ -22,8 +23,8 @@ import { GanhoWizard } from './GanhoWizard'
 
 type Filtros = { busca: string; mes: string; status: string; responsavel: string; origem: string; corretora: string; alerta: boolean; clientes: string }
 
-export function TabelaLeads({ leads, responsaveis, responsaveisClientes, status, admin, filtrosIniciais, corretoras, assessores, hoje }: {
-  leads: LeadRow[]
+export function TabelaLeads({ leads: compacto, responsaveis, responsaveisClientes, status, admin, filtrosIniciais, corretoras, assessores, hoje }: {
+  leads: Compacto<LeadRow>
   responsaveis: string[]           // quem trabalha leads
   responsaveisClientes: string[]   // quem cuida de clientes (ficha do lead ganho)
   status: StatusLead[]
@@ -35,6 +36,8 @@ export function TabelaLeads({ leads, responsaveis, responsaveisClientes, status,
 }) {
   const router = useRouter()
   const { avisar } = useToast()
+  // a lista chega compacta (colunas + arrays) e vira objetos aqui
+  const leads = useMemo(() => expandir(compacto), [compacto])
   const [f, setF] = useState<Filtros>(filtrosIniciais)
   const [limite, setLimite] = useState(100)
   const [editando, setEditando] = useState<LeadRow | null>(null)

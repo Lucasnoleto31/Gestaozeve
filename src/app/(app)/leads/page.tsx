@@ -12,6 +12,8 @@ import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { TRACO } from '@/components/gestao/Celulas'
 import { TabelaLeads } from './TabelaLeads'
+import { compactar } from '@/lib/compacto'
+import { CAMPOS_LEAD } from '@/lib/gestao/tipos'
 import { AcoesLeads } from './AcoesLeads'
 
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -58,7 +60,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           <KpiCard label="Tempo até fechar" value={mediaFechar != null ? `${Math.round(mediaFechar)} dias` : TRACO} sub={mediaAberto != null ? `${Math.round(mediaAberto)} dias em aberto (média)` : undefined} />
         </KpiRow>
         <TabelaLeads
-          leads={leads}
+          leads={compactar(leads, CAMPOS_LEAD)}
           responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)}
           responsaveisClientes={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
           status={status}

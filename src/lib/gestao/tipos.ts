@@ -40,6 +40,18 @@ export type ClienteRow = {
   observacoes: string | null
   motivo_recusa: string | null
 }
+// Campos que a tabela da tela Clientes usa (o resto fica no servidor): é só isso que trafega
+export const CAMPOS_CLIENTE_LINHA = [
+  'cliente_id', 'nome', 'documento', 'telefone', 'email', 'n_contas', 'conta_principal', 'status', 'assessor_nome', 'responsavel', 'tarifa',
+  'data_migracao', 'data_entrada', 'lotes_mes', 'receita_mes', 'lotes_12m', 'receita_12m', 'ultimo_giro', 'meses_sem_giro', 'situacao', 'alertas', 'parceiro',
+] as const satisfies readonly (keyof ClienteRow)[]
+export type ClienteLinha = Pick<ClienteRow, (typeof CAMPOS_CLIENTE_LINHA)[number]>
+// Idem para a tabela da tela Receita
+export const CAMPOS_RECEITA_LINHA = [
+  'cliente_id', 'nome', 'status', 'situacao', 'responsavel', 'tarifa', 'data_migracao', 'lotes_mes', 'zerados_mes', 'receita_mes',
+  'receita_corretagem_mes', 'receita_zeragem_mes', 'lotes_12m', 'receita_12m', 'ultimo_mes_giro', 'meses_sem_giro',
+] as const satisfies readonly (keyof ClienteRow)[]
+export type ReceitaLinha = Pick<ClienteRow, (typeof CAMPOS_RECEITA_LINHA)[number]>
 
 export type ContaRow = {
   conta_id: string
@@ -283,6 +295,13 @@ export type LeadRow = {
   dias: number | null
   alerta: boolean
 }
+
+// Todos os campos do lead (a tela Leads usa quase todos; compactar só tira as chaves repetidas)
+export const CAMPOS_LEAD = [
+  'id', 'corretora', 'data_hora', 'nome', 'whatsapp', 'cpf', 'email', 'ja_opera', 'origem', 'responsavel', 'status', 'tipo_status',
+  'ultimo_contato', 'data_fechamento', 'motivo_perda', 'observacoes', 'cliente_id', 'cliente_nome', 'cliente_status', 'cliente_corretora',
+  'conta', 'girou', 'lotes_12m', 'dias', 'alerta',
+] as const satisfies readonly (keyof LeadRow)[]
 
 export type FunilMensalRow = {
   mes_ref: string

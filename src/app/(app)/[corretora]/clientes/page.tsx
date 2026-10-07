@@ -8,6 +8,8 @@ import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { temListaPropria } from '@/lib/corretoras'
 import { getProfile } from '@/lib/auth/getProfile'
+import { compactar } from '@/lib/compacto'
+import { CAMPOS_CLIENTE_LINHA } from '@/lib/gestao/tipos'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { MesPicker } from '@/components/gestao/Filtros'
@@ -53,7 +55,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
           <KpiCard label="Com alertas" value={fmtNum(r.comAlertas)} sub="algo a completar no cadastro" tone={r.comAlertas ? 'warn' : 'neutral'} />
         </KpiRow>
         <TabelaClientes
-          clientes={clientes} base={base} mesRef={mesRef} corretora={corretora}
+          clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
           filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '' }}
         />

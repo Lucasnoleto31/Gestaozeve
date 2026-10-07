@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Layers, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { Marca } from '@/components/ui/Marca'
 import { createClient } from '@/lib/supabase/client'
 import { ThemeToggle } from '@/lib/theme'
 import { Field } from '@/components/ui/Input'
@@ -40,11 +41,11 @@ export default function LoginPage() {
         <div className="flex h-full flex-col px-14 py-12">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-fg">
-              <Layers className="h-4 w-4" aria-hidden />
+              <Marca className="h-5 w-5" />
             </div>
             <div className="leading-tight">
-              <p className="text-body font-semibold tracking-tight text-fg">ZeveAI</p>
-              <p className="text-micro text-fg-subtle">Controle de lotes</p>
+              <p className="text-body font-semibold tracking-tight text-fg">Zeve Controle</p>
+              <p className="text-micro text-fg-subtle">Genial · XP · BTG</p>
             </div>
           </div>
 
@@ -63,7 +64,7 @@ export default function LoginPage() {
             </ul>
           </div>
 
-          <p className="mt-12 text-micro text-fg-subtle">© {new Date().getFullYear()} ZeveAI</p>
+          <p className="mt-12 text-micro text-fg-subtle">© {new Date().getFullYear()} Zeve Controle</p>
         </div>
       </aside>
 
@@ -73,9 +74,9 @@ export default function LoginPage() {
 
         <div className="mb-8 flex items-center gap-2.5 lg:hidden">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-fg">
-            <Layers className="h-4 w-4" aria-hidden />
+            <Marca className="h-5 w-5" />
           </div>
-          <span className="text-section font-semibold tracking-tight text-fg">ZeveAI</span>
+          <span className="text-section font-semibold tracking-tight text-fg">Zeve Controle</span>
         </div>
 
         <div className="w-full max-w-[400px]">
@@ -107,7 +108,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="mt-8 text-center text-micro text-fg-subtle lg:hidden">© {new Date().getFullYear()} ZeveAI</p>
+        <p className="mt-8 text-center text-micro text-fg-subtle lg:hidden">© {new Date().getFullYear()} Zeve Controle</p>
       </main>
     </div>
   )

@@ -8,7 +8,7 @@ import './globals.css'
 const geist = Geist({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'ZeveAI · Controle de Lotes',
+  title: 'Zeve Controle',
   description: 'Lotes, barras e receita das corretoras Genial, XP e BTG',
 }
 

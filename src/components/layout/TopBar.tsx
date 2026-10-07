@@ -25,7 +25,7 @@ function crumbFor(pathname: string) {
     const label = seg[1] === 'clientes' && seg[2] ? 'Consulta de cliente' : pagina?.label ?? 'Painel'
     return { section: CORRETORA_LABEL[corretora], label }
   }
-  return ROTAS.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/')) ?? { section: 'ZeveAI', label: 'Gestão' }
+  return ROTAS.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/')) ?? { section: 'Zeve Controle', label: 'Início' }
 }
 
 export function TopBar() {

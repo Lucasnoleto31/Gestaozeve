@@ -4,9 +4,10 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import {
-  BarChart3, ChevronRight, Filter, Gift, Home, KeyRound, LayoutDashboard, Layers, LineChart, SlidersHorizontal, Upload, Users, UserSearch, Wallet, X,
+  BarChart3, ChevronRight, Filter, Gift, Home, KeyRound, LayoutDashboard, LineChart, SlidersHorizontal, Upload, Users, UserSearch, Wallet, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Marca } from '@/components/ui/Marca'
 import type { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
 import { CORRETORA_COLOR, CORRETORA_LABEL, CORRETORA_SLUG, corretoraDoSlug, termosDaCorretora, type Corretora } from '@/lib/corretoras'
@@ -103,11 +104,11 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
       {/* Marca */}
       <div className="flex h-14 items-center gap-2.5 px-4">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg">
-          <Layers className="h-4 w-4" aria-hidden />
+          <Marca className="h-5 w-5" />
         </div>
         <div className="min-w-0 leading-tight">
-          <p className="text-dense font-semibold tracking-tight">ZeveAI</p>
-          <p className="text-micro text-fg-subtle">Controle de lotes</p>
+          <p className="text-dense font-semibold tracking-tight">Zeve Controle</p>
+          <p className="text-micro text-fg-subtle">Genial · XP · BTG</p>
         </div>
         <button onClick={close} className="icon-btn ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-3 hover:text-fg lg:hidden" aria-label="Fechar menu">
           <X className="h-4 w-4" aria-hidden />

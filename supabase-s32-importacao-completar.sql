@@ -148,7 +148,7 @@ BEGIN
            z.zer AS zeragem, z.pos AS posicao,
            (NOT z.zer AND NOT z.pos AND v_apenas_futuros
             AND COALESCE(upper(l2.ativo), '') !~ '^[A-Z]{3}F?[FGHJKMNQUVXZ][0-9]{2}$') AS acoes,
-           NOT (v_desde_migracao AND mg.data_migracao IS NOT NULL AND l2.data < mg.data_migracao) AS conta
+           NOT (v_desde_migracao AND mg.data_migracao IS NOT NULL AND l2.data < mg.data_migracao) AS conta_receita
     FROM public.lotes l2
     CROSS JOIN LATERAL (
       SELECT (position(v_modo IN upper(COALESCE(l2.modo, ''))) > 0) AS zer,
@@ -164,7 +164,7 @@ BEGIN
            date_trunc('month', b.data::timestamp)::date AS mes,
            SUM(CASE WHEN b.zeragem OR b.posicao OR b.acoes THEN 0 ELSE b.qtd END) AS operados
     FROM base b
-    WHERE b.conta
+    WHERE b.conta_receita
     GROUP BY 1, 2
   )
   UPDATE public.lotes l SET
@@ -195,7 +195,7 @@ BEGIN
       WHEN l.conta IS NOT NULL THEN 'CONTA:' || l.conta
       ELSE 'NOME:' || COALESCE(c.nome_norm, public.norm_texto(l.nome_cliente), '?')
     END,
-    conta_para_receita = b.conta
+    conta_para_receita = b.conta_receita
   FROM public.lotes l2
   JOIN base b ON b.id = l2.id
   LEFT JOIN public.clientes c ON c.id = l2.cliente_id

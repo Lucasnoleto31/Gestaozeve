@@ -96,7 +96,9 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin }:
             </Field>
             <Input label="Último contato" type="date" value={f.ultimo_contato ?? ''} onChange={e => set('ultimo_contato', e.target.value)} />
             <Input label="Data do fechamento" type="date" value={f.data_fechamento ?? ''} onChange={e => set('data_fechamento', e.target.value)} hint={fechado && !f.data_fechamento ? 'Preencha para o funil contar o fechamento no mês certo' : undefined} />
-            <Input label="Motivo da perda" value={f.motivo_perda ?? ''} onChange={e => set('motivo_perda', e.target.value)} />
+            <Input label="Motivo da perda" value={f.motivo_perda ?? ''} onChange={e => set('motivo_perda', e.target.value)}
+              placeholder={f.status === 'Perdido' ? 'Sem interesse, outra corretora, não respondeu…' : undefined}
+              hint={f.status === 'Perdido' && !(f.motivo_perda ?? '').trim() ? 'Status Perdido: registre o motivo para o funil' : undefined} />
             <Field label="Observações" className="sm:col-span-2">
               <textarea rows={3} value={f.observacoes ?? ''} onChange={e => set('observacoes', e.target.value)} />
             </Field>

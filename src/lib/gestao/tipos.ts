@@ -310,6 +310,22 @@ export type FunilPorRow = {
   com_alerta: number
 }
 
+// Safra de leads (funil_safra / funil_safra_por): do que entrou, o que aconteceu até hoje
+export type FunilSafraBase = {
+  recebidos: number
+  contatados: number
+  perdidos: number
+  ganhos: number
+  em_aberto: number
+  ativados: number          // viraram clientes migrados
+  em_processamento: number  // viraram clientes, conta ainda em abertura
+  recusaram: number         // viraram clientes e recusaram
+  lotes: number             // lotes operados pelos ativados (todo o histórico)
+  receita: number           // receita dos ativados (todo o histórico)
+}
+export type FunilSafraRow = FunilSafraBase & { mes_ref: string; com_giro: number }
+export type FunilSafraPorRow = FunilSafraBase & { grupo: string }
+
 // Parâmetros
 export type Parametro = { chave: string; valor: string; descricao: string | null }
 export type ReceitaMensalRow = {

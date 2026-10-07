@@ -5,7 +5,7 @@ import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import type {
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
-  ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, GrupoPainel, Importacao, IncentivoHistRow,
+  ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
   IncentivoRow, LeadRow, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
   Parametro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
 } from './tipos'
@@ -470,4 +470,29 @@ export async function assessoresPorCorretora(): Promise<AssessoresPorCorretora> 
     if (out[c]) out[c].push(String(r.nome))
   }
   return out
+}
+
+// ── Funil por safra (S26) ───────────────────────────────────────────────────
+// Antes da S26 (função ausente) devolve vazio; a tela mostra traços.
+const mapSafra = (r: Row) => ({
+  recebidos: num(r.recebidos), contatados: num(r.contatados), perdidos: num(r.perdidos), ganhos: num(r.ganhos), em_aberto: num(r.em_aberto),
+  ativados: num(r.ativados), em_processamento: num(r.em_processamento), recusaram: num(r.recusaram), lotes: num(r.lotes), receita: num(r.receita),
+})
+export async function funilSafra(mesRef: string | null, meses = 12): Promise<FunilSafraRow[]> {
+  const { db } = await equipe()
+  try {
+    return linhas(await rpc(db, 'funil_safra', { p_mes_ref: mesRef, p_meses: meses }), r => ({ ...mapSafra(r), mes_ref: String(r.mes_ref), com_giro: num(r.com_giro) }))
+  } catch (e) {
+    if (e instanceof Error && funcaoAusente({ message: e.message })) return []
+    throw e
+  }
+}
+export async function funilSafraPor(campo: 'responsavel' | 'origem' | 'corretora', mesRef: string | null, meses = 12): Promise<FunilSafraPorRow[]> {
+  const { db } = await equipe()
+  try {
+    return linhas(await rpc(db, 'funil_safra_por', { p_campo: campo, p_mes_ref: mesRef, p_meses: meses }), r => ({ ...mapSafra(r), grupo: String(r.grupo ?? '—') }))
+  } catch (e) {
+    if (e instanceof Error && funcaoAusente({ message: e.message })) return []
+    throw e
+  }
 }

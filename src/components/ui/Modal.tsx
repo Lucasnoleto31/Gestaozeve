@@ -35,7 +35,9 @@ export function Modal({ open, onClose, title, subtitle, actions, size = 'md', fo
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
       <div className="modal-backdrop absolute inset-0" onClick={onClose} />
-      <div className={cn('panel modal-panel relative flex max-h-[92vh] w-full flex-col rounded-b-none sm:rounded-b-lg', SIZE[size], className)}>
+      <div className={cn('panel modal-panel relative flex max-h-[92dvh] w-full flex-col rounded-b-none sm:rounded-b-lg', SIZE[size], className)}>
+        {/* no celular o modal sobe de baixo como uma folha: a alça indica que dá para fechar */}
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line-strong sm:hidden" aria-hidden />
         {(title || subtitle) && (
           <header className="flex items-start justify-between gap-3 border-b border-line px-5 pb-4 pt-5 sm:px-6">
             <div className="min-w-0">

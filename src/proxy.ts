@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { usuarioDaSessao } from '@/lib/supabase/jwks'
 
-const PUBLIC_PATHS = ['/login']
+const PUBLIC_PATHS = ['/login', '/manifest.webmanifest']
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl

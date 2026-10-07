@@ -95,7 +95,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-surface text-fg',
+        'safe-top fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-surface text-fg',
         'transition-transform duration-200 lg:translate-x-0',
         isOpen ? 'translate-x-0' : '-translate-x-full',
       )}
@@ -162,7 +162,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
       </nav>
 
       {/* Usuário */}
-      <div className="border-t border-line p-3">
+      <div className="sidebar-rodape border-t border-line p-3">
         <Link
           href="/perfil"
           className={cn('flex items-center gap-3 rounded-md px-2 py-2 hover:bg-surface-3', isActivePath(pathname, '/perfil') && 'bg-surface-3')}

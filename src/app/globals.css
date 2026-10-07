@@ -630,3 +630,63 @@ select.field-sm {
   }
 }
 
+/* ─── Celular como aplicativo (iPhone/Android) ──────────────────────────────
+   Instalado pela Tela de Início, abre sem a barra do navegador: a página encosta na
+   Dynamic Island e no indicador inferior, e os espaços seguros entram aqui. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sidebar-rodape {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  /* lugar da barra inferior */
+  .com-barra-inferior {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+
+  /* o iPhone dá zoom em campos com letra menor que 16 px */
+  input:where(:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="submit"], [type="button"], [type="color"])),
+  select,
+  textarea,
+  .field-sm {
+    font-size: 16px;
+  }
+
+  .tbl-wrap {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .kpi-row > .kpi {
+    padding: 0.75rem 1rem;
+  }
+
+  .modal-panel > footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  /* toque: linhas de tabela um pouco mais altas */
+  .tbl-dense td,
+  .tbl-dense th {
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+  }
+}

@@ -1,10 +1,11 @@
 'use client'
 
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTransition } from 'react'
-import { LogOut, Loader2, Menu } from 'lucide-react'
+import { LogOut, Loader2 } from 'lucide-react'
 import { sair } from '@/lib/auth/sair'
-import { useSidebar } from '@/lib/sidebar-context'
+import { Marca } from '@/components/ui/Marca'
 import { ThemeToggle } from '@/lib/theme'
 import { CORRETORA_LABEL, PAGINAS_CORRETORA, corretoraDoSlug } from '@/lib/corretoras'
 
@@ -30,16 +31,15 @@ function crumbFor(pathname: string) {
 
 export function TopBar() {
   const pathname = usePathname()
-  const { toggle } = useSidebar()
   const crumb = crumbFor(pathname)
   const [saindo, iniciarSaida] = useTransition()
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-bg/90 px-4 backdrop-blur lg:px-8">
-      <div className="flex min-w-0 items-center gap-2">
-        <button onClick={toggle} className="icon-btn -ml-2 inline-flex h-9 w-9 items-center justify-center rounded-md text-fg-muted hover:bg-surface-3 hover:text-fg lg:hidden" aria-label="Abrir menu">
-          <Menu className="h-5 w-5" aria-hidden />
-        </button>
+    <header className="safe-top sticky top-0 z-30 flex min-h-14 items-center justify-between gap-3 border-b border-line bg-bg/90 px-4 backdrop-blur lg:px-8">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Link href="/dashboard" className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg lg:hidden" aria-label="Início">
+          <Marca className="h-5 w-5" />
+        </Link>
         <p className="min-w-0 truncate text-label text-fg-subtle" aria-label="Localização">
           {crumb.section} <span aria-hidden>·</span> <span className="font-medium text-fg-muted">{crumb.label}</span>
         </p>

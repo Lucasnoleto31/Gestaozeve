@@ -4,6 +4,8 @@ import { getProfile } from '@/lib/auth/getProfile'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { MobileOverlay } from '@/components/layout/MobileOverlay'
+import { BottomNav } from '@/components/layout/BottomNav'
+import { InstalarApp } from '@/components/layout/InstalarApp'
 import { SidebarProvider } from '@/lib/sidebar-context'
 import { ToastProvider } from '@/components/ui/Toast'
 import { CORRETORA_COOKIE, corretorasDoPerfil, isCorretora } from '@/lib/corretoras'
@@ -24,10 +26,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="min-h-screen bg-bg">
         <Sidebar role={profile.role} nome={profile.nome} corretoraPadrao={corretoraPadrao} corretoras={permitidas} />
         <MobileOverlay />
-        <div className="flex min-h-screen flex-col lg:pl-60">
+        <div className="com-barra-inferior flex min-h-screen flex-col lg:pl-60">
           <TopBar />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
+        <BottomNav role={profile.role} corretoraPadrao={corretoraPadrao} />
+        <InstalarApp />
       </div>
     </ToastProvider>
     </SidebarProvider>

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist } from 'next/font/google'
 import { cookies } from 'next/headers'
 import { ThemeProvider } from '@/lib/theme'
@@ -10,6 +10,19 @@ const geist = Geist({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'Zeve Controle',
   description: 'Lotes, barras e receita das corretoras Genial, XP e BTG',
+  applicationName: 'Zeve Controle',
+  // iPhone: "Adicionar à Tela de Início" abre em tela cheia, com a barra de status sobre o app
+  appleWebApp: { capable: true, title: 'Zeve Controle', statusBarStyle: 'black-translucent' },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',   // usa a tela toda no iPhone (as áreas seguras ficam no CSS)
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f4f6f9' },
+    { media: '(prefers-color-scheme: dark)', color: '#0a0e14' },
+  ],
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

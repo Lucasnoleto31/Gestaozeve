@@ -310,22 +310,24 @@ export type FunilPorRow = {
   com_alerta: number
 }
 
-// Safra de leads (funil_safra / funil_safra_por): do que entrou, o que aconteceu até hoje
+// Safra de leads (funil_safra / funil_safra_por): do que entrou, o que aconteceu até hoje.
+// Vocabulário do escritório: tombou = virou cliente (abriu a conta); ativado = operou.
 export type FunilSafraBase = {
   recebidos: number
   contatados: number
   perdidos: number
   ganhos: number
   em_aberto: number
-  ja_clientes: number       // já eram clientes migrados antes de entrar como lead (não contam como ativados)
-  viraram_clientes: number  // ganhos ou ligados a um cadastro novo, qualquer status
-  ativados: number          // viraram clientes migrados
-  em_processamento: number  // viraram clientes, conta ainda em abertura
-  recusaram: number         // viraram clientes e recusaram
-  lotes: number             // lotes operados pelos ativados (todo o histórico)
-  receita: number           // receita dos ativados (todo o histórico)
+  ja_clientes: number       // já eram clientes migrados antes de entrar como lead (ficam fora das etapas)
+  viraram_clientes: number  // cadastrados: ganhos ou ligados a um cadastro novo, qualquer status
+  ativados: number          // tombaram: abriram a conta (cliente migrado)
+  em_processamento: number  // cadastrados com a conta ainda em abertura
+  recusaram: number         // cadastrados que recusaram a corretora
+  com_giro: number          // ativados de verdade: abriram a conta e operaram
+  lotes: number             // lotes operados por quem tombou (todo o histórico)
+  receita: number           // receita de quem tombou (todo o histórico)
 }
-export type FunilSafraRow = FunilSafraBase & { mes_ref: string; com_giro: number }
+export type FunilSafraRow = FunilSafraBase & { mes_ref: string }
 export type FunilSafraPorRow = FunilSafraBase & { grupo: string }
 
 // Parâmetros

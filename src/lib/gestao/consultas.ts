@@ -476,13 +476,13 @@ export async function assessoresPorCorretora(): Promise<AssessoresPorCorretora> 
 // Antes da S26 (função ausente) devolve vazio; a tela mostra traços.
 const mapSafra = (r: Row) => ({
   recebidos: num(r.recebidos), contatados: num(r.contatados), perdidos: num(r.perdidos), ganhos: num(r.ganhos), em_aberto: num(r.em_aberto),
-  ja_clientes: num(r.ja_clientes), viraram_clientes: num(r.viraram_clientes),
+  ja_clientes: num(r.ja_clientes), viraram_clientes: num(r.viraram_clientes), com_giro: num(r.com_giro),
   ativados: num(r.ativados), em_processamento: num(r.em_processamento), recusaram: num(r.recusaram), lotes: num(r.lotes), receita: num(r.receita),
 })
 export async function funilSafra(mesRef: string | null, meses = 12): Promise<FunilSafraRow[]> {
   const { db } = await equipe()
   try {
-    return linhas(await rpc(db, 'funil_safra', { p_mes_ref: mesRef, p_meses: meses }), r => ({ ...mapSafra(r), mes_ref: String(r.mes_ref), com_giro: num(r.com_giro) }))
+    return linhas(await rpc(db, 'funil_safra', { p_mes_ref: mesRef, p_meses: meses }), r => ({ ...mapSafra(r), mes_ref: String(r.mes_ref) }))
   } catch (e) {
     if (e instanceof Error && funcaoAusente({ message: e.message })) return []
     throw e

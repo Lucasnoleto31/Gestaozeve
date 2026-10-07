@@ -4,14 +4,14 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { funilMensal, funilSafra, funilSafraPor, leadsLista } from '@/lib/gestao/consultas'
-import { janelaMeses, mesAtual, mesCurto, parseMes } from '@/lib/gestao/meses'
+import { janelaMeses, mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { Alert } from '@/components/ui/Alert'
-import { MesPicker } from '@/components/gestao/Filtros'
+import { MesPicker, SegParam } from '@/components/gestao/Filtros'
 import { LinhaVazia, StatusLeadBadge, TRACO, dataCurta, n0, p1, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import type { FunilSafraBase, FunilSafraPorRow } from '@/lib/gestao/tipos'
@@ -24,23 +24,28 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor')) redirect('/dashboard')
   const sp = await searchParams
   const mesRef = parseMes(typeof sp.mes === 'string' ? sp.mes : null) ?? mesAtual()
+  // Período: só os leads que entraram no mês escolhido (padrão) ou os 12 meses até ele
+  const periodo: 'mes' | '12m' = sp.periodo === '12m' ? '12m' : 'mes'
+  const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
   const [mensal, safra, porResp, porOrigem, leads] = await Promise.all([
-    funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, 12), funilSafraPor('origem', mesRef, 12), leadsLista(),
+    funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsLista(),
   ])
   const m = new Map(mensal.map(x => [x.mes_ref, x]))
   const s = new Map(safra.map(x => [x.mes_ref, x]))
   const semSafra = safra.length === 0 && leads.length > 0   // S27 ainda não rodou
+  const rotuloPeriodo = soMes ? mesLongo(mesRef) : `${mesCurto(meses[0])} a ${mesCurto(mesRef)}`
 
-  // Totais da safra na janela: do que entrou nesses 12 meses, o que aconteceu até hoje
+  // Totais do período: do que entrou nele, o que aconteceu até hoje
+  const base = soMes ? safra.filter(x => x.mes_ref === mesRef) : safra
   const chaves: (keyof FunilSafraBase)[] = ['recebidos', 'contatados', 'perdidos', 'ganhos', 'em_aberto', 'ja_clientes', 'viraram_clientes', 'ativados', 'em_processamento', 'recusaram', 'com_giro', 'lotes', 'receita']
-  const t = Object.fromEntries(chaves.map(k => [k, safra.reduce((acc, x) => acc + x[k], 0)])) as FunilSafraBase
-  const jaClientes = t.ja_clientes || mensal.reduce((acc, x) => acc + x.ja_clientes, 0)
+  const t = Object.fromEntries(chaves.map(k => [k, base.reduce((acc, x) => acc + x[k], 0)])) as FunilSafraBase
+  const jaClientes = t.ja_clientes || (soMes ? m.get(mesRef)?.ja_clientes ?? 0 : mensal.reduce((acc, x) => acc + x.ja_clientes, 0))
   const abertosHoje = leads.filter(l => l.tipo_status === 'Aberto').length
   const acao = leads.filter(l => l.alerta).sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0)).slice(0, 40)
   const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
 
-  // Etapas do funil (janela inteira). Quem já era cliente antes de entrar fica fora das etapas.
+  // Etapas do funil. Quem já era cliente antes de entrar fica fora das etapas.
   const etapas = [
     { nome: 'Entraram', valor: t.recebidos, nota: `${fmtNum(jaClientes)} já eram clientes` },
     { nome: 'Contatados', valor: t.contatados, nota: 'registramos contato ou mudamos o status' },
@@ -61,23 +66,24 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const nn = (v: number | null) => (v == null ? TRACO : n0(v))
   const pp = (v: number | null) => (v == null ? TRACO : p1(v))
   const rr = (v: number | null) => (v == null ? TRACO : rCurto(v))
+  const tudo = Object.fromEntries(chaves.map(k => [k, safra.reduce((acc, x) => acc + x[k], 0)])) as FunilSafraBase
   const linhas: Linha[] = [
-    { label: 'Leads que entraram', valor: x => x?.recebidos ?? null, fmt: nn, total: t.recebidos, destaque: 'bold' },
-    { label: 'já eram clientes ao entrar', valor: x => x?.ja_clientes ?? null, fmt: nn, total: t.ja_clientes, destaque: 'sub' },
-    { label: 'Contatados', valor: x => x?.contatados ?? null, fmt: nn, total: t.contatados },
-    { label: '% contatados', valor: x => (x ? pct(x.contatados, x.recebidos) : null), fmt: pp, total: pct(t.contatados, t.recebidos), destaque: 'sub' },
-    { label: 'Perdidos', valor: x => x?.perdidos ?? null, fmt: nn, total: t.perdidos, destaque: 'loss' },
-    { label: 'Ainda em aberto', valor: x => x?.em_aberto ?? null, fmt: nn, total: t.em_aberto },
-    { label: 'Cadastrados (ganhos ou cadastro novo)', valor: x => x?.viraram_clientes ?? null, fmt: nn, total: t.viraram_clientes },
-    { label: 'marcados como ganho', valor: x => x?.ganhos ?? null, fmt: nn, total: t.ganhos, destaque: 'sub' },
-    { label: 'Tombaram (abriram a conta)', valor: x => x?.ativados ?? null, fmt: nn, total: t.ativados, destaque: 'bold' },
-    { label: 'conta em abertura', valor: x => x?.em_processamento ?? null, fmt: nn, total: t.em_processamento, destaque: 'sub' },
-    { label: 'Recusaram a corretora', valor: x => x?.recusaram ?? null, fmt: nn, total: t.recusaram, destaque: 'loss' },
-    { label: 'Ativados (operaram)', valor: x => x?.com_giro ?? null, fmt: nn, total: t.com_giro, destaque: 'gain' },
-    { label: '% tombaram sobre os que entraram', valor: x => (x ? pct(x.ativados, x.recebidos) : null), fmt: pp, total: pct(t.ativados, t.recebidos), destaque: 'sub' },
-    { label: '% ativados sobre os que tombaram', valor: x => (x ? pct(x.com_giro, x.ativados) : null), fmt: pp, total: pct(t.com_giro, t.ativados), destaque: 'sub' },
-    { label: 'Lotes operados pelos ativados', valor: x => x?.lotes ?? null, fmt: nn, total: t.lotes },
-    { label: 'Receita deixada para o escritório', valor: x => x?.receita ?? null, fmt: rr, total: t.receita, destaque: 'gain' },
+    { label: 'Leads que entraram', valor: x => x?.recebidos ?? null, fmt: nn, total: tudo.recebidos, destaque: 'bold' },
+    { label: 'já eram clientes ao entrar', valor: x => x?.ja_clientes ?? null, fmt: nn, total: tudo.ja_clientes, destaque: 'sub' },
+    { label: 'Contatados', valor: x => x?.contatados ?? null, fmt: nn, total: tudo.contatados },
+    { label: '% contatados', valor: x => (x ? pct(x.contatados, x.recebidos) : null), fmt: pp, total: pct(tudo.contatados, tudo.recebidos), destaque: 'sub' },
+    { label: 'Perdidos', valor: x => x?.perdidos ?? null, fmt: nn, total: tudo.perdidos, destaque: 'loss' },
+    { label: 'Ainda em aberto', valor: x => x?.em_aberto ?? null, fmt: nn, total: tudo.em_aberto },
+    { label: 'Cadastrados (ganhos ou cadastro novo)', valor: x => x?.viraram_clientes ?? null, fmt: nn, total: tudo.viraram_clientes },
+    { label: 'marcados como ganho', valor: x => x?.ganhos ?? null, fmt: nn, total: tudo.ganhos, destaque: 'sub' },
+    { label: 'Tombaram (abriram a conta)', valor: x => x?.ativados ?? null, fmt: nn, total: tudo.ativados, destaque: 'bold' },
+    { label: 'conta em abertura', valor: x => x?.em_processamento ?? null, fmt: nn, total: tudo.em_processamento, destaque: 'sub' },
+    { label: 'Recusaram a corretora', valor: x => x?.recusaram ?? null, fmt: nn, total: tudo.recusaram, destaque: 'loss' },
+    { label: 'Ativados (operaram)', valor: x => x?.com_giro ?? null, fmt: nn, total: tudo.com_giro, destaque: 'gain' },
+    { label: '% tombaram sobre os que entraram', valor: x => (x ? pct(x.ativados, x.recebidos) : null), fmt: pp, total: pct(tudo.ativados, tudo.recebidos), destaque: 'sub' },
+    { label: '% ativados sobre os que tombaram', valor: x => (x ? pct(x.com_giro, x.ativados) : null), fmt: pp, total: pct(tudo.com_giro, tudo.ativados), destaque: 'sub' },
+    { label: 'Lotes operados pelos ativados', valor: x => x?.lotes ?? null, fmt: nn, total: tudo.lotes },
+    { label: 'Receita deixada para o escritório', valor: x => x?.receita ?? null, fmt: rr, total: tudo.receita, destaque: 'gain' },
   ]
   const grafico = meses.map(x => ({ label: mesCurto(x), entraram: s.get(x)?.recebidos ?? m.get(x)?.recebidos ?? 0, tombaram: s.get(x)?.ativados ?? 0, ativados: s.get(x)?.com_giro ?? 0, perdidos: s.get(x)?.perdidos ?? 0 }))
 
@@ -86,14 +92,17 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
       <PageHeader
         eyebrow="Leads · todas as corretoras"
         title="Funil"
-        description={<>Do que entrou em cada mês, o que aconteceu até hoje: contato, cadastro, conta aberta (tombou), operação (ativou), giro e receita. Tudo vem da tela de <Link href="/leads" className="link">Leads</Link> e do vínculo com o cadastro de clientes.</>}
-        actions={<MesPicker valor={mesRef} label="Janela até" />}
+        description={<>Do que entrou no período, o que aconteceu até hoje: contato, cadastro, conta aberta (tombou), operação (ativou), giro e receita. Tudo vem da tela de <Link href="/leads" className="link">Leads</Link> e do vínculo com o cadastro de clientes.</>}
+        actions={<>
+          <SegParam param="periodo" valor={periodo} opcoes={[{ valor: 'mes', label: 'Só o mês' }, { valor: '12m', label: '12 meses' }]} />
+          <MesPicker valor={mesRef} label={soMes ? 'Mês de entrada' : 'Janela até'} />
+        </>}
       />
       <PageBody>
         {semSafra && <Alert tone="warn" title="Funil por safra ainda não ativado no banco">Rode os scripts S27 e S28 no Supabase para ver contatados, tombaram, ativados, lotes e receita.</Alert>}
 
         <KpiRow cols={7}>
-          <KpiCard label="Entraram (12 m)" value={fmtNum(t.recebidos)} sub={`${fmtNum(jaClientes)} já eram clientes`} />
+          <KpiCard label={`Entraram em ${soMes ? mesCurto(mesRef) : '12 m'}`} value={fmtNum(t.recebidos)} sub={`${fmtNum(jaClientes)} já eram clientes`} />
           <KpiCard label="Contatados" value={fmtNum(t.contatados)} sub={t.recebidos ? `${fmtPct(pct(t.contatados, t.recebidos) ?? 0, 0)} dos que entraram` : undefined} />
           <KpiCard label="Cadastrados" value={fmtNum(t.viraram_clientes)} sub={`${fmtNum(t.ganhos)} marcados como ganho`} />
           <KpiCard label="Tombaram" value={fmtNum(t.ativados)} sub={`abriram a conta · ${fmtNum(t.em_processamento)} em abertura`} tone={t.ativados ? 'gain' : 'neutral'} />
@@ -103,7 +112,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
         </KpiRow>
 
         <div className="grid gap-8 xl:grid-cols-3">
-          <Panel className="xl:col-span-2" title="Funil da janela" subtitle={`Leads que entraram de ${mesCurto(meses[0])} a ${mesCurto(mesRef)} e onde estão hoje. Quem já era cliente ao entrar fica fora das etapas.`}>
+          <Panel className="xl:col-span-2" title={`Funil de ${rotuloPeriodo}`} subtitle={`Leads que entraram ${soMes ? 'nesse mês' : 'nessa janela'} e onde estão hoje. Quem já era cliente ao entrar fica fora das etapas.`}>
             <ol className="space-y-3">
               {etapas.map((e, i) => {
                 const anterior = i > 0 ? etapas[i - 1].valor : null
@@ -123,7 +132,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
               })}
             </ol>
           </Panel>
-          <Panel title="Saídas e pendências" subtitle="O que não virou cliente ativo, na mesma janela.">
+          <Panel title="Saídas e pendências" subtitle={`O que não virou cliente ativo entre os leads de ${rotuloPeriodo}.`}>
             <ul className="divide-y divide-line text-dense">
               {saidas.map(x => (
                 <li key={x.nome} className="flex items-center justify-between gap-3 py-2.5">
@@ -143,7 +152,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
           <GraficoSeries dados={grafico} series={[{ key: 'entraram', nome: 'Entraram', tipo: 'bar' }, { key: 'tombaram', nome: 'Tombaram', tipo: 'bar', cor: 'neutral' }, { key: 'ativados', nome: 'Ativados', tipo: 'bar', cor: 'gain' }, { key: 'perdidos', nome: 'Perdidos', tipo: 'bar', cor: 'loss' }]} altura={260} />
         </Panel>
 
-        <Panel title="Safra mês a mês" subtitle={`Cada coluna é o mês em que o lead entrou; os números dizem o que aconteceu com esses leads até hoje. De ${mesCurto(meses[0])} a ${mesCurto(mesRef)}.`}>
+        <Panel title="Safra mês a mês" subtitle={`Cada coluna é o mês em que o lead entrou; os números dizem o que aconteceu com esses leads até hoje. De ${mesCurto(meses[0])} a ${mesCurto(mesRef)}; a coluna do mês escolhido fica em destaque.`}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead><tr><th className="sticky-col min-w-[240px]">Indicador</th>{meses.map((x, i) => <th key={x} className={cn('num', colMes(i), x === mesRef && 'text-fg')}>{mesCurto(x)}</th>)}<th className="num">12 m</th></tr></thead>
@@ -151,13 +160,13 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
                 {linhas.map(l => (
                   <tr key={l.label}>
                     <td className={cn('sticky-col', l.destaque === 'sub' && 'pl-6 text-fg-muted', l.destaque === 'bold' && 'font-semibold', l.destaque === 'gain' && 'text-gain', l.destaque === 'loss' && 'text-loss')}>{l.label}</td>
-                    {meses.map((x, i) => { const v = l.valor(s.get(x)); return <td key={x} className={cn('num', colMes(i), !v && 'subtle', l.destaque === 'gain' && v && 'text-gain', l.destaque === 'loss' && v && 'text-loss')}>{l.fmt(v)}</td> })}
+                    {meses.map((x, i) => { const v = l.valor(s.get(x)); return <td key={x} className={cn('num', colMes(i), !v && 'subtle', x === mesRef && 'bg-surface-2', l.destaque === 'gain' && v && 'text-gain', l.destaque === 'loss' && v && 'text-loss')}>{l.fmt(v)}</td> })}
                     <td className="num font-semibold">{l.total == null ? '' : l.fmt(l.total)}</td>
                   </tr>
                 ))}
                 <tr>
                   <td className="sticky-col">Tempo médio até fechar (dias)</td>
-                  {meses.map((x, i) => { const v = m.get(x)?.dias_fechar ?? null; return <td key={x} className={cn('num', colMes(i), !v && 'subtle')}>{v == null ? TRACO : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td> })}
+                  {meses.map((x, i) => { const v = m.get(x)?.dias_fechar ?? null; return <td key={x} className={cn('num', colMes(i), !v && 'subtle', x === mesRef && 'bg-surface-2')}>{v == null ? TRACO : v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td> })}
                   <td></td>
                 </tr>
               </tbody>
@@ -165,10 +174,10 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
           </div>
         </Panel>
 
-        <TabelaSafra titulo="Por responsável" descricao="Leads atribuídos a cada pessoa na janela: quantos tombaram e quantos operaram." dados={porResp} />
-        <TabelaSafra titulo="Por origem" descricao="De onde vêm os leads e quanto cada origem rende." dados={porOrigem} />
+        <TabelaSafra titulo="Por responsável" descricao={`Leads de ${rotuloPeriodo} atribuídos a cada pessoa: quantos tombaram e quantos operaram.`} dados={porResp} />
+        <TabelaSafra titulo="Por origem" descricao={`De onde vieram os leads de ${rotuloPeriodo} e quanto cada origem rendeu.`} dados={porOrigem} />
 
-        <Panel title="Lista de ação" subtitle="Leads abertos sem contato · mais tempo primeiro." action={<Link href="/leads?alerta=1" className="link text-label">ver todos na tela de Leads</Link>}>
+        <Panel title="Lista de ação" subtitle="Leads abertos sem contato, de qualquer mês · mais tempo primeiro." action={<Link href="/leads?alerta=1" className="link text-label">ver todos na tela de Leads</Link>}>
           <div className="tbl-wrap max-h-[480px]">
             <table className="tbl tbl-dense">
               <thead><tr><th>Nome</th><th className="col-p2">WhatsApp</th><th className="col-p2">Responsável</th><th>Status</th><th className="col-p3">Recebido</th><th className="col-p2">Último contato</th><th className="num">Dias</th><th className="col-p3">Opera em</th></tr></thead>
@@ -207,7 +216,7 @@ function TabelaSafra({ titulo, descricao, dados }: { titulo: string; descricao: 
             </tr>
           </thead>
           <tbody>
-            {dados.length === 0 && <LinhaVazia colunas={13}>Sem leads na janela.</LinhaVazia>}
+            {dados.length === 0 && <LinhaVazia colunas={13}>Sem leads no período.</LinhaVazia>}
             {dados.map(g => (
               <tr key={g.grupo}>
                 <td className="font-medium">{g.grupo}</td>

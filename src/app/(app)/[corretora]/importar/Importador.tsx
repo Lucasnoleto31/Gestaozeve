@@ -32,7 +32,7 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
   const { avisar } = useToast()
   const [tipo, setTipo] = useState<Tipo>('lotes')
   const [estado, setEstado] = useState<Estado>({ fase: 'vazio' })
-  const [modo, setModo] = useState<'substituir' | 'acrescentar'>('substituir')
+  const [modo, setModo] = useState<'completar' | 'substituir' | 'acrescentar'>('completar')
 
   const escolher = async (file: File | null) => {
     if (!file) return
@@ -80,14 +80,28 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
   const importarLotesAgora = async () => {
     if (estado.fase !== 'lotes') return
     const { nome, linhas, resumo } = estado
-    setEstado({ fase: 'enviando', progresso: 0, total: linhas.length, texto: modo === 'substituir' ? 'Substituindo o período…' : 'Preparando…' })
+    setEstado({ fase: 'enviando', progresso: 0, total: linhas.length, texto: modo === 'substituir' ? 'Substituindo o período…' : modo === 'completar' ? 'Conferindo os dias já lançados…' : 'Preparando…' })
     const ini = await iniciarImportacaoLotes(corretora, nome, resumo.dataMin, resumo.dataMax, modo)
     if (!ini.ok) { setEstado({ fase: 'erro', erro: ini.erro }); return }
-    const { importacaoId, removidas } = ini.dados
+    const { importacaoId, removidas, diasExistentes, diasProtegidos } = ini.dados
+    // completar: só os dias que ainda não têm lançamento entram; em qualquer modo, os dias com
+    // ajuste de fechamento (importação protegida) ficam como estão
+    const pular = new Set([...(modo === 'completar' ? diasExistentes : []), ...diasProtegidos])
+    const envio = linhas.filter(l => !pular.has(l.data))
+    const diasIgnorados = [...new Set(linhas.filter(l => pular.has(l.data)).map(l => l.data))].sort()
+    const lista = (dias: string[]) => dias.map(dataPt).join(', ')
+    if (envio.length === 0) {
+      await cancelarImportacaoLotes(corretora, importacaoId)
+      setEstado({ fase: 'pronto', texto: 'Nada a importar: todos os dias do arquivo já estavam lançados.', detalhes: [
+        `Dias no arquivo: ${lista(diasIgnorados)}. Para refazer algum dia, use "Substituir o período".`,
+      ] })
+      return
+    }
+    const parcial = resumoLotes(envio, modoZeragem)
     let inseridas = 0
-    for (let i = 0; i < linhas.length; i += BLOCO) {
-      setEstado({ fase: 'enviando', progresso: i, total: linhas.length, texto: `Enviando lotes… ${fmtNum(Math.min(i + BLOCO, linhas.length))} de ${fmtNum(linhas.length)}` })
-      const r = await enviarLotes(corretora, importacaoId, linhas.slice(i, i + BLOCO))
+    for (let i = 0; i < envio.length; i += BLOCO) {
+      setEstado({ fase: 'enviando', progresso: i, total: envio.length, texto: `Enviando lotes… ${fmtNum(Math.min(i + BLOCO, envio.length))} de ${fmtNum(envio.length)}` })
+      const r = await enviarLotes(corretora, importacaoId, envio.slice(i, i + BLOCO))
       if (!r.ok) {
         await cancelarImportacaoLotes(corretora, importacaoId)
         setEstado({ fase: 'erro', erro: `${r.erro}. A importação foi desfeita; nada ficou pela metade.` })
@@ -95,15 +109,21 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
       }
       inseridas += r.dados.inseridas
     }
-    setEstado({ fase: 'enviando', progresso: linhas.length, total: linhas.length, texto: 'Concluindo…' })
-    const fim = await concluirImportacaoLotes(corretora, importacaoId, { linhas: linhas.length, inseridas, operados: resumo.operados, zerados: resumo.zerados })
+    setEstado({ fase: 'enviando', progresso: envio.length, total: envio.length, texto: 'Concluindo…' })
+    const fim = await concluirImportacaoLotes(corretora, importacaoId, { linhas: linhas.length, inseridas, ignoradas: linhas.length - envio.length, operados: parcial.operados, zerados: parcial.zerados, diasIgnorados })
     if (!fim.ok) { setEstado({ fase: 'erro', erro: fim.erro }); return }
-    setEstado({ fase: 'pronto', texto: `Lotes importados: ${fmtNum(inseridas)} linhas de ${dataPt(resumo.dataMin)} a ${dataPt(resumo.dataMax)}.`, detalhes: [
-      `${fmtNum(resumo.operados)} lotes operados · ${fmtNum(resumo.zerados)} contratos zerados`,
-      modo === 'substituir' ? `${fmtNum(removidas)} linhas antigas do período foram substituídas` : 'Linhas acrescentadas às já existentes',
+    const faltando = fim.dados.diasFaltando
+    const diasNovos = [...new Set(envio.map(l => l.data))].sort()
+    setEstado({ fase: 'pronto', texto: `Lotes importados: ${fmtNum(inseridas)} linhas de ${dataPt(parcial.dataMin)} a ${dataPt(parcial.dataMax)}.`, detalhes: [
+      `${fmtNum(parcial.operados)} lotes operados · ${fmtNum(parcial.zerados)} contratos zerados`,
+      modo === 'completar'
+        ? `${fmtNum(diasNovos.length)} ${diasNovos.length === 1 ? 'dia novo gravado' : 'dias novos gravados'}: ${lista(diasNovos)}`
+        : modo === 'substituir' ? `${fmtNum(removidas)} linhas antigas do período foram substituídas` : 'Linhas acrescentadas às já existentes',
+      ...(diasIgnorados.length ? [`${fmtNum(diasIgnorados.length)} ${diasIgnorados.length === 1 ? 'dia já lançado ficou como estava' : 'dias já lançados ficaram como estavam'}: ${lista(diasIgnorados)}`] : []),
+      ...(faltando.length ? [`Atenção: o arquivo não trouxe lançamentos em ${lista(faltando)}, que existiam antes e saíram com a substituição. Se esses dias tinham giro, importe-os de novo com "Completar".`] : []),
       'Vínculo com clientes, tarifas, zeragem e pontos recalculados.',
     ] })
-    avisar({ titulo: 'Lotes importados', detalhe: `${fmtNum(inseridas)} linhas · ${fmtNum(resumo.operados)} lotes`, tom: 'gain' })
+    avisar({ titulo: 'Lotes importados', detalhe: `${fmtNum(inseridas)} linhas · ${fmtNum(parcial.operados)} lotes`, tom: 'gain' })
     router.refresh()
   }
 
@@ -186,7 +206,11 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
           ) : (
             <Alert tone="gain">Nenhum lote lançado nesse período ainda.</Alert>
           )}
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <label className={cn('flex cursor-pointer items-start gap-2 rounded-md border p-3 text-dense', modo === 'completar' ? 'border-accent bg-accent-soft' : 'border-line')}>
+              <input type="radio" className="mt-1" checked={modo === 'completar'} onChange={() => setModo('completar')} />
+              <span><span className="font-medium">Completar</span> <span className="text-micro text-fg-subtle">(recomendado)</span><br /><span className="text-label text-fg-muted">Grava só os dias que ainda não têm lançamento; o que já existe fica como está. Serve para o relatório que chega sempre com os dias anteriores junto.</span></span>
+            </label>
             <label className={cn('flex cursor-pointer items-start gap-2 rounded-md border p-3 text-dense', modo === 'substituir' ? 'border-accent bg-accent-soft' : 'border-line')}>
               <input type="radio" className="mt-1" checked={modo === 'substituir'} onChange={() => setModo('substituir')} />
               <span><span className="font-medium">Substituir o período</span><br /><span className="text-label text-fg-muted">Apaga o que já existe entre {dataPt(estado.resumo.dataMin)} e {dataPt(estado.resumo.dataMax)} e grava o arquivo inteiro. É o jeito seguro de recolar um export atualizado.</span></span>

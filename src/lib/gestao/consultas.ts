@@ -155,7 +155,7 @@ export const mapKpis = (r: Row): PainelKpis => ({
   zerados_mes: num(r.zerados_mes), receita_mes: num(r.receita_mes), incentivo_mes: num(r.incentivo_mes), clientes_com_faixa: num(r.clientes_com_faixa),
   migrados_sem_giro: num(r.migrados_sem_giro), inativos: num(r.inativos), com_alertas: num(r.com_alertas), migrados_sem_data: num(r.migrados_sem_data),
   multi_conta: num(r.multi_conta), linhas_nao_cadastradas: num(r.linhas_nao_cadastradas), lotes_nao_cadastrados: num(r.lotes_nao_cadastrados),
-  ultima_data: str(r.ultima_data), lotes_12m: num(r.lotes_12m), receita_12m: num(r.receita_12m),
+  ultima_data: str(r.ultima_data), lotes_12m: num(r.lotes_12m), receita_12m: num(r.receita_12m), posicao_mes: num(r.posicao_mes),
 })
 
 export async function painelKpis(corretora: Corretora, mesRef: string | null): Promise<PainelKpis | null> {
@@ -168,7 +168,7 @@ export const mapMensal = (r: Row): PainelMensalRow => ({
   mes_ref: String(r.mes_ref), migrados_acumulados: num(r.migrados_acumulados), novas_migracoes: num(r.novas_migracoes), entradas: num(r.entradas),
   clientes_ativos: num(r.clientes_ativos), lotes: num(r.lotes), zerados: num(r.zerados), receita_corretagem: num(r.receita_corretagem),
   receita_zeragem: num(r.receita_zeragem), receita: num(r.receita), incentivo: num(r.incentivo), clientes_pontuando: num(r.clientes_pontuando),
-  clientes_com_faixa: num(r.clientes_com_faixa),
+  clientes_com_faixa: num(r.clientes_com_faixa), posicao: num(r.posicao),
 })
 
 export async function painelMensal(corretora: Corretora, mesRef: string | null, meses = 12): Promise<PainelMensalRow[]> {

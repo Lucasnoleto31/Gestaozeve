@@ -8,7 +8,7 @@ import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './
 import { lerFaixas, lerMetas, lerParticipacoes, numeroParam } from './btg'
 import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from '@/lib/corretoras'
 import { normTexto } from '@/lib/texto'
-import { buscarClientes, funcaoAusente, lotesNoPeriodo } from './consultas'
+import { buscarClientes, funcaoAusente, lotesNoPeriodo, todasAsLinhas } from './consultas'
 import { esquecerMesReferencia } from './pagina'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import type { ClienteDuplicado, LeadCampos, NovoClienteCampos, Resultado } from './tipos'
@@ -72,22 +72,49 @@ export async function prepararLotes(corretoraIn: string, dataMin: string, dataMa
   })
 }
 
-export async function iniciarImportacaoLotes(corretoraIn: string, nomeArquivo: string, dataMin: string, dataMax: string, modo: 'substituir' | 'acrescentar') {
+export type ModoImportacao = 'completar' | 'substituir' | 'acrescentar'
+
+// Dias que já têm lançamento no período (dias_com_lotes, S32; antes dela, lê a tabela)
+async function diasComLotes(db: Admin, corretora: Corretora, dataMin: string, dataMax: string): Promise<string[]> {
+  const { data, error } = await db.rpc('dias_com_lotes', { p_corretora: corretora, p_inicio: dataMin, p_fim: dataMax })
+  if (!error) return ((data ?? []) as Row[]).map(r => String(r.dia))
+  if (!funcaoAusente(error)) falha(error, 'dias_com_lotes')
+  const linhas = await todasAsLinhas<{ data: string }>((de, ate) => db.from('lotes').select('data').eq('corretora', corretora).gte('data', dataMin).lte('data', dataMax).range(de, ate), 'lotes')
+  return [...new Set(linhas.map(l => String(l.data)))].sort()
+}
+
+// Modos: completar grava só os dias que ainda não têm lançamento (o resto do arquivo é ignorado);
+// substituir apaga o período e grava o arquivo (menos os dias de importações protegidas, os ajustes
+// de fechamento); acrescentar grava tudo por cima. Devolve os dias que o importador deve pular.
+export async function iniciarImportacaoLotes(corretoraIn: string, nomeArquivo: string, dataMin: string, dataMax: string, modo: ModoImportacao) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
     const { db, profile } = await somenteAdmin()
     let removidas = 0
+    const diasExistentes = modo === 'completar' ? await diasComLotes(db, corretora, dataMin, dataMax) : []
+    // importações protegidas (ajustes de fechamento) nunca são apagadas nem duplicadas
+    const { data: prot } = await db.from('importacoes').select('id').eq('corretora', corretora).eq('protegida', true)
+    const protegidas = ((prot ?? []) as Row[]).map(p => String(p.id))
+    let diasProtegidos: string[] = []
+    if (protegidas.length) {
+      const { data: lp } = await db.from('lotes').select('data').eq('corretora', corretora).gte('data', dataMin).lte('data', dataMax).in('importacao_id', protegidas).range(0, 9999)
+      diasProtegidos = [...new Set(((lp ?? []) as Row[]).map(r => String(r.data)))].sort()
+    }
+    let diasAntes: string[] = []
     if (modo === 'substituir') {
-      const { count, error } = await db.from('lotes').delete({ count: 'exact' }).eq('corretora', corretora).gte('data', dataMin).lte('data', dataMax)
+      diasAntes = await diasComLotes(db, corretora, dataMin, dataMax)
+      let q = db.from('lotes').delete({ count: 'exact' }).eq('corretora', corretora).gte('data', dataMin).lte('data', dataMax)
+      if (protegidas.length) q = q.not('importacao_id', 'in', `(${protegidas.join(',')})`)
+      const { count, error } = await q
       if (error) falha(error, 'lotes')
       removidas = count ?? 0
     }
     const { data, error } = await db.from('importacoes').insert({
       corretora, tipo: 'lotes', nome_arquivo: nomeArquivo, data_min: dataMin, data_max: dataMax,
-      detalhes: { modo, removidas, status: 'em andamento' }, criado_por: profile.user_id, criado_por_nome: profile.nome,
+      detalhes: { modo, removidas, status: 'em andamento', dias_antes: diasAntes, dias_protegidos: diasProtegidos }, criado_por: profile.user_id, criado_por_nome: profile.nome,
     }).select('id').single()
     if (error) falha(error, 'importacoes')
-    return { importacaoId: String((data as Row).id), removidas }
+    return { importacaoId: String((data as Row).id), removidas, diasExistentes, diasProtegidos }
   })
 }
 
@@ -101,16 +128,26 @@ export async function enviarLotes(corretoraIn: string, importacaoId: string, lin
   })
 }
 
-export async function concluirImportacaoLotes(corretoraIn: string, importacaoId: string, totais: { linhas: number; inseridas: number; operados: number; zerados: number }) {
+export async function concluirImportacaoLotes(corretoraIn: string, importacaoId: string, totais: { linhas: number; inseridas: number; ignoradas?: number; operados: number; zerados: number; diasIgnorados?: string[] }) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const { data: atual } = await db.from('importacoes').select('detalhes').eq('id', importacaoId).maybeSingle()
-    const detalhes = { ...(((atual as Row | null)?.detalhes as Row | null) ?? {}), status: 'concluída', operados: totais.operados, zerados: totais.zerados }
-    const { error } = await db.from('importacoes').update({ linhas: totais.linhas, linhas_novas: totais.inseridas, detalhes }).eq('id', importacaoId)
+    const anteriores = ((atual as Row | null)?.detalhes as Row | null) ?? {}
+    // substituir: dias que existiam antes e o arquivo não trouxe (sumiram com a substituição)
+    const diasAntes = Array.isArray(anteriores.dias_antes) ? (anteriores.dias_antes as string[]) : []
+    let diasFaltando: string[] = []
+    if (diasAntes.length) {
+      const novos = await todasAsLinhas<{ data: string }>((de, ate) => db.from('lotes').select('data').eq('importacao_id', importacaoId).range(de, ate), 'lotes')
+      const temDia = new Set(novos.map(r => String(r.data)))
+      const protegidos = new Set(Array.isArray(anteriores.dias_protegidos) ? (anteriores.dias_protegidos as string[]) : [])
+      diasFaltando = diasAntes.filter(d => !temDia.has(d) && !protegidos.has(d)).sort()
+    }
+    const detalhes = { ...anteriores, status: 'concluída', operados: totais.operados, zerados: totais.zerados, dias_faltando: diasFaltando, dias_ignorados: totais.diasIgnorados ?? [] }
+    const { error } = await db.from('importacoes').update({ linhas: totais.linhas, linhas_novas: totais.inseridas, linhas_ignoradas: totais.ignoradas ?? 0, detalhes }).eq('id', importacaoId)
     if (error) falha(error, 'importacoes')
     revalidarCorretora(corretora)
-    return { ok: true }
+    return { diasFaltando }
   })
 }
 
@@ -582,7 +619,7 @@ function validarParametro(chave: string, valor: string): string {
     case 'zeragem_padrao': case 'meses_inativo': case 'dias_alerta_lead': case 'imposto_pct': case 'delta_pct':
     case 'impostos_embutidos_pct': case 'imposto_btg_pct':
       return numero()
-    case 'receita_desde_migracao': {
+    case 'receita_desde_migracao': case 'lotes_apenas_futuros': {
       const s = v.toUpperCase()
       if (s !== 'SIM' && s !== 'NAO' && s !== 'NÃO') throw new Error('Informe SIM ou NAO')
       return s === 'NÃO' ? 'NAO' : s
@@ -594,6 +631,8 @@ function validarParametro(chave: string, valor: string): string {
     }
     case 'modo_zeragem':
       if (!v) throw new Error('Informe o texto que marca a zeragem')
+      return v.toUpperCase()
+    case 'modo_daytrade':
       return v.toUpperCase()
     case 'modelo_incentivo': {
       const m = v.toUpperCase()

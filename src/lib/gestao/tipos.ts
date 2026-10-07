@@ -135,6 +135,7 @@ export type PainelKpis = {
   ultima_data: string | null
   lotes_12m: number
   receita_12m: number
+  posicao_mes: number        // contratos/ações carregados (não day trade), fora dos lotes e da receita
 }
 
 // Resumo do Painel calculado no banco (painel_resumo): totais, grupos e migrados sem giro
@@ -200,6 +201,7 @@ export type PainelMensalRow = {
   incentivo: number
   clientes_pontuando: number
   clientes_com_faixa: number
+  posicao: number            // posição (não day trade) no mês
 }
 
 export type ClienteMesRow = { cliente_id: string; cliente_nome: string; responsavel: string | null; mes_ref: string; lotes: number; total_clientes: number }

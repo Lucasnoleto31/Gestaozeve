@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { assessoresPorCorretora, leadsLista, parametroGeral, responsaveisAtivos, statusLeadLista } from '@/lib/gestao/consultas'
-import { mesAtual } from '@/lib/gestao/meses'
-import { fmtDate, hojeBrasil } from '@/lib/periodo'
+import { mesAtual, parseMes } from '@/lib/gestao/meses'
+import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { corretorasDoPerfil } from '@/lib/corretoras'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
@@ -23,7 +23,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   ])
 
   const mes = mesAtual().slice(0, 7)
-  const nesteMes = leads.filter(l => l.data_hora.slice(0, 7) === mes).length
+  const nesteMes = leads.filter(l => mesBrasil(l.data_hora) === mes).length
   const abertos = leads.filter(l => l.tipo_status === 'Aberto')
   const comAlerta = abertos.filter(l => l.alerta).length
   const ganhos = leads.filter(l => l.status === 'Ganho')
@@ -66,7 +66,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           corretoras={corretorasDoPerfil(profile)}
           assessores={assessores}
           hoje={fmtDate(hojeBrasil())}
-          filtrosIniciais={{ busca: f('busca'), status: f('status'), responsavel: f('responsavel'), origem: f('origem'), corretora: f('corretora'), alerta: f('alerta') === '1', clientes: f('clientes') }}
+          filtrosIniciais={{ busca: f('busca'), mes: parseMes(f('mes'))?.slice(0, 7) ?? '', status: f('status'), responsavel: f('responsavel'), origem: f('origem'), corretora: f('corretora'), alerta: f('alerta') === '1', clientes: f('clientes') }}
         />
       </PageBody>
     </>

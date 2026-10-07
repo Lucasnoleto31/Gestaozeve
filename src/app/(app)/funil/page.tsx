@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { funilMensal, funilSafra, funilSafraPor, leadsLista } from '@/lib/gestao/consultas'
-import { janelaMeses, mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
+import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
@@ -112,7 +112,8 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
         </KpiRow>
 
         <div className="grid gap-8 xl:grid-cols-3">
-          <Panel className="xl:col-span-2" title={`Funil de ${rotuloPeriodo}`} subtitle={`Leads que entraram ${soMes ? 'nesse mês' : 'nessa janela'} e onde estão hoje. Quem já era cliente ao entrar fica fora das etapas.`}>
+          <Panel className="xl:col-span-2" title={`Funil de ${rotuloPeriodo}`} subtitle={`Leads que entraram ${soMes ? 'nesse mês' : 'nessa janela'} e onde estão hoje. Quem já era cliente ao entrar fica fora das etapas.`}
+            action={soMes ? <Link href={`/leads?mes=${mesInput(mesRef)}`} className="link text-label">ver os leads do mês</Link> : undefined}>
             <ol className="space-y-3">
               {etapas.map((e, i) => {
                 const anterior = i > 0 ? etapas[i - 1].valor : null

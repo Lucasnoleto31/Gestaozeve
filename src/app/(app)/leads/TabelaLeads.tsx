@@ -14,12 +14,13 @@ import { StatusLeadBadge, TRACO, dataCurta, n0 } from '@/components/gestao/Celul
 import { marcarLeadPerdido, registrarContatoLead } from '@/lib/gestao/acoes'
 import type { AssessoresPorCorretora, LeadRow, StatusLead } from '@/lib/gestao/tipos'
 import { CORRETORA_SLUG, isCorretora, type Corretora } from '@/lib/corretoras'
-import { fmtNum } from '@/lib/format'
+import { fmtNum, labelMesCurto } from '@/lib/format'
+import { mesBrasil } from '@/lib/periodo'
 import { cn } from '@/lib/utils'
 import { LeadForm } from './LeadForm'
 import { GanhoWizard } from './GanhoWizard'
 
-type Filtros = { busca: string; status: string; responsavel: string; origem: string; corretora: string; alerta: boolean; clientes: string }
+type Filtros = { busca: string; mes: string; status: string; responsavel: string; origem: string; corretora: string; alerta: boolean; clientes: string }
 
 export function TabelaLeads({ leads, responsaveis, responsaveisClientes, status, admin, filtrosIniciais, corretoras, assessores, hoje }: {
   leads: LeadRow[]
@@ -47,11 +48,20 @@ export function TabelaLeads({ leads, responsaveis, responsaveisClientes, status,
   const origens = useMemo(() => [...new Set(leads.map(l => l.origem ?? ''))].filter(Boolean).sort(), [leads])
   const corretorasOpera = useMemo(() => [...new Set(leads.map(l => l.corretora ?? ''))].filter(Boolean).sort(), [leads])
   const respOpcoes = useMemo(() => [...new Set([...responsaveis, ...leads.map(l => l.responsavel ?? '')])].filter(Boolean).sort(), [leads, responsaveis])
+  // Mês de entrada de cada lead no fuso de Brasília (mesmo critério do funil)
+  const mesPorLead = useMemo(() => new Map(leads.map(l => [l.id, mesBrasil(l.data_hora)])), [leads])
+  const mesesOpcoes = useMemo(() => {
+    const contagem = new Map<string, number>()
+    for (const m of mesPorLead.values()) contagem.set(m, (contagem.get(m) ?? 0) + 1)
+    if (f.mes && !contagem.has(f.mes)) contagem.set(f.mes, 0)   // mês vindo da URL sem leads continua selecionável
+    return [...contagem.entries()].sort((a, b) => b[0].localeCompare(a[0]))
+  }, [mesPorLead, f.mes])
 
   const filtrados = useMemo(() => {
     const t = f.busca.trim().toUpperCase()
     const dig = t.replace(/\D/g, '')
     return leads.filter(l => {
+      if (f.mes && mesPorLead.get(l.id) !== f.mes) return false
       if (f.status && l.status !== f.status) return false
       if (f.responsavel && (l.responsavel ?? '') !== f.responsavel) return false
       if (f.origem && (l.origem ?? '') !== f.origem) return false
@@ -65,7 +75,7 @@ export function TabelaLeads({ leads, responsaveis, responsaveisClientes, status,
       }
       return true
     })
-  }, [leads, f])
+  }, [leads, f, mesPorLead])
   const visiveis = filtrados.slice(0, limite)
   const sel = (k: keyof Filtros, v: string | boolean) => setF(x => ({ ...x, [k]: v }))
 
@@ -96,6 +106,7 @@ export function TabelaLeads({ leads, responsaveis, responsaveisClientes, status,
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
           <input className="field-sm w-52 pl-8" placeholder="Nome, telefone, CPF, e-mail…" value={f.busca} onChange={e => sel('busca', e.target.value)} aria-label="Buscar" />
         </label>
+        <select className="field-sm" value={f.mes} onChange={e => sel('mes', e.target.value)} aria-label="Mês de entrada"><option value="">Mês: todos</option>{mesesOpcoes.map(([m, n]) => <option key={m} value={m}>{labelMesCurto(m + '-01')} · {fmtNum(n)}</option>)}</select>
         <select className="field-sm" value={f.status} onChange={e => sel('status', e.target.value)} aria-label="Status"><option value="">Status: todos</option>{status.map(s => <option key={s.status}>{s.status}</option>)}</select>
         <select className="field-sm" value={f.responsavel} onChange={e => sel('responsavel', e.target.value)} aria-label="Responsável"><option value="">Responsável: todos</option>{respOpcoes.map(r => <option key={r}>{r}</option>)}</select>
         <select className="field-sm" value={f.origem} onChange={e => sel('origem', e.target.value)} aria-label="Origem"><option value="">Origem: todas</option>{origens.map(o => <option key={o}>{o}</option>)}</select>

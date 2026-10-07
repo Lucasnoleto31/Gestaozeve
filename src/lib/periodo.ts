@@ -85,3 +85,14 @@ export function ultimosMeses(n: number): string[] {
   }
   return out
 }
+
+// timestamptz ISO (ex.: '2026-10-01T01:00:00+00:00') → 'YYYY-MM' no fuso de Brasília.
+// Mesmo critério do banco (data_hora AT TIME ZONE 'America/Sao_Paulo') nas telas de leads e funil.
+const FMT_MES_BR = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' })
+export function mesBrasil(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 7)
+  const partes = FMT_MES_BR.formatToParts(d)
+  const parte = (tipo: string) => partes.find(p => p.type === tipo)?.value ?? ''
+  return `${parte('year')}-${parte('month')}`
+}

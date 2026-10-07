@@ -10,6 +10,7 @@ import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from
 import { normTexto } from '@/lib/texto'
 import { buscarClientes, funcaoAusente, lotesNoPeriodo, todasAsLinhas } from './consultas'
 import { esquecerMesReferencia } from './pagina'
+import { ehIso } from './meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import type { ClienteDuplicado, LeadCampos, NovoClienteCampos, Resultado } from './tipos'
 
@@ -617,7 +618,7 @@ function validarParametro(chave: string, valor: string): string {
   }
   switch (chave) {
     case 'zeragem_padrao': case 'meses_inativo': case 'dias_alerta_lead': case 'imposto_pct': case 'delta_pct':
-    case 'impostos_embutidos_pct': case 'imposto_btg_pct':
+    case 'impostos_embutidos_pct': case 'imposto_btg_pct': case 'tarifa_acoes_daytrade':
       return numero()
     case 'receita_desde_migracao': case 'lotes_apenas_futuros': {
       const s = v.toUpperCase()
@@ -894,5 +895,29 @@ export async function buscarClientesAction(corretoraIn: string, termo: string) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
     return buscarClientes(corretora, termo)
+  })
+}
+
+// ── Corretagem por operação (tela Operações do dia) ───────────────────────────
+// tarifa null = volta ao cadastro. Só linhas do dia e da corretora informados; o banco recalcula os lotes.
+export async function salvarCorretagensDia(corretoraIn: string, dia: string, itens: { id: string; tarifa: number | null }[]) {
+  return tentar(async () => {
+    const corretora = await corretoraValida(corretoraIn)
+    const { db } = await somenteAdmin()
+    if (!ehIso(dia)) throw new Error('Dia inválido')
+    const limpos = itens
+      .filter(i => typeof i.id === 'string' && /^[0-9a-f-]{36}$/i.test(i.id))
+      .map(i => ({ id: i.id, tarifa: i.tarifa == null ? null : Number(i.tarifa) }))
+    if (limpos.some(i => i.tarifa != null && (!Number.isFinite(i.tarifa) || i.tarifa < 0 || i.tarifa > 100000))) throw new Error('Corretagem inválida')
+    if (!limpos.length) return { alteradas: 0 }
+    const { data: doDia, error: e1 } = await db.from('lotes').select('id').eq('corretora', corretora).eq('data', dia).in('id', limpos.map(i => i.id))
+    if (e1) falha(e1, 'lotes')
+    const validos = new Set(((doDia ?? []) as Row[]).map(r => String(r.id)))
+    const envio = limpos.filter(i => validos.has(i.id))
+    if (!envio.length) throw new Error('Nenhuma das operações pertence a esse dia')
+    const { data, error } = await db.rpc('definir_corretagem_dia', { p_corretora: corretora, p_itens: envio })
+    if (error) falha(error, 'definir_corretagem_dia')
+    revalidarCorretora(corretora)
+    return { alteradas: num(data) }
   })
 }

@@ -39,7 +39,8 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
   const resp = porResponsavel(migrados)
   const sit = porSituacao(clientes)
   const mensalMap = new Map(mensal.map(m => [m.mes_ref, m]))
-  const totMensal = mensal.reduce((a, m) => ({ lotes: a.lotes + m.lotes, rc: a.rc + m.receita_corretagem, rz: a.rz + m.receita_zeragem, inc: a.inc + m.incentivo }), { lotes: 0, rc: 0, rz: 0, inc: 0 })
+  const totMensal = mensal.reduce((a, m) => ({ lotes: a.lotes + m.lotes, rc: a.rc + m.receita_corretagem, rz: a.rz + m.receita_zeragem, ra: a.ra + m.receita_acoes, inc: a.inc + m.incentivo }), { lotes: 0, rc: 0, rz: 0, ra: 0, inc: 0 })
+  const fixaMes = mensalMap.get(mesRef)?.receita_acoes ?? 0
 
   return (
     <>
@@ -51,7 +52,7 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
       />
       <PageBody>
         <KpiRow cols={6}>
-          <KpiCard label="Receita do mês" value={rCurto(receitaMes)} sub={`corretagem ${rCurto(corretagemMes)} · zeragem ${rCurto(zeragemMes)}`} />
+          <KpiCard label="Receita do mês" value={rCurto(receitaMes)} sub={`corretagem ${rCurto(corretagemMes)} · zeragem ${rCurto(zeragemMes)}${fixaMes > 0 ? ` · fixa ${rCurto(fixaMes)}` : ''}`} />
           <KpiCard label="Receita 12 meses" value={rCurto(receita12)} sub={`${fmtNum(lotes12)} lotes na janela`} />
           <KpiCard label="Lotes no mês" value={fmtNum(lotesMes)} sub={`${fmtNum(zeradosMes)} contratos zerados`} />
           <KpiCard label="R$ por lote" value={lotesMes ? n2(Math.round((receitaMes / lotesMes) * 1000) / 1000) : TRACO} sub={`tarifa média cadastrada ${n2(Math.round(tarifaMedia * 100) / 100)}`} />
@@ -128,7 +129,7 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
                         </tr>
                       )
                     })}
-                    <tr className="total"><td>12 m</td><td className="num col-p2">{n0(totMensal.lotes)}</td><td className="num">{rCurto(totMensal.rc)}</td><td className="num">{rCurto(totMensal.rz)}</td><td className="num">{rCurto(totMensal.rc + totMensal.rz)}</td><td className="num col-p2">{rCurto(totMensal.inc)}</td></tr>
+                    <tr className="total"><td>12 m</td><td className="num col-p2">{n0(totMensal.lotes)}</td><td className="num">{rCurto(totMensal.rc)}</td><td className="num">{rCurto(totMensal.rz)}</td><td className="num">{rCurto(totMensal.rc + totMensal.rz + totMensal.ra)}</td><td className="num col-p2">{rCurto(totMensal.inc)}</td></tr>
                   </tbody>
                 </table>
               </div>

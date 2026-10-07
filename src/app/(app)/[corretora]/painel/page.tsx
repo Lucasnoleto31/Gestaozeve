@@ -109,6 +109,10 @@ export default async function PainelPage({ params, searchParams }: { params: Par
     { label: 'Lotes por cliente ativo', valores: col(m => (m && m.clientes_ativos ? m.lotes / m.clientes_ativos : null)), fmt: v => (v == null ? TRACO : n2(Math.round(v * 10) / 10)) },
     { label: 'Receita de corretagem', valores: col(m => m?.receita_corretagem ?? null), fmt: rr, total: true },
     { label: 'Receita de zeragem', valores: col(m => m?.receita_zeragem ?? null), fmt: rr, total: true },
+    ...(mensal.some(m => m.receita_acoes > 0 || m.acoes_operacoes > 0) ? [
+      { label: 'Corretagem fixa (ações, cripto e posições)', valores: col(m => m?.receita_acoes ?? null), fmt: rr, total: true } as Linha,
+      { label: 'operações de ações e cripto (day trade)', valores: col(m => m?.acoes_operacoes ?? null), fmt: nn, destaque: 'sub', total: true } as Linha,
+    ] : []),
     ...(atp ? [] : [{ label: `Incentivo ${ctx.label}`, valores: col(m => m?.incentivo ?? null), fmt: rr, total: true } as Linha]),
     { label: 'Receita total', valores: col(m => (m ? receitaTotal(m) : null)), fmt: rr, destaque: 'total', total: true },
     ...linhasRepasse,
@@ -136,7 +140,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           <KpiCard label="Taxa de migração" value={fmtPct(taxaMigracao)} sub={`${fmtNum(r.migrados)} migrados · ${fmtNum(r.recusaram)} recusaram`} />
           <KpiCard label="Ativos no mês" value={fmtNum(r.ativos)} sub={`giraram em ${mesCurto(mesRef)}`} />
           <KpiCard label="% ativos da base migrada" value={fmtPct(pctAtivosMigrados)} sub={`${fmtPct(pctAtivosLevados)} do total levado`} />
-          <KpiCard label="Lotes no mês" value={fmtNum(r.lotes_mes)} sub={`${fmtNum(r.zerados_mes)} zerados · ${rCurto(r.receita_mes)}${mesAtual?.posicao ? ` · ${fmtNum(mesAtual.posicao)} em posição` : ''}`} />
+          <KpiCard label="Lotes no mês" value={fmtNum(r.lotes_mes)} sub={`${fmtNum(r.zerados_mes)} zerados · ${rCurto(r.receita_mes)}${mesAtual?.acoes_operacoes ? ` · ${fmtNum(mesAtual.acoes_operacoes)} op. de ações` : ''}${mesAtual?.posicao ? ` · ${fmtNum(mesAtual.posicao)} em posição` : ''}`} />
           {comRepasse ? (
             <KpiCard label="Comissão líquida no mês" value={rCurto(repasseMes.liquido)} sub={`comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`} />
           ) : atp ? (

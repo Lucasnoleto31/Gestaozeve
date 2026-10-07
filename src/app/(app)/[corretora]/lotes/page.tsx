@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import Link from 'next/link'
 import { contexto, periodoDaUrl, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { diario, ultimaData } from '@/lib/gestao/consultas'
 import { diasEntre, inicioSemana, somarDias } from '@/lib/gestao/meses'
@@ -134,7 +135,7 @@ export default async function GiroDiarioPage({ params, searchParams }: { params:
           </Panel>
         </div>
 
-        <Panel title="Dia a dia" subtitle="Mais recente primeiro.">
+        <Panel title="Dia a dia" subtitle="Mais recente primeiro · clique na data para ver e ajustar as operações do dia.">
           <div className="tbl-wrap max-h-[70vh]">
             <table className="tbl tbl-dense">
               <thead>
@@ -147,7 +148,7 @@ export default async function GiroDiarioPage({ params, searchParams }: { params:
                 {serie.length === 0 && <LinhaVazia colunas={11}>Sem lotes no período.</LinhaVazia>}
                 {[...serie].reverse().map(d => (
                   <tr key={d.dia}>
-                    <td className="num font-medium">{dataCurta(d.dia)}</td>
+                    <td className="num font-medium"><Link href={`${ctx.base}/lotes/${d.dia}`} className="hover:text-accent hover:underline">{dataCurta(d.dia)}</Link></td>
                     <td className="muted col-p2">{diaSemana(d.dia)}</td>
                     <td className="num"><BarraCelula valor={d.lotes} max={maxLotes} largura={80} /></td>
                     <td className={cn('num col-p2', !d.zerados && 'subtle')}>{n0(d.zerados)}</td>

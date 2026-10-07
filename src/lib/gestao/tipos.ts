@@ -136,6 +136,8 @@ export type PainelKpis = {
   lotes_12m: number
   receita_12m: number
   posicao_mes: number        // contratos/ações carregados (não day trade), fora dos lotes e da receita
+  acoes_operacoes_mes: number // operações de day trade em ações/cripto (corretagem fixa, fora dos lotes)
+  receita_acoes_mes: number   // corretagem fixa (ações + posições com corretagem informada), já dentro de receita_mes
 }
 
 // Resumo do Painel calculado no banco (painel_resumo): totais, grupos e migrados sem giro
@@ -202,6 +204,8 @@ export type PainelMensalRow = {
   clientes_pontuando: number
   clientes_com_faixa: number
   posicao: number            // posição (não day trade) no mês
+  acoes_operacoes: number    // operações de day trade em ações/cripto
+  receita_acoes: number      // corretagem fixa (ações + posições com corretagem informada), já dentro de receita
 }
 
 export type ClienteMesRow = { cliente_id: string; cliente_nome: string; responsavel: string | null; mes_ref: string; lotes: number; total_clientes: number }
@@ -267,6 +271,28 @@ export type IncentivoRow = {
 export type IncentivoHistRow = { mes_ref: string; pontos: number; clientes_pontuando: number; clientes_com_faixa: number; incentivo: number }
 
 export type DiarioRow = { dia: string; lotes: number; zerados: number; clientes: number; operacoes: number; receita: number }
+
+// Uma linha do relatório num dia (tela Operações do dia), com a corretagem em uso e a do cadastro
+export type OperacaoDia = {
+  id: string
+  conta: string | null
+  cliente_id: string | null
+  cliente_nome: string
+  nao_cadastrado: boolean
+  assessor_nome: string | null
+  ativo: string | null
+  produto: string | null
+  modo: string | null
+  plataforma: string | null
+  tipo: 'lote' | 'acoes' | 'posicao' | 'zeragem'
+  qtd: number
+  tarifa: number               // em uso: manual, se houver, senão a do cadastro (R$/lote; ações e posição: R$ por operação)
+  tarifa_manual: number | null
+  tarifa_padrao: number        // o que o cadastro daria (tarifa do cliente/assessor, ou corretagem fixa de ações)
+  zeragem_rs: number
+  conta_para_receita: boolean  // false antes da migração (receita_desde_migracao)
+  receita: number
+}
 
 export type MixPlataformaRow = { plataforma: string; lotes: number; zerados: number; clientes: number }
 

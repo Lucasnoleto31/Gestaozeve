@@ -6,6 +6,7 @@ import { mesAtual } from './meses'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import type {
+  OperacaoDia,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
   IncentivoRow, LeadAcao, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
@@ -156,6 +157,7 @@ export const mapKpis = (r: Row): PainelKpis => ({
   migrados_sem_giro: num(r.migrados_sem_giro), inativos: num(r.inativos), com_alertas: num(r.com_alertas), migrados_sem_data: num(r.migrados_sem_data),
   multi_conta: num(r.multi_conta), linhas_nao_cadastradas: num(r.linhas_nao_cadastradas), lotes_nao_cadastrados: num(r.lotes_nao_cadastrados),
   ultima_data: str(r.ultima_data), lotes_12m: num(r.lotes_12m), receita_12m: num(r.receita_12m), posicao_mes: num(r.posicao_mes),
+  acoes_operacoes_mes: num(r.acoes_operacoes_mes), receita_acoes_mes: num(r.receita_acoes_mes),
 })
 
 export async function painelKpis(corretora: Corretora, mesRef: string | null): Promise<PainelKpis | null> {
@@ -168,7 +170,7 @@ export const mapMensal = (r: Row): PainelMensalRow => ({
   mes_ref: String(r.mes_ref), migrados_acumulados: num(r.migrados_acumulados), novas_migracoes: num(r.novas_migracoes), entradas: num(r.entradas),
   clientes_ativos: num(r.clientes_ativos), lotes: num(r.lotes), zerados: num(r.zerados), receita_corretagem: num(r.receita_corretagem),
   receita_zeragem: num(r.receita_zeragem), receita: num(r.receita), incentivo: num(r.incentivo), clientes_pontuando: num(r.clientes_pontuando),
-  clientes_com_faixa: num(r.clientes_com_faixa), posicao: num(r.posicao),
+  clientes_com_faixa: num(r.clientes_com_faixa), posicao: num(r.posicao), acoes_operacoes: num(r.acoes_operacoes), receita_acoes: num(r.receita_acoes),
 })
 
 export async function painelMensal(corretora: Corretora, mesRef: string | null, meses = 12): Promise<PainelMensalRow[]> {
@@ -528,4 +530,17 @@ export async function funilSafraPor(campo: 'responsavel' | 'origem' | 'corretora
     if (e instanceof Error && funcaoAusente({ message: e.message })) return []
     throw e
   }
+}
+
+// ── Operações de um dia ────────────────────────────────────────────────────
+// Todas as linhas do relatório no dia, inclusive as que não contam para a receita (antes da migração).
+export async function operacoesDoDia(corretora: Corretora, dia: string): Promise<OperacaoDia[]> {
+  const { db } = await equipe()
+  return linhas(await rpc(db, 'operacoes_dia', { p_corretora: corretora, p_data: dia }), r => ({
+    id: String(r.id), conta: str(r.conta), cliente_id: str(r.cliente_id), cliente_nome: String(r.cliente_nome ?? 'Não cadastrado'),
+    nao_cadastrado: bool(r.nao_cadastrado), assessor_nome: str(r.assessor_nome), ativo: str(r.ativo), produto: str(r.produto), modo: str(r.modo),
+    plataforma: str(r.plataforma), tipo: (str(r.tipo) ?? 'lote') as OperacaoDia['tipo'], qtd: num(r.qtd), tarifa: num(r.tarifa),
+    tarifa_manual: r.tarifa_manual == null ? null : num(r.tarifa_manual), tarifa_padrao: num(r.tarifa_padrao), zeragem_rs: num(r.zeragem_rs),
+    conta_para_receita: bool(r.conta_para_receita), receita: num(r.receita),
+  }))
 }

@@ -317,6 +317,8 @@ export type FunilSafraBase = {
   perdidos: number
   ganhos: number
   em_aberto: number
+  ja_clientes: number       // já eram clientes migrados antes de entrar como lead (não contam como ativados)
+  viraram_clientes: number  // ganhos ou ligados a um cadastro novo, qualquer status
   ativados: number          // viraram clientes migrados
   em_processamento: number  // viraram clientes, conta ainda em abertura
   recusaram: number         // viraram clientes e recusaram

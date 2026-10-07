@@ -32,26 +32,27 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const semSafra = safra.length === 0 && leads.length > 0   // S26 ainda não rodou
 
   // Totais da safra na janela: do que entrou nesses 12 meses, o que aconteceu até hoje
-  const chaves: (keyof FunilSafraBase)[] = ['recebidos', 'contatados', 'perdidos', 'ganhos', 'em_aberto', 'ativados', 'em_processamento', 'recusaram', 'lotes', 'receita']
+  const chaves: (keyof FunilSafraBase)[] = ['recebidos', 'contatados', 'perdidos', 'ganhos', 'em_aberto', 'ja_clientes', 'viraram_clientes', 'ativados', 'em_processamento', 'recusaram', 'lotes', 'receita']
   const t = Object.fromEntries(chaves.map(k => [k, safra.reduce((acc, x) => acc + x[k], 0)])) as FunilSafraBase
-  const jaClientes = mensal.reduce((acc, x) => acc + x.ja_clientes, 0)
+  const jaClientes = t.ja_clientes || mensal.reduce((acc, x) => acc + x.ja_clientes, 0)
   const comGiro = safra.reduce((acc, x) => acc + x.com_giro, 0)
   const abertosHoje = leads.filter(l => l.tipo_status === 'Aberto').length
   const acao = leads.filter(l => l.alerta).sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0)).slice(0, 40)
   const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
 
-  // Etapas do funil (janela inteira)
+  // Etapas do funil (janela inteira). Quem já era cliente antes de entrar fica fora das etapas.
   const etapas = [
     { nome: 'Entraram', valor: t.recebidos, nota: `${fmtNum(jaClientes)} já eram clientes` },
     { nome: 'Contatados', valor: t.contatados, nota: 'registramos contato ou mudamos o status' },
-    { nome: 'Ganhos', valor: t.ganhos, nota: 'fechados como ganho' },
-    { nome: 'Ativados', valor: t.ativados, nota: 'viraram clientes migrados' },
+    { nome: 'Viraram clientes', valor: t.viraram_clientes, nota: `${fmtNum(t.ganhos)} marcados como ganho` },
+    { nome: 'Ativados', valor: t.ativados, nota: 'migraram e viraram clientes ativos' },
   ]
   const saidas = [
     { nome: 'Tombaram (perdidos)', valor: t.perdidos, tom: 'loss' as const },
     { nome: 'Recusaram a corretora', valor: t.recusaram, tom: 'loss' as const },
     { nome: 'Ainda em aberto', valor: t.em_aberto, tom: 'neutral' as const },
     { nome: 'Conta em abertura', valor: t.em_processamento, tom: 'neutral' as const },
+    { nome: 'Já eram clientes ao entrar', valor: jaClientes, tom: 'neutral' as const },
   ]
 
   type Linha = { label: string; valor: (x: FunilSafraBase | undefined) => number | null; fmt: (v: number | null) => string; total: number | null; destaque?: 'sub' | 'bold' | 'gain' | 'loss' }
@@ -60,11 +61,13 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const rr = (v: number | null) => (v == null ? TRACO : rCurto(v))
   const linhas: Linha[] = [
     { label: 'Leads que entraram', valor: x => x?.recebidos ?? null, fmt: nn, total: t.recebidos, destaque: 'bold' },
+    { label: 'já eram clientes ao entrar', valor: x => x?.ja_clientes ?? null, fmt: nn, total: t.ja_clientes, destaque: 'sub' },
     { label: 'Contatados', valor: x => x?.contatados ?? null, fmt: nn, total: t.contatados },
     { label: '% contatados', valor: x => (x ? pct(x.contatados, x.recebidos) : null), fmt: pp, total: pct(t.contatados, t.recebidos), destaque: 'sub' },
     { label: 'Tombaram (perdidos)', valor: x => x?.perdidos ?? null, fmt: nn, total: t.perdidos, destaque: 'loss' },
     { label: 'Ganhos', valor: x => x?.ganhos ?? null, fmt: nn, total: t.ganhos, destaque: 'gain' },
     { label: 'Ainda em aberto', valor: x => x?.em_aberto ?? null, fmt: nn, total: t.em_aberto },
+    { label: 'Viraram clientes (cadastro novo)', valor: x => x?.viraram_clientes ?? null, fmt: nn, total: t.viraram_clientes },
     { label: 'Ativados (clientes migrados)', valor: x => x?.ativados ?? null, fmt: nn, total: t.ativados, destaque: 'bold' },
     { label: 'conta em abertura', valor: x => x?.em_processamento ?? null, fmt: nn, total: t.em_processamento, destaque: 'sub' },
     { label: 'Recusaram a corretora', valor: x => x?.recusaram ?? null, fmt: nn, total: t.recusaram, destaque: 'loss' },
@@ -83,20 +86,20 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
         actions={<MesPicker valor={mesRef} label="Janela até" />}
       />
       <PageBody>
-        {semSafra && <Alert tone="warn" title="Funil por safra ainda não ativado no banco">Rode o script S26 no Supabase para ver contatados, ativados, recusados, lotes e receita.</Alert>}
+        {semSafra && <Alert tone="warn" title="Funil por safra ainda não ativado no banco">Rode o script S27 no Supabase para ver contatados, ativados, recusados, lotes e receita.</Alert>}
 
         <KpiRow cols={7}>
           <KpiCard label="Entraram (12 m)" value={fmtNum(t.recebidos)} sub={`${fmtNum(jaClientes)} já eram clientes`} />
           <KpiCard label="Contatados" value={fmtNum(t.contatados)} sub={t.recebidos ? `${fmtPct(pct(t.contatados, t.recebidos) ?? 0, 0)} dos que entraram` : undefined} />
           <KpiCard label="Tombaram" value={fmtNum(t.perdidos)} sub={t.recebidos ? `${fmtPct(pct(t.perdidos, t.recebidos) ?? 0, 0)} dos que entraram` : undefined} tone={t.perdidos ? 'loss' : 'neutral'} />
-          <KpiCard label="Ganhos" value={fmtNum(t.ganhos)} sub={t.recebidos ? `${fmtPct(pct(t.ganhos, t.recebidos) ?? 0, 0)} dos que entraram` : undefined} tone={t.ganhos ? 'gain' : 'neutral'} />
+          <KpiCard label="Viraram clientes" value={fmtNum(t.viraram_clientes)} sub={`${fmtNum(t.ganhos)} marcados como ganho`} tone={t.viraram_clientes ? 'gain' : 'neutral'} />
           <KpiCard label="Ativados" value={fmtNum(t.ativados)} sub={`${fmtNum(t.em_processamento)} com conta em abertura`} tone={t.ativados ? 'gain' : 'neutral'} />
           <KpiCard label="Recusaram" value={fmtNum(t.recusaram)} sub="viraram cliente e não migraram" tone={t.recusaram ? 'loss' : 'neutral'} />
           <KpiCard label="Receita dos ativados" value={rCurto(t.receita)} sub={`${fmtNum(t.lotes)} lotes · ${fmtNum(comGiro)} giraram`} tone={t.receita ? 'gain' : 'neutral'} />
         </KpiRow>
 
         <div className="grid gap-8 xl:grid-cols-3">
-          <Panel className="xl:col-span-2" title="Funil da janela" subtitle={`Leads que entraram de ${mesCurto(meses[0])} a ${mesCurto(mesRef)} e onde estão hoje.`}>
+          <Panel className="xl:col-span-2" title="Funil da janela" subtitle={`Leads que entraram de ${mesCurto(meses[0])} a ${mesCurto(mesRef)} e onde estão hoje. Quem já era cliente ao entrar fica fora das etapas.`}>
             <ol className="space-y-3">
               {etapas.map((e, i) => {
                 const anterior = i > 0 ? etapas[i - 1].valor : null
@@ -107,10 +110,10 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
                       <span className="tabular-nums text-fg-muted">
                         <span className="font-semibold text-fg">{fmtNum(e.valor)}</span>
                         {i > 0 && t.recebidos > 0 && <> · {fmtPct(pct(e.valor, t.recebidos) ?? 0, 0)} dos que entraram</>}
-                        {anterior != null && anterior > 0 && i > 0 && <span className="text-fg-subtle"> · {fmtPct(pct(e.valor, anterior) ?? 0, 0)} da etapa anterior</span>}
+                        {anterior != null && anterior >= e.valor && anterior > 0 && <span className="text-fg-subtle"> · {fmtPct(pct(e.valor, anterior) ?? 0, 0)} da etapa anterior</span>}
                       </span>
                     </div>
-                    <div className="bar-track mt-1 h-2" aria-hidden><div className="bar-fill" style={{ width: `${t.recebidos ? (e.valor / t.recebidos) * 100 : 0}%`, opacity: 1 - i * 0.18 }} /></div>
+                    <div className="bar-track mt-1 h-2" aria-hidden><div className="bar-fill" style={{ width: `${t.recebidos ? Math.min(100, (e.valor / t.recebidos) * 100) : 0}%`, opacity: 1 - i * 0.18 }} /></div>
                   </li>
                 )
               })}
@@ -195,20 +198,22 @@ function TabelaSafra({ titulo, descricao, dados }: { titulo: string; descricao: 
         <table className="tbl tbl-dense">
           <thead>
             <tr>
-              <th>Grupo</th><th className="num">Entraram</th><th className="num col-p2">Contatados</th><th className="num">Tombaram</th><th className="num">Ganhos</th><th className="num col-p3">Em aberto</th>
-              <th className="num">Ativados</th><th className="num col-p2">Recusaram</th><th className="num col-p2">% ativados</th><th className="num col-p3">Lotes</th><th className="num">Receita</th>
+              <th>Grupo</th><th className="num">Entraram</th><th className="num col-p3">Já clientes</th><th className="num col-p2">Contatados</th><th className="num">Tombaram</th><th className="num col-p2">Ganhos</th><th className="num col-p3">Em aberto</th>
+              <th className="num col-p2">Novos clientes</th><th className="num">Ativados</th><th className="num col-p2">Recusaram</th><th className="num col-p2">% ativados</th><th className="num col-p3">Lotes</th><th className="num">Receita</th>
             </tr>
           </thead>
           <tbody>
-            {dados.length === 0 && <LinhaVazia colunas={11}>Sem leads na janela.</LinhaVazia>}
+            {dados.length === 0 && <LinhaVazia colunas={13}>Sem leads na janela.</LinhaVazia>}
             {dados.map(g => (
               <tr key={g.grupo}>
                 <td className="font-medium">{g.grupo}</td>
                 <td className="num">{n0(g.recebidos)}</td>
+                <td className="num muted col-p3">{n0(g.ja_clientes)}</td>
                 <td className="num col-p2">{n0(g.contatados)}</td>
                 <td className={cn('num', g.perdidos && 'text-loss')}>{n0(g.perdidos)}</td>
-                <td className={cn('num', g.ganhos && 'text-gain')}>{n0(g.ganhos)}</td>
+                <td className={cn('num col-p2', g.ganhos && 'text-gain')}>{n0(g.ganhos)}</td>
                 <td className="num col-p3">{n0(g.em_aberto)}</td>
+                <td className="num col-p2">{n0(g.viraram_clientes)}</td>
                 <td className={cn('num font-semibold', g.ativados && 'text-gain')}>{n0(g.ativados)}</td>
                 <td className={cn('num col-p2', g.recusaram && 'text-loss')}>{n0(g.recusaram)}</td>
                 <td className="num col-p2">{g.recebidos ? fmtPct((g.ativados / g.recebidos) * 100, 0) : TRACO}</td>

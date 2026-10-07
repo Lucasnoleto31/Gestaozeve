@@ -21,22 +21,24 @@ export default async function GraficosPage({ params, searchParams }: { params: P
   const { corretora, mesRef, q } = ctx
   const meses = janelaMeses(mesRef, 12)
   const lim = limitesDoMes(mesRef)
-  const ultima = await ultimaData(corretora)
-  const ref = ehIso(q.ref) ? q.ref : (ultima ?? fmtDate(hojeBrasil()))
-  const ini30 = somarDias(ref, -29)
-  const iniSemanas = inicioSemana(somarDias(ref, -77)) // 12 semanas até a semana da referência
-
-  const [clientes, mensal, porAssessor, top10, mix, migr, dias, funil, porCorretora, porStatus] = await Promise.all([
+  // Duas levas em paralelo: só migrações e diário dependem da última data lançada
+  const [ultima, clientes, mensal, porAssessor, top10, mix, funil, porCorretora, porStatus] = await Promise.all([
+    ultimaData(corretora),
     clientesLista(corretora, mesRef),
     painelMensal(corretora, mesRef, 12),
     assessoresMensal(corretora, mesRef, 12),
     topClientes(corretora, meses[0], lim.fim, null, 10),
     mixPlataforma(corretora, meses[0], lim.fim),
-    migracoesDiarias(corretora, iniSemanas < ini30 ? iniSemanas : ini30, ref),
-    diario(corretora, iniSemanas, ref),
     funilMensal(mesRef, 12),
     funilPor('corretora', mesRef, 12),
     funilPor('status', mesRef, 12),
+  ])
+  const ref = ehIso(q.ref) ? q.ref : (ultima ?? fmtDate(hojeBrasil()))
+  const ini30 = somarDias(ref, -29)
+  const iniSemanas = inicioSemana(somarDias(ref, -77)) // 12 semanas até a semana da referência
+  const [migr, dias] = await Promise.all([
+    migracoesDiarias(corretora, iniSemanas < ini30 ? iniSemanas : ini30, ref),
+    diario(corretora, iniSemanas, ref),
   ])
 
   const r = resumoClientes(clientes)

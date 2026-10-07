@@ -1,12 +1,14 @@
 // Leituras do controle (só servidor: páginas e server actions). Cada função chama uma
 // RPC da S19 com o client service_role e devolve linhas tipadas.
 import type { Corretora } from '@/lib/corretoras'
+import { mesBrasil } from '@/lib/periodo'
+import { mesAtual } from './meses'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import type {
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
-  IncentivoRow, LeadRow, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
+  IncentivoRow, LeadAcao, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
   Parametro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
 } from './tipos'
 
@@ -14,25 +16,24 @@ type Row = Record<string, unknown>
 const bool = (v: unknown) => v === true
 const arr = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
 
-// A API do Supabase devolve no máximo "Max rows" linhas por chamada (1.000 por padrão,
-// configurável em Settings → API). Pedimos páginas grandes e usamos a contagem total que
-// a API devolve para saber quando parar: com o limite maior, a lista vem numa chamada só.
+// A API do Supabase devolve no máximo "Max rows" linhas por chamada (10.000 em Settings → API).
+// Pedimos páginas desse tamanho e seguimos só quando a página veio cheia. Sem pedir a contagem
+// total (count: 'exact'): ela fazia o banco executar a função duas vezes.
 const PAGINA = 10000
 async function rpc(db: Admin, fn: string, args: Record<string, unknown>): Promise<Row[]> {
   const out: Row[] = []
-  for (let offset = 0; ; ) {
-    const { data, error, count } = await db.rpc(fn, args, { count: 'exact' }).range(offset, offset + PAGINA - 1)
+  for (let offset = 0; ; offset += PAGINA) {
+    const { data, error } = await db.rpc(fn, args).range(offset, offset + PAGINA - 1)
     if (error) falha(error, fn)
     const rows = (data ?? []) as Row[]
     out.push(...rows)
-    offset += rows.length
-    if (rows.length === 0 || (count != null && out.length >= count) || (count == null && rows.length < PAGINA)) break
+    if (rows.length < PAGINA) break
   }
   return out
 }
 
 // Erro da API quando a função ainda não existe no banco (script SQL não aplicado)
-const funcaoAusente = (e: { code?: string; message: string } | null) =>
+export const funcaoAusente = (e: { code?: string; message: string } | null) =>
   !!e && (e.code === 'PGRST202' || /could not find the function/i.test(e.message))
 
 // Leitura paginada de uma tabela/view (mesmo limite de 1.000 por chamada)
@@ -292,6 +293,37 @@ export const mapLead = (r: Row): LeadRow => ({
 export async function leadsLista(): Promise<LeadRow[]> {
   const { db } = await equipe()
   return linhas(await rpc(db, 'leads_lista', { p_corretora_opera: null }), mapLead)
+}
+
+// Contagens dos leads + lista de ação (abertos com alerta, mais antigos primeiro), sem baixar a
+// lista inteira. Antes da S29 (função ausente) calcula a partir da lista.
+const mapLeadAcao = (r: Row): LeadAcao => ({
+  id: String(r.id), nome: String(r.nome ?? ''), whatsapp: str(r.whatsapp), responsavel: str(r.responsavel), status: String(r.status ?? 'Novo'),
+  tipo_status: (str(r.tipo_status) ?? 'Aberto') as LeadAcao['tipo_status'], data_hora: String(r.data_hora), ultimo_contato: str(r.ultimo_contato),
+  dias: r.dias == null ? null : num(r.dias), corretora: str(r.corretora),
+})
+export async function leadsResumo(limite = 40): Promise<LeadsResumo> {
+  const { db } = await equipe()
+  const { data, error } = await db.rpc('leads_resumo', { p_limite: limite })
+  if (error) {
+    if (!funcaoAusente(error)) falha(error, 'leads_resumo')
+    return resumoPelaListaLeads(await leadsLista(), limite)
+  }
+  const j = (data ?? {}) as Row
+  return {
+    total: num(j.total), neste_mes: num(j.neste_mes), abertos: num(j.abertos), com_alerta: num(j.com_alerta), ganhos: num(j.ganhos),
+    perdidos: num(j.perdidos), ja_clientes: num(j.ja_clientes), acao: linhas<LeadAcao>(j.acao, mapLeadAcao),
+  }
+}
+function resumoPelaListaLeads(leads: LeadRow[], limite: number): LeadsResumo {
+  const mes = mesAtual().slice(0, 7)
+  return {
+    total: leads.length, neste_mes: leads.filter(l => mesBrasil(l.data_hora) === mes).length,
+    abertos: leads.filter(l => l.tipo_status === 'Aberto').length, com_alerta: leads.filter(l => l.alerta).length,
+    ganhos: leads.filter(l => l.status === 'Ganho').length, perdidos: leads.filter(l => l.status === 'Perdido').length,
+    ja_clientes: leads.filter(l => l.cliente_id).length,
+    acao: leads.filter(l => l.alerta).sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0)).slice(0, limite),
+  }
 }
 
 export async function funilMensal(mesRef: string | null, meses = 12): Promise<FunilMensalRow[]> {

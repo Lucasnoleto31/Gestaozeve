@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { funilMensal, funilSafra, funilSafraPor, leadsLista } from '@/lib/gestao/consultas'
+import { funilMensal, funilSafra, funilSafraPor, leadsResumo } from '@/lib/gestao/consultas'
 import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -29,11 +29,11 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
   const [mensal, safra, porResp, porOrigem, leads] = await Promise.all([
-    funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsLista(),
+    funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40),
   ])
   const m = new Map(mensal.map(x => [x.mes_ref, x]))
   const s = new Map(safra.map(x => [x.mes_ref, x]))
-  const semSafra = safra.length === 0 && leads.length > 0   // S27 ainda não rodou
+  const semSafra = safra.length === 0 && leads.total > 0   // S27 ainda não rodou
   const rotuloPeriodo = soMes ? mesLongo(mesRef) : `${mesCurto(meses[0])} a ${mesCurto(mesRef)}`
 
   // Totais do período: do que entrou nele, o que aconteceu até hoje
@@ -41,8 +41,8 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const chaves: (keyof FunilSafraBase)[] = ['recebidos', 'contatados', 'perdidos', 'ganhos', 'em_aberto', 'ja_clientes', 'viraram_clientes', 'ativados', 'em_processamento', 'recusaram', 'com_giro', 'lotes', 'receita']
   const t = Object.fromEntries(chaves.map(k => [k, base.reduce((acc, x) => acc + x[k], 0)])) as FunilSafraBase
   const jaClientes = t.ja_clientes || (soMes ? m.get(mesRef)?.ja_clientes ?? 0 : mensal.reduce((acc, x) => acc + x.ja_clientes, 0))
-  const abertosHoje = leads.filter(l => l.tipo_status === 'Aberto').length
-  const acao = leads.filter(l => l.alerta).sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0)).slice(0, 40)
+  const abertosHoje = leads.abertos
+  const acao = leads.acao
   const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
 
   // Etapas do funil. Quem já era cliente antes de entrar fica fora das etapas.
@@ -143,7 +143,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
               ))}
               <li className="flex items-center justify-between gap-3 py-2.5">
                 <span>Em aberto hoje (todos os leads)</span>
-                <span className="tabular-nums font-semibold">{fmtNum(abertosHoje)}<span className="ml-1.5 text-micro font-normal text-fg-subtle">{fmtNum(leads.filter(l => l.alerta).length)} com alerta</span></span>
+                <span className="tabular-nums font-semibold">{fmtNum(abertosHoje)}<span className="ml-1.5 text-micro font-normal text-fg-subtle">{fmtNum(leads.com_alerta)} com alerta</span></span>
               </li>
             </ul>
           </Panel>

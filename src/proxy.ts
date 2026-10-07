@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { usuarioDaSessao } from '@/lib/supabase/jwks'
 
 const PUBLIC_PATHS = ['/login']
 
@@ -34,7 +35,8 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  // Assinatura do token conferida localmente (JWKS em cache); renova o token expirado pelos cookies
+  const user = await usuarioDaSessao(supabase)
 
   if (!user && pathname !== '/login') {
     return NextResponse.redirect(new URL('/login', request.url))

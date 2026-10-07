@@ -10,7 +10,7 @@ import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
 import { Empty } from '@/components/ui/Skeleton'
 import { CORRETORA_SLUG, PAGINAS_CORRETORA, corretorasDoPerfil } from '@/lib/corretoras'
-import { leadsLista, painelKpis } from '@/lib/gestao/consultas'
+import { leadsResumo, painelKpis } from '@/lib/gestao/consultas'
 import { mesCurto } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { dataCurta, rCurto } from '@/components/gestao/Celulas'
@@ -30,10 +30,9 @@ export default async function DashboardPage() {
   const visiveis = corretorasDoPerfil(profile)
 
   const [kpis, leads] = equipe
-    ? await Promise.all([Promise.all(visiveis.map(c => painelKpis(c, null))), leadsLista()])
-    : [[], []]
-  const abertos = leads.filter(l => l.tipo_status === 'Aberto')
-  const comAlerta = abertos.filter(l => l.alerta).length
+    ? await Promise.all([Promise.all(visiveis.map(c => painelKpis(c, null))), leadsResumo(0)])
+    : [[], null]
+  const comAlerta = leads?.com_alerta ?? 0
 
   return (
     <>
@@ -86,10 +85,10 @@ export default async function DashboardPage() {
             <Panel title="Leads" subtitle="Funil único do escritório, independente da corretora."
               action={<Link href="/leads" className="link inline-flex items-center gap-1 text-label">Abrir leads <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>}>
               <KpiRow cols={4}>
-                <KpiCard label="Total" value={fmtNum(leads.length)} sub={`${fmtNum(leads.filter(l => l.cliente_id).length)} já eram clientes`} />
-                <KpiCard label="Em aberto" value={fmtNum(abertos.length)} />
+                <KpiCard label="Total" value={fmtNum(leads?.total ?? 0)} sub={`${fmtNum(leads?.ja_clientes ?? 0)} já eram clientes`} />
+                <KpiCard label="Em aberto" value={fmtNum(leads?.abertos ?? 0)} />
                 <KpiCard label="Com alerta de contato" value={fmtNum(comAlerta)} tone={comAlerta ? 'warn' : 'neutral'} />
-                <KpiCard label="Ganhos" value={fmtNum(leads.filter(l => l.status === 'Ganho').length)} />
+                <KpiCard label="Ganhos" value={fmtNum(leads?.ganhos ?? 0)} />
               </KpiRow>
             </Panel>
           </>

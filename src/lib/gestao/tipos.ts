@@ -330,6 +330,12 @@ export type FunilSafraBase = {
 export type FunilSafraRow = FunilSafraBase & { mes_ref: string }
 export type FunilSafraPorRow = FunilSafraBase & { grupo: string }
 
+// Resumo dos leads para o Início e o Funil (leads_resumo): contagens + leads abertos com alerta
+export type LeadAcao = Pick<LeadRow, 'id' | 'nome' | 'whatsapp' | 'responsavel' | 'status' | 'tipo_status' | 'data_hora' | 'ultimo_contato' | 'dias' | 'corretora'>
+export type LeadsResumo = { total: number; neste_mes: number; abertos: number; com_alerta: number; ganhos: number; perdidos: number; ja_clientes: number; acao: LeadAcao[] }
+// Outro cadastro que já tem o CPF/CNPJ informado (para unificar)
+export type ClienteDuplicado = { id: string; nome: string; corretora: string | null }
+
 // Parâmetros
 export type Parametro = { chave: string; valor: string; descricao: string | null }
 export type ReceitaMensalRow = {

@@ -8,10 +8,10 @@ import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './
 import { lerFaixas, lerMetas, lerParticipacoes, numeroParam } from './btg'
 import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from '@/lib/corretoras'
 import { normTexto } from '@/lib/texto'
-import { buscarClientes, lotesNoPeriodo } from './consultas'
+import { buscarClientes, funcaoAusente, lotesNoPeriodo } from './consultas'
 import { esquecerMesReferencia } from './pagina'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
-import type { LeadCampos, NovoClienteCampos, Resultado } from './tipos'
+import type { ClienteDuplicado, LeadCampos, NovoClienteCampos, Resultado } from './tipos'
 
 type Row = Record<string, unknown>
 
@@ -356,20 +356,107 @@ export async function excluirClienteDaCorretora(corretoraIn: string, clienteId: 
   })
 }
 
-export async function salvarCadastroCliente(clienteId: string, campos: { nome: string; documento: string | null; telefone: string | null; email: string | null }) {
-  return tentar(async () => {
+// Outro cadastro que já usa este CPF/CNPJ (a constraint clientes_documento_key impede repetir)
+async function clienteComDocumento(db: Admin, documento: string, exceto: string): Promise<ClienteDuplicado | null> {
+  const { data } = await db.from('clientes').select('id, nome').eq('documento', documento).neq('id', exceto).limit(1).maybeSingle()
+  if (!data) return null
+  const { data: vc } = await db.from('v_cliente_corretora').select('corretora').eq('cliente_id', data.id).order('corretora').limit(1).maybeSingle()
+  return { id: String(data.id), nome: String(data.nome ?? ''), corretora: vc ? String(vc.corretora) : null }
+}
+
+export type ResultadoCadastro = Resultado<undefined> | { ok: false; erro: string; duplicado: ClienteDuplicado }
+
+export async function salvarCadastroCliente(clienteId: string, campos: { nome: string; documento: string | null; telefone: string | null; email: string | null }): Promise<ResultadoCadastro> {
+  const achado: { duplicado: ClienteDuplicado | null } = { duplicado: null }
+  const r = await tentar(async () => {
     const { db } = await somenteAdmin()
     const nome = campos.nome.trim()
     if (!nome) throw new Error('Informe o nome')
     const documento = campos.documento ? campos.documento.replace(/\D/g, '') || null : null
     const telefone = campos.telefone?.trim() || null
+    if (documento) {
+      achado.duplicado = await clienteComDocumento(db, documento, clienteId)
+      if (achado.duplicado) throw new Error(`Já existe outro cadastro com esse CPF/CNPJ: ${achado.duplicado.nome}. Unifique os dois cadastros ou corrija o documento.`)
+    }
     const { error } = await db.from('clientes').update({
       nome, nome_norm: normTexto(nome), documento, telefone, telefone_digits: telefone ? telefone.replace(/\D/g, '') || null : null,
       email: campos.email?.trim().toLowerCase() || null, updated_at: new Date().toISOString(),
     }).eq('id', clienteId)
-    if (error) falha(error, 'clientes')
+    if (error) {
+      if (error.code === '23505') throw new Error('Já existe outro cadastro com esse CPF/CNPJ. Unifique os dois cadastros ou corrija o documento.')
+      falha(error, 'clientes')
+    }
     for (const c of ['GENIAL', 'XP', 'BTG'] as Corretora[]) revalidarCorretora(c)
-    return { ok: true }
+    return undefined
+  })
+  return !r.ok && achado.duplicado ? { ok: false, erro: r.erro, duplicado: achado.duplicado } : r
+}
+
+// Contas do cliente na corretora, mantidas à mão na ficha (além das que os lotes e as listas criam):
+// inclui as novas (ou liga as que já existiam sem dono), tira as que saíram da lista (os lotes
+// delas voltam a "não cadastrados") e refaz conta principal, vínculos e tarifas dos lotes.
+export async function salvarContasCliente(corretoraIn: string, clienteId: string, contas: string[]) {
+  return tentar(async () => {
+    const corretora = await corretoraValida(corretoraIn)
+    const { db } = await equipe()
+    const desejadas = [...new Set(contas.map(c => c.replace(/\D/g, '')).filter(Boolean))]
+    if (desejadas.length > 10) throw new Error('No máximo 10 contas por cliente')
+    const passo = async (p: PromiseLike<{ error: { message: string } | null }>, contexto: string) => {
+      const { error } = await p
+      if (error) falha(error, contexto)
+    }
+    const { data: atuaisRes, error: e1 } = await db.from('contas').select('id, conta, conta_digito').eq('corretora', corretora).eq('cliente_id', clienteId)
+    if (e1) falha(e1, 'contas')
+    const atuais = (atuaisRes ?? []) as { id: string; conta: string; conta_digito: string | null }[]
+    const novas = desejadas.filter(n => !atuais.some(a => a.conta === n || a.conta_digito === n))
+    const removidas = atuais.filter(a => !desejadas.includes(a.conta) && !(a.conta_digito && desejadas.includes(a.conta_digito)))
+    if (!novas.length && !removidas.length) return { adicionadas: 0, removidas: 0 }
+    // conta nova herda o assessor informado à mão ou o responsável (lista própria)
+    const { data: m } = await db.from('cliente_corretora').select('assessor, responsavel').eq('cliente_id', clienteId).eq('corretora', corretora).maybeSingle()
+    const mm = (m ?? {}) as Row
+    const assessor = (mm.assessor ?? mm.responsavel ?? null) as string | null
+    for (const n of novas) {
+      const { data: ex } = await db.from('contas').select('id, cliente_id, clientes(nome)').eq('corretora', corretora).or(`conta.eq.${n},conta_digito.eq.${n}`).limit(1).maybeSingle()
+      const e = ex as Row | null
+      if (e && e.cliente_id && e.cliente_id !== clienteId) {
+        const dono = ((e.clientes as Row | null)?.nome as string | undefined) ?? 'outro cliente'
+        throw new Error(`A conta ${n} já pertence a ${dono}`)
+      }
+      if (e) await passo(db.from('contas').update({ cliente_id: clienteId, updated_at: new Date().toISOString() }).eq('id', e.id), 'contas')
+      else await passo(db.from('contas').insert({ corretora, cliente_id: clienteId, conta: n, assessor_nome: assessor, assessor_norm: assessor ? normTexto(assessor) : null }), 'contas')
+    }
+    for (const a of removidas) {
+      await passo(db.from('lotes').update({ cliente_id: null, conta_id: null }).eq('conta_id', a.id), 'lotes')
+      await passo(db.from('contas').delete().eq('id', a.id), 'contas')
+    }
+    for (const [fn, args] of [
+      ['marcar_contas_principais', { p_corretora: corretora }],
+      ['vincular_lotes', { p_corretora: corretora, p_importacao_id: null }],
+      ['recalcular_lotes', { p_corretora: corretora, p_importacao_id: null }],
+    ] as [string, Record<string, unknown>][]) {
+      const { error } = await db.rpc(fn, args)
+      if (error) falha(error, fn)
+    }
+    revalidarCorretora(corretora)
+    return { adicionadas: novas.length, removidas: removidas.length }
+  })
+}
+
+// Junta dois cadastros da mesma pessoa (CPF/CNPJ repetido): mantém `manterId` e passa para ele
+// contas, lotes, leads, campos por corretora e tarifas do outro cadastro, que é apagado (S29).
+export async function unificarClientes(manterId: string, removerId: string) {
+  return tentar(async () => {
+    const { db } = await somenteAdmin()
+    if (!manterId || !removerId || manterId === removerId) throw new Error('Escolha dois cadastros diferentes')
+    const { data, error } = await db.rpc('unificar_clientes', { p_manter: manterId, p_remover: removerId })
+    if (error) {
+      if (funcaoAusente(error)) throw new Error('Rode o script S29 no Supabase para liberar a unificação de cadastros')
+      falha(error, 'unificar_clientes')
+    }
+    for (const c of ['GENIAL', 'XP', 'BTG'] as Corretora[]) revalidarCorretora(c)
+    revalidatePath('/leads', 'layout'); revalidatePath('/funil')
+    const j = (data ?? {}) as Row
+    return { contas: num(j.contas), lotes: num(j.lotes), leads: num(j.leads) }
   })
 }
 

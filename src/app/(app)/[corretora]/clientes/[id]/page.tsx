@@ -114,6 +114,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 assessores={assessoresTodos[corretora]}
                 statusAutomatico={ficha.manual.status ? null : (resumo?.status ?? null)}
                 temConta={(resumo?.n_contas ?? 0) > 0}
+                contas={contas.filter(x => (x.status as string) !== 'Não cadastrada').map(x => ({ id: x.conta_id, conta: x.conta }))}
                 abrirInicial={ctx.q.editar === '1'}
               />
               {temListaPropria(corretora) && admin && <ExcluirClienteButton corretora={corretora} clienteId={id} nome={cadastro.nome} base={base} variante="botao" />}

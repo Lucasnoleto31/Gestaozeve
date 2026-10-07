@@ -20,12 +20,14 @@ import { IncentivoAtp } from './IncentivoAtp'
 export default async function IncentivoPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base } = ctx
-  const par = await parametrosDaCorretora(corretora)
+  // Tudo em paralelo; cada modelo usa a sua parte (antes eram três idas ao banco em sequência)
+  const [par, serie, linhas, hist] = await Promise.all([
+    parametrosDaCorretora(corretora), receitaMensal(corretora, null), incentivoMes(corretora, mesRef), incentivoHistorico(corretora, mesRef, 12),
+  ])
   const cfg = configBtg(par.parametros)
 
   // BTG: programa ATP Turbo Receita (metas de comissão acumulada), não pontos por lote
   if (cfg.modelo === 'ATP') {
-    const serie = await receitaMensal(corretora, null)
     return (
       <>
         <PageHeader
@@ -41,7 +43,6 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
   }
 
   const meses = janelaMeses(mesRef, 12)
-  const [linhas, hist] = await Promise.all([incentivoMes(corretora, mesRef), incentivoHistorico(corretora, mesRef, 12)])
 
   const total = linhas.reduce((s, l) => s + l.valor_incentivo, 0)
   const comFaixa = linhas.filter(l => l.valor_incentivo > 0)

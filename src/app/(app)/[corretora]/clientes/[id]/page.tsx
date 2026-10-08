@@ -170,17 +170,17 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
               </div>
             </Panel>
 
-            <Panel title={`Contas · ${contas.length}`} subtitle="A conta principal representa o cliente nas contagens; lotes e receita somam todas.">
+            <Panel title={`Contas · ${contas.length}`} subtitle={`A conta principal representa o cliente nas contagens; lotes e receita somam todas. Mês = ${mesCurto(mesRef)}.`}>
               <div className="tbl-wrap">
                 <table className="tbl tbl-dense">
                   <thead>
                     <tr>
                       <th>Conta</th><th className="col-p2">Situação</th><th>Status</th><th className="col-p2">Migração</th><th className="col-p3">Assessor</th>
-                      <th className="num">Lotes</th><th className="num col-p2">Lotes 12 m</th><th className="num col-p2">Receita</th><th className="col-p3">Último giro</th>
+                      <th className="num">Lotes mês</th><th className="num">Lotes 12 m</th><th className="num col-p2">Receita mês</th><th className="num col-p2">Receita 12 m</th><th className="col-p2">Último giro</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {contas.length === 0 && <LinhaVazia colunas={9}>Nenhuma conta nesta corretora.</LinhaVazia>}
+                    {contas.length === 0 && <LinhaVazia colunas={10}>Nenhuma conta nesta corretora.</LinhaVazia>}
                     {contas.map(c => (
                       <tr key={c.conta_id ?? `lotes:${c.conta}`}>
                         <td className="num font-medium">{c.conta}{c.conta_digito && <span className="ml-1 text-micro text-fg-subtle">{c.conta_digito}</span>}{c.principal && <span className="ml-1.5 text-micro text-accent">principal</span>}</td>
@@ -188,10 +188,11 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                         <td>{c.conta_id ? <StatusBadge status={c.status} /> : <span title="Conta que só aparece nos lotes; ligada ao cliente pelo nome ou ID"><Badge variant="warn">só nos lotes</Badge></span>}</td>
                         <td className="num col-p2">{dataPt(c.data_habilitacao)}</td>
                         <td className="max-w-[160px] truncate muted col-p3">{c.assessor_nome ?? TRACO}</td>
-                        <td className={cn('num', !c.lotes && 'subtle')}>{n0(c.lotes)}</td>
-                        <td className={cn('num col-p2', !c.lotes_12m && 'subtle')}>{n0(c.lotes_12m)}</td>
-                        <td className={cn('num col-p2', !c.receita && 'subtle')}>{r0(c.receita)}</td>
-                        <td className="num col-p3">{dataPt(c.ultimo_giro)}</td>
+                        <td className={cn('num', !c.lotes_mes && 'subtle')}>{n0(c.lotes_mes)}</td>
+                        <td className={cn('num font-medium', !c.lotes_12m && 'subtle')}>{n0(c.lotes_12m)}</td>
+                        <td className={cn('num col-p2', !c.receita_mes && 'subtle')}>{r0(c.receita_mes)}</td>
+                        <td className={cn('num col-p2', !c.receita_12m && 'subtle')}>{r0(c.receita_12m)}</td>
+                        <td className="num col-p2">{dataPt(c.ultimo_giro)}</td>
                       </tr>
                     ))}
                   </tbody>

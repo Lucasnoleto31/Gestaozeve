@@ -69,11 +69,14 @@ export type ContaRow = {
   filial: string | null
   data_habilitacao: string | null
   principal: boolean
-  lotes: number
+  lotes: number              // desde sempre
   lotes_12m: number
   zerados: number
-  receita: number
+  receita: number            // desde sempre
   ultimo_giro: string | null
+  lotes_mes: number          // no mês de referência da ficha
+  receita_mes: number
+  receita_12m: number
 }
 
 export type ClienteMensalRow = { mes_ref: string; lotes: number; zerados: number; receita: number; pontos: number }

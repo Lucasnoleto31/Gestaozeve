@@ -73,12 +73,22 @@ export async function clientesLista(corretora: Corretora, mesRef: string | null)
   return linhas(await rpc(db, 'clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef }), mapCliente)
 }
 
+// Contas do cliente no mês de referência; antes da S37 a função não tem p_mes_ref
+async function contasDoCliente(db: Admin, corretora: Corretora, clienteId: string, mesRef: string | null): Promise<Row[]> {
+  try {
+    return await rpc(db, 'cliente_contas', { p_corretora: corretora, p_cliente_id: clienteId, p_mes_ref: mesRef })
+  } catch (e) {
+    if (e instanceof Error && funcaoAusente({ message: e.message })) return rpc(db, 'cliente_contas', { p_corretora: corretora, p_cliente_id: clienteId })
+    throw e
+  }
+}
+
 export async function clienteFicha(corretora: Corretora, clienteId: string, mesRef: string | null) {
   const { db } = await equipe()
   const [lista, cad, contas, mensal, tarifas, extrato, porAtivo, manualRes] = await Promise.all([
     rpc(db, 'clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef, p_cliente_id: clienteId }),
     db.from('clientes').select('*').eq('id', clienteId).maybeSingle(),
-    rpc(db, 'cliente_contas', { p_corretora: corretora, p_cliente_id: clienteId }),
+    contasDoCliente(db, corretora, clienteId, mesRef),
     rpc(db, 'cliente_mensal', { p_corretora: corretora, p_cliente_id: clienteId, p_mes_ref: mesRef, p_meses: 12 }),
     db.from('tarifas_cliente').select('id, vigencia, corretagem, observacao').eq('corretora', corretora).eq('cliente_id', clienteId).order('vigencia', { ascending: false }),
     rpc(db, 'cliente_extrato', { p_corretora: corretora, p_cliente_id: clienteId, p_limit: 400 }),
@@ -107,6 +117,7 @@ export async function clienteFicha(corretora: Corretora, clienteId: string, mesR
       status: (str(r.status) ?? 'Em processamento') as ContaRow['status'], assessor_nome: str(r.assessor_nome), filial: str(r.filial),
       data_habilitacao: str(r.data_habilitacao), principal: bool(r.principal), lotes: num(r.lotes), lotes_12m: num(r.lotes_12m),
       zerados: num(r.zerados), receita: num(r.receita), ultimo_giro: str(r.ultimo_giro),
+      lotes_mes: num(r.lotes_mes), receita_mes: num(r.receita_mes), receita_12m: num(r.receita_12m),
     })),
     mensal: linhas<ClienteMensalRow>(mensal, r => ({ mes_ref: String(r.mes_ref), lotes: num(r.lotes), zerados: num(r.zerados), receita: num(r.receita), pontos: num(r.pontos) })),
     tarifas: ((tarifas.data ?? []) as Row[]).map<TarifaCliente>(r => ({ id: String(r.id), vigencia: String(r.vigencia), corretagem: num(r.corretagem), observacao: str(r.observacao) })),

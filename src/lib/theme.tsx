@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExte
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { THEME_COOKIE, THEME_PADRAO, THEME_STORAGE_KEY, isThemePref, type ResolvedTheme, type ThemePref } from './theme-shared'
-import { comAlpha, useTokens } from './tokens'
+import { comAlpha, ehEscuro, useTokens } from './tokens'
 
 export type { ResolvedTheme, ThemePref }
 
@@ -138,6 +138,9 @@ export type ChartColors = {
   corretora: Record<'GENIAL' | 'XP' | 'BTG', string>
   // Série por valor, não por matiz: tinta, apagado, sutil; depois as mesmas a 55 % e 30 %.
   palette: string[]
+  // Paleta colorida (só a página Gráficos, a pedido do Lucas): matizes distintas por tema
+  cores: string[]
+  coresNomeadas: { bom: string; ruim: string; acento: string; violeta: string }
 }
 
 export function useChartColors(): ChartColors {
@@ -161,5 +164,11 @@ export function useChartColors(): ChartColors {
       comAlpha(t.fg, 0.55), comAlpha(t.fgMuted, 0.55), comAlpha(t.fgSubtle, 0.55),
       comAlpha(t.fg, 0.3), comAlpha(t.fgMuted, 0.3), t.lineStrong,
     ],
+    cores: ehEscuro(t.bg)
+      ? ['#60a5fa', '#fbbf24', '#34d399', '#a78bfa', '#f472b6', '#22d3ee', '#fb923c', '#a3e635']
+      : ['#2563eb', '#d97706', '#059669', '#7c3aed', '#db2777', '#0891b2', '#ea580c', '#65a30d'],
+    coresNomeadas: ehEscuro(t.bg)
+      ? { bom: '#34d399', ruim: '#f87171', acento: '#60a5fa', violeta: '#a78bfa' }
+      : { bom: '#059669', ruim: '#dc2626', acento: '#2563eb', violeta: '#7c3aed' },
   }), [t])
 }

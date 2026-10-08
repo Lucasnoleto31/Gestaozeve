@@ -15,13 +15,24 @@ const compacto = (v: number) => (Math.abs(v) >= 1_000_000 ? `${(v / 1_000_000).t
 
 export type Serie = { key: string; nome: string; cor?: string; tipo?: 'bar' | 'line'; eixo?: 'esq' | 'dir'; empilhar?: string; formato?: Formato }
 
-// Cores nomeadas (as páginas são Server Components e não enxergam a paleta do tema)
-function corDe(cor: string | undefined, c: ReturnType<typeof useChartColors>, i: number): string {
+// Cores nomeadas (as páginas são Server Components e não enxergam a paleta do tema).
+// Padrão: série por valor (tinta → apagado). colorido: paleta de matizes (página Gráficos).
+function corDe(cor: string | undefined, c: ReturnType<typeof useChartColors>, i: number, colorido = false): string {
+  if (colorido) {
+    if (!cor) return c.cores[i % c.cores.length]
+    if (cor === 'success') return c.coresNomeadas.bom
+    if (cor === 'danger') return c.coresNomeadas.ruim
+    if (cor === 'accent') return c.coresNomeadas.acento
+    if (cor === 'violet') return c.coresNomeadas.violeta
+    if (cor === 'neutral') return c.text
+    return cor
+  }
   if (!cor) return c.palette[i % c.palette.length]
   if (cor === 'success') return c.incentivo
   if (cor === 'danger') return c.zerados
   if (cor === 'accent') return c.operados
   if (cor === 'violet') return c.clientes
+  if (cor === 'neutral') return c.text
   return cor
 }
 
@@ -35,7 +46,7 @@ function useTooltipStyle() {
 }
 
 // Barras/linhas por categoria (meses, semanas, dias)
-export function GraficoSeries({ dados, series, altura = 260, formato = 'num', formatoDir, legenda = true, margemEsq }: {
+export function GraficoSeries({ dados, series, altura = 260, formato = 'num', formatoDir, legenda = true, margemEsq, colorido = false }: {
   dados: Record<string, string | number>[]
   series: Serie[]
   altura?: number
@@ -43,6 +54,7 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
   formatoDir?: Formato
   legenda?: boolean
   margemEsq?: number
+  colorido?: boolean   // paleta de matizes em vez de série por valor
 }) {
   const c = useChartColors()
   const tt = useTooltipStyle()
@@ -57,7 +69,7 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
       <ComposedChart data={dados} margin={{ top: 8, right: temDir ? 8 : 12, left: margemEsq ?? 0, bottom: 0 }}>
         <defs>
           {series.filter(s => s.tipo !== 'line').map((s, i) => {
-            const cor = corDe(s.cor, c, series.indexOf(s))
+            const cor = corDe(s.cor, c, series.indexOf(s), colorido)
             return (
               <linearGradient key={s.key + i} id={gradId(s.key)} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={cor} stopOpacity={0.95} />
@@ -81,7 +93,7 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
         />
         {legenda && <Legend wrapperStyle={{ fontSize: 11, color: c.text }} iconSize={10} />}
         {series.map((s, i) => {
-          const cor = corDe(s.cor, c, i)
+          const cor = corDe(s.cor, c, i, colorido)
           return s.tipo === 'line'
             ? <Line key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} type="monotone" dataKey={s.key} name={s.nome} stroke={cor} strokeWidth={2} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />
             : <Bar key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} dataKey={s.key} name={s.nome} fill={`url(#${gradId(s.key)})`} stroke="none" background={s.empilhar ? undefined : { fill: c.track }} stackId={s.empilhar} radius={s.empilhar ? 0 : [4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
@@ -92,16 +104,17 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
 }
 
 // Rosca (mix de plataforma, funil da base)
-export function GraficoRosca({ dados, altura = 240, formato = 'num', cores }: {
+export function GraficoRosca({ dados, altura = 240, formato = 'num', cores, colorido = false }: {
   dados: { nome: string; valor: number }[]
   altura?: number
   formato?: Formato
   cores?: string[]
+  colorido?: boolean
 }) {
   const c = useChartColors()
   const tt = useTooltipStyle()
   const total = dados.reduce((s, d) => s + d.valor, 0)
-  const paleta = cores ?? c.palette
+  const paleta = cores ?? (colorido ? c.cores : c.palette)
   return (
     <ResponsiveContainer width="100%" height={altura}>
       <PieChart>
@@ -116,17 +129,18 @@ export function GraficoRosca({ dados, altura = 240, formato = 'num', cores }: {
 }
 
 // Barras horizontais (top clientes, leads por corretora)
-export function GraficoBarrasH({ dados, altura, formato = 'num', cor, larguraRotulo = 150 }: {
+export function GraficoBarrasH({ dados, altura, formato = 'num', cor, larguraRotulo = 150, colorido = false }: {
   dados: { nome: string; valor: number }[]
   altura?: number
   formato?: Formato
   cor?: string
   larguraRotulo?: number
+  colorido?: boolean
 }) {
   const c = useChartColors()
   const tt = useTooltipStyle()
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
-  const corBarra = corDe(cor, c, 0)
+  const corBarra = corDe(cor, c, 0, colorido)
   const h = altura ?? Math.max(120, dados.length * 26 + 24)
   return (
     <ResponsiveContainer width="100%" height={h}>

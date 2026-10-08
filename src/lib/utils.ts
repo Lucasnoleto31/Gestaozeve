@@ -1,5 +1,16 @@
 import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import { extendTailwindMerge } from 'tailwind-merge'
+
+// A escala de texto é própria (text-micro … text-display, globals.css). Sem avisar o tailwind-merge,
+// ele lia "text-body" como cor e derrubava "text-accent-fg" do mesmo elemento: botão primário
+// ficava com texto da cor do fundo.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      'font-size': [{ text: ['micro', 'label', 'dense', 'body', 'section', 'title', 'kpi', 'display'] }],
+    },
+  },
+})
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

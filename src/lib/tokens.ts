@@ -57,10 +57,28 @@ export function useTokens(): Tokens {
   return useMemo(() => (classe === '\0ssr' ? FALLBACK : lerTokens()), [classe])
 }
 
-// '#rrggbb' → 'rgba(r, g, b, a)'. Outros formatos voltam como vieram.
+// Cor com transparência: aceita '#rgb', '#rrggbb' (o Tailwind compila #111111 como #111),
+// 'rgb(r, g, b)' e 'rgba(r, g, b, a)'. Outros formatos voltam como vieram.
 export function comAlpha(cor: string, alpha: number): string {
-  const m = cor.match(/^#([0-9a-f]{6})$/i)
-  if (!m) return cor
-  const n = parseInt(m[1], 16)
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+  const rgb = rgbDe(cor)
+  return rgb ? `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})` : cor
+}
+
+// [r, g, b] de uma cor em hex ou rgb(); null para o que não entende
+export function rgbDe(cor: string): [number, number, number] | null {
+  const s = cor.trim()
+  const h3 = s.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i)
+  if (h3) return [parseInt(h3[1] + h3[1], 16), parseInt(h3[2] + h3[2], 16), parseInt(h3[3] + h3[3], 16)]
+  const h6 = s.match(/^#([0-9a-f]{6})$/i)
+  if (h6) { const n = parseInt(h6[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
+  const r = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
+  if (r) return [Number(r[1]), Number(r[2]), Number(r[3])]
+  return null
+}
+
+// Fundo escuro? (luminância abaixo da metade)
+export function ehEscuro(cor: string): boolean {
+  const rgb = rgbDe(cor)
+  if (!rgb) return true
+  return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255 < 0.5
 }

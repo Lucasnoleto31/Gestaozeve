@@ -118,45 +118,45 @@ export default async function GraficosPage({ params, searchParams }: { params: P
         </KpiRow>
 
         <Panel title="Lotes girados por semana" subtitle="Últimas 12 semanas.">
-          <GraficoSeries dados={porSemana} series={[{ key: 'lotes', nome: 'Lotes', tipo: 'bar' }]} altura={260} legenda={false} />
+          <GraficoSeries colorido dados={porSemana} series={[{ key: 'lotes', nome: 'Lotes', tipo: 'bar' }]} altura={260} legenda={false} />
         </Panel>
 
         <div className="grid gap-8 xl:grid-cols-2">
           <Panel title="Migrados e entradas por dia" subtitle="Últimos 30 dias.">
-            <GraficoSeries dados={porDia} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }]} altura={200} />
+            <GraficoSeries colorido dados={porDia} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }]} altura={200} />
           </Panel>
           <Panel title="Migrados e entradas por semana" subtitle="12 semanas, com a base migrada acumulada.">
-            <GraficoSeries dados={porSemana} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }, { key: 'acumulado', nome: 'Base acumulada', tipo: 'line', eixo: 'dir' }]} formatoDir="num" altura={200} />
+            <GraficoSeries colorido dados={porSemana} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }, { key: 'acumulado', nome: 'Base acumulada', tipo: 'line', eixo: 'dir' }]} formatoDir="num" altura={200} />
           </Panel>
           <Panel title="Migrados e entradas por mês" subtitle="12 meses.">
-            <GraficoSeries dados={porMes} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }]} altura={200} />
+            <GraficoSeries colorido dados={porMes} series={[{ key: 'migrados', nome: 'Migrados', tipo: 'bar' }, { key: 'entradas', nome: 'Entradas', tipo: 'bar' }]} altura={200} />
           </Panel>
           <Panel title="Clientes ativos por mês" subtitle="Com giro no mês.">
-            <GraficoSeries dados={porMes} series={[{ key: 'ativos', nome: 'Clientes ativos', tipo: 'bar' }]} altura={200} legenda={false} />
+            <GraficoSeries colorido dados={porMes} series={[{ key: 'ativos', nome: 'Clientes ativos', tipo: 'bar' }]} altura={200} legenda={false} />
           </Panel>
           <Panel title="Lotes por mês por assessor" subtitle="Top 8 + outros.">
-            <GraficoSeries dados={lotesAssessorMes} series={seriesAssessor} altura={240} />
+            <GraficoSeries colorido dados={lotesAssessorMes} series={seriesAssessor} altura={240} />
           </Panel>
           <Panel title="Receita mensal" subtitle="Corretagem + zeragem.">
-            <GraficoSeries dados={porMes} series={[{ key: 'corretagem', nome: 'Corretagem', tipo: 'bar', empilhar: 'r' }, { key: 'zeragem', nome: 'Zeragem', tipo: 'bar', empilhar: 'r' }]} formato="brl" altura={240} />
+            <GraficoSeries colorido dados={porMes} series={[{ key: 'corretagem', nome: 'Corretagem', tipo: 'bar', empilhar: 'r' }, { key: 'zeragem', nome: 'Zeragem', tipo: 'bar', empilhar: 'r' }]} formato="brl" altura={240} />
           </Panel>
           <Panel title="Top 10 clientes" subtitle="Lotes em 12 meses.">
-            <GraficoBarrasH dados={top10.map(c => ({ nome: nomeCurto(c.cliente_nome, 28), valor: c.lotes }))} larguraRotulo={190} />
+            <GraficoBarrasH colorido dados={top10.map(c => ({ nome: nomeCurto(c.cliente_nome, 28), valor: c.lotes }))} larguraRotulo={190} />
           </Panel>
           <Panel title="Funil da base" subtitle="Status dos clientes levados.">
-            <GraficoRosca dados={[{ nome: 'Migrado', valor: r.migrados }, { nome: 'Em processamento', valor: r.emProcessamento }, { nome: 'Recusou', valor: r.recusaram }]} />
+            <GraficoRosca colorido dados={[{ nome: 'Migrado', valor: r.migrados }, { nome: 'Em processamento', valor: r.emProcessamento }, { nome: 'Recusou', valor: r.recusaram }]} />
           </Panel>
           <Panel title="Mix de plataforma" subtitle="Lotes em 12 meses.">
-            <GraficoRosca dados={mix.map(m => ({ nome: m.plataforma, valor: m.lotes }))} />
+            <GraficoRosca colorido dados={mix.map(m => ({ nome: m.plataforma, valor: m.lotes }))} />
           </Panel>
           <Panel title="Leads por mês" subtitle="Recebidos, já clientes, ganhos e perdidos.">
-            <GraficoSeries dados={leadsMes} series={[{ key: 'recebidos', nome: 'Recebidos', tipo: 'bar' }, { key: 'clientes', nome: 'Já clientes', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'perdidos', nome: 'Perdidos', tipo: 'bar', cor: 'loss' }]} altura={240} />
+            <GraficoSeries colorido dados={leadsMes} series={[{ key: 'recebidos', nome: 'Recebidos', tipo: 'bar' }, { key: 'clientes', nome: 'Já clientes', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'perdidos', nome: 'Perdidos', tipo: 'bar', cor: 'loss' }]} altura={240} />
           </Panel>
           <Panel title="Leads por corretora onde já operam">
-            <GraficoBarrasH dados={porCorretora.map(x => ({ nome: x.grupo, valor: x.leads }))} larguraRotulo={110} />
+            <GraficoBarrasH colorido dados={porCorretora.map(x => ({ nome: x.grupo, valor: x.leads }))} larguraRotulo={110} />
           </Panel>
           <Panel title="Leads por status">
-            <GraficoBarrasH dados={porStatus.map(x => ({ nome: x.grupo, valor: x.leads }))} larguraRotulo={110} />
+            <GraficoBarrasH colorido dados={porStatus.map(x => ({ nome: x.grupo, valor: x.leads }))} larguraRotulo={110} />
           </Panel>
         </div>
       </PageBody>

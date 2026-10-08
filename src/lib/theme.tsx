@@ -128,6 +128,7 @@ export type ChartColors = {
   text: string
   tooltipBg: string
   tooltipBorder: string
+  track: string          // trilho atrás da barra (tinta a 4 %)
   operados: string
   zerados: string
   clientes: string
@@ -135,29 +136,30 @@ export type ChartColors = {
   acumulado: string
   incentivo: string
   corretora: Record<'GENIAL' | 'XP' | 'BTG', string>
-  // 1ª accent, 2ª âmbar, 3ª neutro; depois versões atenuadas (séries empilhadas). Verde/vermelho só em ganho/perda.
+  // Série por valor, não por matiz: tinta, apagado, sutil; depois as mesmas a 55 % e 30 %.
   palette: string[]
 }
 
 export function useChartColors(): ChartColors {
   const t = useTokens()
   return useMemo(() => ({
-    grid: comAlpha(t.fg, 0.08),
+    grid: comAlpha(t.fg, 0.12),
     axis: t.fgSubtle,
     text: t.fgMuted,
     tooltipBg: t.surface2,
     tooltipBorder: t.lineStrong,
-    operados: t.accent,
-    zerados: t.loss,
-    clientes: t.warn,
-    receita: t.accent,
-    acumulado: t.warn,
-    incentivo: t.gain,
+    track: comAlpha(t.fg, 0.04),
+    operados: t.fg,
+    zerados: t.fgMuted,
+    clientes: t.fgSubtle,
+    receita: t.fg,
+    acumulado: t.fgMuted,
+    incentivo: t.fgMuted,
     corretora: t.corretora,
     palette: [
-      t.accent, t.warn, t.fgMuted,
-      comAlpha(t.accent, 0.6), comAlpha(t.warn, 0.6), comAlpha(t.fgMuted, 0.6),
-      comAlpha(t.accent, 0.35), comAlpha(t.warn, 0.35), t.fgSubtle,
+      t.fg, t.fgMuted, t.fgSubtle,
+      comAlpha(t.fg, 0.55), comAlpha(t.fgMuted, 0.55), comAlpha(t.fgSubtle, 0.55),
+      comAlpha(t.fg, 0.3), comAlpha(t.fgMuted, 0.3), t.lineStrong,
     ],
   }), [t])
 }

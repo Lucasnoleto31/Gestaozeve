@@ -11,7 +11,7 @@
           text-accent, bg-accent-soft, text-gain, bg-loss-soft, text-warn …
    Tipo:  text-micro, text-label, text-dense, text-body, text-section,
           text-title, text-kpi, text-display
-   Raio:  rounded-sm (6) · rounded-md (8) · rounded-lg (12)
+   Raio:  rounded-sm (8, chip) · rounded-md (10, controle) · rounded-lg (12, painel) · rounded-xl (16, folha)
    "inline" faz o utilitário apontar pra var(), então o tema troca em runtime.
    ───────────────────────────────────────────────────────────────────────── */
 @theme inline {
@@ -35,6 +35,10 @@
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
   --color-focus: var(--focus);
+  --color-popover: var(--popover);
+  --color-marca: var(--marca);
+  --color-capa: var(--capa);
+  --color-capa-fg: var(--capa-fg);
 
   /* Aliases de transição dos nomes antigos (somem quando as telas migrarem) */
   --color-success: var(--gain);
@@ -54,96 +58,112 @@
   --color-sb-active: var(--surface-3);
   --color-sb-accent: var(--accent);
 
-  /* Escala tipográfica (DESIGN.md §2.2) */
+  /* Escala tipográfica: papéis do HIG no desktop, em Poppins (DESIGN.md §2.2) */
   --text-micro: 11px;
   --text-micro--line-height: 1.3;
   --text-label: 12px;
-  --text-label--line-height: 1.3;
+  --text-label--line-height: 1.34;
   --text-dense: 13px;
-  --text-dense--line-height: 1.4;
+  --text-dense--line-height: 1.385;
   --text-body: 14px;
-  --text-body--line-height: 1.5;
-  --text-section: 15px;
+  --text-body--line-height: 1.43;
+  --text-section: 17px;
   --text-section--line-height: 1.3;
-  --text-title: 20px;
-  --text-title--line-height: 1.2;
-  --text-kpi: 26px;
-  --text-kpi--line-height: 1.1;
+  --text-title: 28px;
+  --text-title--line-height: 1.215;
+  --text-kpi: 24px;
+  --text-kpi--line-height: 1.25;
   --text-display: 32px;
-  --text-display--line-height: 1.1;
+  --text-display--line-height: 1.19;
 
-  /* Raio e sombra */
-  --radius-sm: 6px;
-  --radius-md: 8px;
+  /* Raio (controle 10; folha +6, painel +2, chip −2) e sombra */
+  --radius-sm: 8px;
+  --radius-md: 10px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
   --shadow-float: var(--elev-float);
 }
 
-/* ─── Paleta clara ─────────────────────────────────────────────────────── */
+/* ─── Paleta clara (ficha padrão do Midiakit: medida no Business Plan XP) ─── */
 :root {
-  --bg: #f4f6f9;
-  --surface: #ffffff;
-  --surface-2: #f7f9fc;
-  --surface-3: #eef2f6;
-  --line: #e3e8ef;
-  --line-strong: #c9d2df;
+  --bg: #ffffff;
+  --surface: #f3f3f3;        /* card: fundo com L +4 */
+  --surface-2: #eaeaea;
+  --surface-3: #e2e2e2;
+  --popover: #ffffff;        /* o que flutua: menu, modal, toast */
+  --line: #e4e4e4;           /* fio */
+  --line-strong: #cfcfcf;
 
-  --fg: #0f1722;
-  --fg-muted: #4a5667;
-  --fg-subtle: #8a95a5;
+  --fg: #111111;             /* a tinta: texto, número e destaque */
+  --fg-muted: #555555;
+  --fg-subtle: #7a7a7a;      /* só em texto grande (4,3:1) */
 
-  --accent: #1f5eff;
-  --accent-hover: #1a4fd6;
-  --accent-fg: #ffffff;
-  --accent-soft: rgba(31, 94, 255, 0.09);
+  /* Sem acento cromático: a tinta faz a ação (link, botão principal, item ativo) */
+  --accent: #111111;
+  --accent-hover: #333333;
+  --accent-fg: #f5f5f5;
+  --accent-soft: rgba(17, 17, 17, 0.07);
 
-  --gain: #148a4f;
-  --gain-soft: rgba(20, 138, 79, 0.1);
-  --loss: #d6382d;
-  --loss-soft: rgba(214, 56, 45, 0.09);
-  --warn: #b26a05;
-  --warn-soft: rgba(178, 106, 5, 0.1);
+  /* Semânticas só em texto curto e no delta */
+  --gain: #2e6f40;
+  --gain-soft: rgba(46, 111, 64, 0.1);
+  --loss: #b22222;
+  --loss-soft: rgba(178, 34, 34, 0.09);
+  --warn: #a14a17;
+  --warn-soft: rgba(161, 74, 23, 0.1);
 
-  --c-genial: #2563eb;
-  --c-xp: #c77d00;
-  --c-btg: #0f8f72;
+  /* Corretora por valor, não por matiz (série clara → escura) */
+  --c-genial: #8c8c8c;
+  --c-xp: #c4c4c4;
+  --c-btg: #111111;
 
-  --focus: var(--accent);
-  --panel-line: var(--line);
-  --elev-float: 0 8px 24px rgba(15, 23, 34, 0.08);
+  /* A cor da marca entra só no detalhe: símbolo e foco */
+  --marca: #0a5cff;
+  --focus: var(--marca);
+  /* Capa escura (login): narrativa no escuro, dado no claro */
+  --capa: #0b0b0b;
+  --capa-fg: #f5f5f5;
+
+  --panel-line: transparent;
+  --elev-float: 0 8px 24px rgba(17, 17, 17, 0.1);
   --bar-fill: var(--accent);
 }
 
-/* ─── Paleta escura (padrão) ───────────────────────────────────────────── */
+/* ─── Paleta escura (padrão; derivada da clara pela regra do kit, não medida) ─── */
 .dark {
-  --bg: #0a0e14;
-  --surface: #10151d;
-  --surface-2: #151b25;
-  --surface-3: #1b2230;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.14);
+  --bg: #0b0b0b;
+  --surface: #151515;
+  --surface-2: #1c1c1c;
+  --surface-3: #232323;
+  --popover: #1a1a1a;
+  --line: #262626;
+  --line-strong: #343434;
 
-  --fg: #eef2f6;
-  --fg-muted: #a7b1bf;
-  --fg-subtle: #6f7a89;
+  --fg: #f5f5f5;
+  --fg-muted: #9e9e9e;
+  --fg-subtle: #7a7a7a;
 
-  --accent: #4d8dff;
-  --accent-hover: #6ea1ff;
-  --accent-fg: #ffffff;
-  --accent-soft: rgba(77, 141, 255, 0.14);
+  --accent: #f5f5f5;
+  --accent-hover: #ffffff;
+  --accent-fg: #111111;
+  --accent-soft: rgba(245, 245, 245, 0.08);
 
-  --gain: #2ecc8a;
-  --gain-soft: rgba(46, 204, 138, 0.14);
-  --loss: #ff5c5c;
-  --loss-soft: rgba(255, 92, 92, 0.14);
-  --warn: #f0b35b;
-  --warn-soft: rgba(240, 179, 91, 0.14);
+  --gain: #31c47f;
+  --gain-soft: rgba(49, 196, 127, 0.14);
+  --loss: #df3a3a;
+  --loss-soft: rgba(223, 58, 58, 0.14);
+  --warn: #f6a823;
+  --warn-soft: rgba(246, 168, 35, 0.14);
 
-  --c-genial: #60a5fa;
-  --c-xp: #f5b942;
-  --c-btg: #35c3a2;
+  --c-genial: #a3a3a3;
+  --c-xp: #666666;
+  --c-btg: #f5f5f5;
 
-  --focus: var(--accent);
+  --marca: #0a5cff;
+  --focus: #4d8dff;
+  --capa: #0b0b0b;
+  --capa-fg: #f5f5f5;
+
   --panel-line: transparent;
   --elev-float: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
@@ -187,8 +207,7 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-size: var(--text-body);
-  line-height: 1.5;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  line-height: 1.43;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -232,7 +251,7 @@ textarea {
   background: var(--surface);
   color: var(--fg);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding: 0.5rem 0.75rem;
   font-family: inherit;
   font-size: var(--text-body);
@@ -253,8 +272,8 @@ textarea::placeholder {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent);
 }
 
 input:focus-visible,
@@ -274,14 +293,14 @@ textarea:disabled {
 select {
   padding-right: 2rem;
   cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a95a5' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a7a7a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.6rem center;
   background-size: 12px;
 }
 
 .dark select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a7b1bf' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239e9e9e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 
 select option {
@@ -337,12 +356,14 @@ select.field-sm {
     color: var(--fg-subtle);
   }
 
-  /* Identificação de seção acima do título da página */
+  /* Identificação de seção acima do título da página: caixa alta leve, apagada (rótulo de grupo do iOS) */
   .eyebrow {
-    font-size: var(--text-label);
+    font-size: var(--text-micro);
     line-height: 1.3;
     font-weight: 500;
-    color: var(--fg-subtle);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
   }
 
   .num {
@@ -359,11 +380,10 @@ select.field-sm {
   }
 
   /* Tabelas de dados */
+  /* Tabela sem caixa em volta: o fio entre as linhas separa; o espaço faz o resto */
   .tbl-wrap {
     overflow: auto;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--surface);
+    border-radius: var(--radius-sm);
   }
 
   .tbl {
@@ -379,11 +399,13 @@ select.field-sm {
     z-index: 1;
     padding: 9px 12px;
     text-align: left;
-    font-size: var(--text-label);
+    font-size: var(--text-micro);
     font-weight: 500;
-    color: var(--fg-subtle);
-    background: var(--surface);
-    border-bottom: 1px solid var(--line-strong);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
     white-space: nowrap;
   }
 
@@ -399,7 +421,7 @@ select.field-sm {
   }
 
   .tbl tbody tr:hover td {
-    background: var(--surface-2);
+    background: var(--surface);
   }
 
   .tbl th.num,
@@ -410,9 +432,9 @@ select.field-sm {
   }
 
   .tbl tr.total td {
-    font-weight: 600;
-    background: var(--surface-2);
-    border-top: 1px solid var(--line-strong);
+    font-weight: 700;
+    background: var(--surface);
+    border-top: 0;
   }
 
   .tbl .muted {
@@ -436,7 +458,7 @@ select.field-sm {
     position: sticky;
     left: 0;
     z-index: 2;
-    background: var(--surface);
+    background: var(--bg);
   }
 
   .tbl th.sticky-col {
@@ -445,7 +467,7 @@ select.field-sm {
 
   .tbl tbody tr:hover td.sticky-col,
   .tbl tr.total td.sticky-col {
-    background: var(--surface-2);
+    background: var(--surface);
   }
 
   /* Controle segmentado (período, ordenação, tema) */
@@ -455,7 +477,7 @@ select.field-sm {
     gap: 2px;
     padding: 2px;
     border-radius: var(--radius-md);
-    background: var(--surface-3);
+    background: var(--surface);
   }
 
   .seg > button {
@@ -477,7 +499,7 @@ select.field-sm {
   }
 
   .seg > button[data-active="true"] {
-    background: var(--surface);
+    background: var(--bg);
     color: var(--fg);
     font-weight: 600;
   }
@@ -510,7 +532,7 @@ select.field-sm {
 
   .chip[data-active="true"] {
     background: var(--accent-soft);
-    border-color: var(--accent);
+    border-color: var(--fg-subtle);
     color: var(--fg);
   }
 
@@ -533,14 +555,17 @@ select.field-sm {
     background: var(--bar-fill);
   }
 
-  /* Faixa de KPIs: células separadas por hairline (o gap mostra a cor de --line) */
+  /* Grade de KPIs: cards chapados separados por espaço (ficha padrão: tom + espaço, sem fio) */
   .kpi-row {
-    gap: 1px;
-    background: var(--line);
+    gap: 12px;
+    background: transparent;
+    border: 0;
+    overflow: visible;
   }
 
   .kpi-row > .kpi {
     background: var(--surface);
+    border-radius: var(--radius-lg);
   }
 
   /* Prioridade de colunas (DESIGN.md §3): P1 sempre; P2 ≥ 768 px; P3 ≥ 1280 px */
@@ -569,13 +594,16 @@ select.field-sm {
   }
 
   .modal-backdrop {
-    background: rgba(3, 7, 18, 0.6);
+    background: rgba(0, 0, 0, 0.55);
     animation: fadeIn 0.15s ease both;
   }
 
+  /* O que flutua tem a superfície de popover, fio e sombra; painel de conteúdo nunca */
   .modal-panel {
     animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+    background: var(--popover);
     border: 1px solid var(--line);
+    border-radius: var(--radius-xl);
     box-shadow: var(--elev-float);
   }
 }
@@ -641,8 +669,9 @@ html {
   padding-top: env(safe-area-inset-top);
 }
 
+/* Barra de abas flutuante, de vidro, acima do indicador do iPhone */
 .bottom-nav {
-  padding-bottom: env(safe-area-inset-bottom);
+  bottom: calc(1rem + env(safe-area-inset-bottom));
 }
 
 .sidebar-rodape {
@@ -659,7 +688,7 @@ html {
 @media (max-width: 1023.98px) {
   /* lugar da barra inferior */
   .com-barra-inferior {
-    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
   }
 
   /* o iPhone dá zoom em campos com letra menor que 16 px */

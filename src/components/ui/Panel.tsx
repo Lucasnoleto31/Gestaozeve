@@ -19,11 +19,7 @@ export function Panel({ title, subtitle, action, icon: Icon, variant = 'section'
   const header = temHeader && (
     <header className={cn('flex items-start justify-between gap-3', variant === 'card' ? (flush ? 'border-b border-line px-5 py-4' : 'px-5 pb-3 pt-5') : 'mb-3')}>
       <div className="flex min-w-0 items-start gap-2.5">
-        {Icon && (
-          <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-accent-soft text-accent">
-            <Icon className="h-3.5 w-3.5" aria-hidden />
-          </span>
-        )}
+        {Icon && <Icon className="mt-1 h-4 w-4 shrink-0 text-fg-muted" aria-hidden />}
         <div className="min-w-0">
           {title && <h2 className="text-section font-semibold text-fg">{title}</h2>}
           {subtitle && <p className="mt-0.5 text-dense text-fg-muted">{subtitle}</p>}

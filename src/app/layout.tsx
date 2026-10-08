@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist } from 'next/font/google'
+import { Poppins } from 'next/font/google'
 import { cookies } from 'next/headers'
 import { ThemeProvider } from '@/lib/theme'
 import { THEME_COOKIE, THEME_INIT_SCRIPT, THEME_PADRAO, isThemePref, type ThemePref } from '@/lib/theme-shared'
 import './globals.css'
 
-const geist = Geist({ subsets: ['latin'] })
+// Uma família só (ficha padrão): Poppins, com os pesos que a escala usa
+const poppins = Poppins({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] })
 
 export const metadata: Metadata = {
   title: 'Zeve Controle',
@@ -20,8 +21,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',   // usa a tela toda no iPhone (as áreas seguras ficam no CSS)
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f4f6f9' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a0e14' },
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0b0b' },
   ],
 }
 
@@ -44,7 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body className={`${geist.className} h-full bg-bg text-fg antialiased`}>
+      <body className={`${poppins.className} h-full bg-bg text-fg antialiased`}>
         <ThemeProvider initial={initial}>{children}</ThemeProvider>
       </body>
     </html>

@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils'
 
 // Classes dos botões, separadas do componente pra servirem também em <Link>
 // dentro de Server Components (Button.tsx é 'use client').
-// DESIGN.md §3: primário (accent), secundário (superfície + hairline), ghost, destrutivo (loss).
+// DESIGN.md §3: primário (tinta), secundário (só o fio), ghost, destrutivo (fio e texto em loss).
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
 export type ButtonSize = 'xs' | 'sm' | 'md'
 
@@ -13,9 +13,9 @@ export const BUTTON_BASE =
 
 export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary: 'border-accent bg-accent text-accent-fg hover:bg-accent-hover hover:border-accent-hover',
-  secondary: 'border-line-strong bg-surface text-fg hover:bg-surface-2',
+  secondary: 'border-line-strong bg-transparent text-fg hover:bg-surface',
   ghost: 'border-transparent text-fg-muted hover:bg-surface-3 hover:text-fg',
-  danger: 'border-loss bg-loss text-white hover:opacity-90',
+  danger: 'border-loss bg-transparent text-loss hover:bg-loss-soft',
   // "success" é só alias do primário: cor de ação é uma só (DESIGN.md §1)
   success: 'border-accent bg-accent text-accent-fg hover:bg-accent-hover hover:border-accent-hover',
 }

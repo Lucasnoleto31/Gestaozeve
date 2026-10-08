@@ -7,11 +7,12 @@ export type AlertTone = 'loss' | 'warn' | 'gain' | 'neutral' | 'danger' | 'warni
 const TOM: Record<AlertTone, 'loss' | 'warn' | 'gain' | 'neutral'> = {
   loss: 'loss', warn: 'warn', gain: 'gain', neutral: 'neutral', danger: 'loss', warning: 'warn', success: 'gain', info: 'neutral',
 }
+// Semântica só no texto e no ícone; o fundo é o tom de card (ficha padrão)
 const CLASSE = {
-  loss: 'bg-loss-soft text-loss',
-  warn: 'bg-warn-soft text-warn',
-  gain: 'bg-gain-soft text-gain',
-  neutral: 'bg-surface-3 text-fg-muted',
+  loss: 'bg-surface text-loss',
+  warn: 'bg-surface text-warn',
+  gain: 'bg-surface text-gain',
+  neutral: 'bg-surface text-fg-muted',
 } as const
 const ICON = { loss: AlertCircle, warn: AlertTriangle, gain: CheckCircle2, neutral: Info } as const
 

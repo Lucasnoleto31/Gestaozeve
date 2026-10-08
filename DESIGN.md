@@ -7,107 +7,118 @@ Leads, Funil, Início, Login, Usuários, Perfil). Quem for mexer na interface l�
 ## 1. Direção
 
 **O que o sistema é:** o terminal de controle de um escritório de assessoria — lotes, receita, incentivo e
-base de clientes de três corretoras. **Como deve parecer:** produto de banco de investimento (referência:
-apps do BTG Pactual), não planilha. Escuro por padrão, denso só onde há dado, muito respiro no resto.
+base de clientes de três corretoras. **Como deve parecer:** a **ficha padrão do Midiakit**
+(`C:\Users\PICHAU\OneDrive\Documentos\Midiakit\ficha-padrao.md`, aplicada em 08/10/2026 a pedido do Lucas):
+monocromático, Poppins, cartão chapado, a tinta fazendo o destaque. Os dois temas desde o início; escuro
+é o padrão salvo.
 
 Princípios, em ordem:
 
-1. **Hierarquia por tipografia e espaço**, não por borda e caixa. Seção é um título e um respiro; card só
-   quando o bloco precisa se destacar do fundo (KPI, flutuante).
-2. **Uma cor de ação** (azul), usada pouco: links, botão primário, item ativo, foco. **Verde e vermelho só
-   para ganho/perda, subida/queda e alerta crítico.** Âmbar para "atenção". O resto é neutro.
-3. **Números são o protagonista:** tabulares, alinhados à direita, com peso; texto de apoio recua.
-4. **Densidade proporcional ao dado:** tabela de 1.500 linhas é compacta; cabeçalho de página, KPI e
-   ficha respiram.
-5. **Nada de template:** sem gradiente decorativo, glassmorphism, sombra em tudo, cards idênticos
-   enfileirados, emoji como ícone, texto explicando fórmula na tela (vai para tooltip/`?`).
-6. **Mobile primeiro (390 px):** sem rolagem horizontal da página; tabelas mostram as colunas prioritárias
-   e o resto fica para telas maiores; toque mínimo de 44 px.
-7. **Animação só em resposta a ação** (abrir menu/modal, hover, troca de aba). Sem animação de entrada.
+1. **Nenhum acento cromático.** A tinta (`--fg`) faz o destaque: link, botão principal, item ativo e o
+   card principal da página. A cor da marca (azul `--marca`) entra só no detalhe: o símbolo da Zeve
+   e o anel de foco. **Semânticas só em texto curto e no delta:** verde (bom), âmbar (atenção) e vermelho
+   (erro) pintam a palavra "Ativo", "Inativo", "Bloqueado", o +12,3 %; nunca um fundo, uma barra ou um
+   gráfico.
+2. **Hierarquia por tom e espaço**, não por borda e caixa. Cartão chapado (`--surface`, sem borda e sem
+   sombra); duas superfícies acima do fundo bastam (card e popover). Vidro só no que flutua (barra de
+   abas do celular).
+3. **Números são o protagonista:** Bold 700, tabulares, à direita; o texto de apoio recua. Número antes
+   do texto: o card abre pelo número e a legenda vem embaixo.
+4. **Um destaque por página, na tinta:** o card principal (`KpiCard destaque`) fica preto com texto
+   claro; os outros no tom de card. Dois destaques anulam os dois.
+5. **Densidade proporcional ao dado:** tabela de 1.500 linhas é compacta; cabeçalho de página, KPI e
+   ficha respiram (20 px dentro do card, também no celular).
+6. **Nada que lembre tela gerada:** ícone de brilho, ícone em quadradinho tintado, pílula tintada com
+   seta, número contando, rótulo em caixa alta com palavra colorida, sombra colorida, hover que cresce.
+7. **Celular como aplicativo (390 px):** título grande no topo, barra de abas flutuante de vidro no pé,
+   sem rolagem horizontal da página; toque mínimo de 44 px.
+8. **Movimento mínimo:** fade de 180 ms no que aparece, escala 0,97 no toque, nada em carga de página.
+   `prefers-reduced-motion` respeitado no CSS e nos gráficos.
 
 ## 2. Tokens (um lugar só: `src/app/globals.css`)
 
 Tudo que é cor, tipo, espaço, raio e sombra vem de `--token`. Componentes e páginas **não** usam hex,
 rgba, px de cor nem `text-[Npx]` fora da escala. Gráficos leem os mesmos tokens em runtime
-(`getComputedStyle`), não têm paleta própria.
+(`getComputedStyle`), não têm paleta própria. Migrar de identidade é trocar os **valores** aqui, não os
+nomes (foi assim que a ficha padrão entrou, sem tocar em componente).
 
 ### 2.1 Cor
 
-Escuro (padrão) → claro.
+Claro (medido no Business Plan XP) → escuro (derivado pela regra do kit, não medido).
 
-| Token | Escuro | Claro | Uso |
+| Token | Claro | Escuro | Uso |
 |---|---|---|---|
-| `--bg` | `#0a0e14` | `#f4f6f9` | fundo da página |
-| `--surface` | `#10151d` | `#ffffff` | painéis, tabelas, sidebar |
-| `--surface-2` | `#151b25` | `#f7f9fc` | cabeçalho de tabela, hover, linha de total |
-| `--surface-3` | `#1b2230` | `#eef2f6` | controles segmentados, chips, skeleton |
-| `--line` | `rgba(255,255,255,.07)` | `#e3e8ef` | divisórias (hairline) |
-| `--line-strong` | `rgba(255,255,255,.14)` | `#c9d2df` | borda de input, total |
-| `--fg` | `#eef2f6` | `#0f1722` | texto e números |
-| `--fg-muted` | `#a7b1bf` | `#4a5667` | texto de apoio |
-| `--fg-subtle` | `#6f7a89` | `#8a95a5` | rótulos, zero (–), placeholders |
-| `--accent` | `#4d8dff` | `#1f5eff` | ação, link, ativo, foco |
-| `--accent-hover` | `#6ea1ff` | `#1a4fd6` | hover do primário |
-| `--accent-soft` | `rgba(77,141,255,.14)` | `rgba(31,94,255,.09)` | fundo do item ativo, seleção |
-| `--gain` | `#2ecc8a` | `#148a4f` | ganho, subida, ativo, positivo |
-| `--gain-soft` | `rgba(46,204,138,.14)` | `rgba(20,138,79,.10)` | fundo de badge/heatmap de lotes |
-| `--loss` | `#ff5c5c` | `#d6382d` | perda, queda, crítico |
-| `--loss-soft` | `rgba(255,92,92,.14)` | `rgba(214,56,45,.09)` | fundo de badge |
-| `--warn` | `#f0b35b` | `#b26a05` | atenção (alerta de contato, inativo) |
-| `--warn-soft` | `rgba(240,179,91,.14)` | `rgba(178,106,5,.10)` | fundo de badge |
-| `--c-genial` / `--c-xp` / `--c-btg` | `#60a5fa` / `#f5b942` / `#35c3a2` | `#2563eb` / `#c77d00` / `#0f8f72` | só para identificar corretora (ponto, aba) |
-| `--focus` | `var(--accent)` | `var(--accent)` | anel de foco 2 px |
+| `--bg` | `#ffffff` | `#0b0b0b` | fundo da página |
+| `--surface` | `#f3f3f3` | `#151515` | card: KPI, painel, ficha (fundo com L +4) |
+| `--surface-2` | `#eaeaea` | `#1c1c1c` | hover de linha, tooltip |
+| `--surface-3` | `#e2e2e2` | `#232323` | skeleton, controles apagados |
+| `--popover` | `#ffffff` | `#1a1a1a` | o que flutua: menu, modal, toast (fundo com L +6) |
+| `--line` | `#e4e4e4` | `#262626` | fio: linha de tabela, divisória |
+| `--line-strong` | `#cfcfcf` | `#343434` | borda de input e de botão secundário |
+| `--fg` | `#111111` | `#f5f5f5` | a tinta: texto, número, destaque, ação |
+| `--fg-muted` | `#555555` | `#9e9e9e` | texto de apoio, cabeçalho de tabela |
+| `--fg-subtle` | `#7a7a7a` | `#7a7a7a` | só em texto grande (4,3:1): placeholder, zero (–) |
+| `--accent` | `= --fg` | `= --fg` | ação, link, item ativo, foco do botão (sem matiz) |
+| `--accent-soft` | tinta a 7 % | tinta a 8 % | fundo do item ativo, seleção |
+| `--gain` | `#2e6f40` | `#31c47f` | bom: Ativo, Migrado, Vinculado, subida |
+| `--loss` | `#b22222` | `#df3a3a` | erro: Recusou, Bloqueado, queda, crítico |
+| `--warn` | `#a14a17` | `#f6a823` | atenção: Inativo, Não vinculado, alerta |
+| `--c-genial` / `--c-xp` / `--c-btg` | `#8c8c8c` / `#c4c4c4` / `#111111` | `#a3a3a3` / `#666666` / `#f5f5f5` | corretora por valor, não por matiz (ponto, aba) |
+| `--marca` | `#0a5cff` | `#0a5cff` | o símbolo da Zeve (`Marca`) e nada mais |
+| `--focus` | `= --marca` | `#4d8dff` | anel de foco 2 px |
+| `--capa` / `--capa-fg` | `#0b0b0b` / `#f5f5f5` | iguais | capa escura do login |
 
-Regras: `success/danger/warning/info/violet` deixam de existir como tons de componente — viram `gain`,
-`loss`, `warn`; "info" e "violet" são substituídos por neutro. Sidebar usa `--surface` + `--line`
-(sem segunda paleta `--sb-*`). Sombra: escuro nenhuma (degraus de superfície fazem o trabalho);
-claro `--shadow-float: 0 8px 24px rgba(15,23,34,.08)` só em modal, menu e popover.
-
-Contraste mínimo AA: `--fg` sobre `--surface` ≥ 12:1; `--fg-muted` ≥ 7:1; `--fg-subtle` ≥ 4.5:1;
-`--accent` como texto sobre `--surface` ≥ 4.5:1 nos dois temas.
+Regras: `gain-soft`, `loss-soft` e `warn-soft` existem só para o heatmap e o foco de linha editada;
+badge e alerta pintam o texto, não o fundo. Sombra: nenhuma em conteúdo; `--elev-float` só em modal,
+menu e toast. Contraste medido sobre a cor composta: tinta 18,9:1 no branco e 17:1 no card;
+`--fg-muted` 7,5:1; `--fg-subtle` 4,3:1 (por isso só em texto grande).
 
 ### 2.2 Tipografia
 
-Fonte: **Geist** (já carregada via `next/font`). Números: `font-variant-numeric: tabular-nums` em
-qualquer valor numérico (`.num`, KPI, eixos). Sem segunda família; sem itálico.
+Fonte: **Poppins** (uma família só, via `next/font`; pesos 300, 400, 500, 600 e 700). Bold 700 em
+título e número, Regular 400 no corpo, Light 300 no subtítulo ao lado do título, itálico só em rótulo.
+Números: `font-variant-numeric: tabular-nums` em qualquer valor (`.num`, KPI, eixos).
+
+Papéis do HIG no desktop (tamanho/entrelinha); no telefone a escala sobe (34 · 28 · 22 · 20 · 17):
 
 | Nome | Tamanho / altura | Peso | Uso |
 |---|---|---|---|
-| `display` | 32 / 1.1 | 600, `tracking-tight` | número-herói (Início, Consulta) |
-| `kpi` | 26 / 1.1 | 600, `tracking-tight` | valor de KPI |
-| `title` | 20 / 1.2 | 600 | título de página |
-| `section` | 15 / 1.3 | 600 | título de seção/painel |
-| `body` | 14 / 1.5 | 400 | texto, inputs, botões |
-| `dense` | 13 / 1.4 | 400 | tabelas, listas, descrições |
-| `label` | 12 / 1.3 | 500 | rótulo de campo, cabeçalho de tabela (sentence case, sem letter-spacing) |
-| `micro` | 11 / 1.3 | 500 | subtexto de KPI, timestamps |
+| `display` | 32 / 38 | 700 | número-herói (Início, Consulta) |
+| `title` | 28 / 34 | 700 | título grande de página |
+| `kpi` | 24 / 30 | 700 | valor de KPI |
+| `section` | 17 / 22 | 600 | título de seção/painel |
+| `body` | 14 / 20 | 400 | texto, inputs, botões |
+| `dense` | 13 / 18 | 400 | tabelas, listas, descrições (subtítulo em 300) |
+| `label` | 12 / 16 | 500 | rótulo de campo, subtexto |
+| `micro` | 11 / 14 | 500 | cabeçalho de tabela e eyebrow (caixa alta leve, 0,04–0,06 em), timestamps |
 
-Fora da escala só por exceção documentada aqui. Cabeçalho de tabela deixa de ser CAIXA ALTA espaçada
-(cara de planilha): `label`, cor `--fg-subtle`, sentence case.
+Caixa alta só no rótulo de grupo (eyebrow, cabeçalho de tabela), apagada e leve, como o iOS agrupa.
+Fora da escala só por exceção documentada aqui.
 
 ### 2.3 Espaço, raio, borda
 
 - Escala de espaço (px): 4, 8, 12, 16, 20, 24, 32, 40, 48. Gutter da página: 16 (mobile) / 32 (desktop).
-- Entre seções: 32. Dentro de painel: 16–20. Célula de tabela: 6 × 12 (densa) / 10 × 12 (normal).
-- Raio: `--r-sm` 6 (badge, chip, input), `--r-md` 8 (botão, menu), `--r-lg` 12 (card, modal). Tabela
-  dentro de painel não tem raio próprio.
-- Borda: hairline `--line` 1 px. Painel no escuro: sem borda (superfície já destaca); no claro: borda
-  `--line`. Nunca borda + sombra juntas.
+- Entre seções: 32. Dentro de card: 20. Entre cards de KPI: 12. Célula de tabela: 6 × 12 (densa) / 9 × 12.
+- Raio proporcional ao controle (10): `--radius-sm` 8 (chip, badge, célula), `--radius-md` 10 (botão,
+  input, menu), `--radius-lg` 12 (card), `--radius-xl` 16 (folha, modal). Cápsula de navegação e barra
+  de abas seguem o desenho do sistema (26 / 20), fora da escala.
+- Borda: só o fio `--line` entre linhas de tabela e em input/botão secundário. Card sem borda e sem
+  sombra, nos dois temas. Nunca borda + sombra juntas.
 
 ## 3. Componentes base (`src/components/ui`)
 
 | Componente | Regra |
 |---|---|
-| **Botão** | Primário (accent, texto branco), secundário (superfície + hairline), ghost (só texto), destrutivo (loss). Altura 40 (36 em barras densas); 44 no mobile. Ícone 16 px. Loading = spinner no lugar do ícone. |
+| **Botão** | Primário (tinta: fundo `--fg`, texto `--bg`), secundário (superfície + hairline), ghost (só texto), destrutivo (loss). Altura 40 (36 em barras densas); 44 no mobile. Ícone 16 px. Loading = spinner no lugar do ícone. |
 | **Input / Select / Textarea** | Superfície, hairline, raio sm, altura 40; foco = anel 2 px `--focus`; erro = borda `--loss` + mensagem. Rótulo `label` acima. |
 | **Seção / Painel** | `Section`: título `section` + subtítulo opcional `dense` muted + divisor. `Card`: superfície com raio lg, só para KPI, ficha e blocos flutuantes. Não aninhar card em card. |
-| **KPI** | Faixa única com divisórias verticais (não 6 caixas): rótulo `label`, valor `kpi`, subtexto `micro`. Cor só na variação (gain/loss) e no ícone de tendência. Máximo 6 por faixa; no mobile 2 colunas. |
-| **Tabela** | Cabeçalho `label` muted, sticky; linhas hairline; hover `--surface-2`; números `.num` à direita; zero = `–` em `--fg-subtle`; linha de total `--surface-2` + peso 600; primeira coluna sticky quando rola. Prioridade de colunas: P1 sempre, P2 ≥ 768, P3 ≥ 1280. Sem zebra. |
+| **KPI** | Cards chapados em grade (gap 12), um por indicador; um card `destaque` por página, na tinta: rótulo `label`, valor `kpi`, subtexto `micro`. Cor só na variação (gain/loss) e no ícone de tendência. Máximo 6 por faixa; no mobile 2 colunas. |
+| **Tabela** | Sem caixa em volta; cabeçalho `micro` em caixa alta leve, muted, sticky; linhas hairline; hover `--surface-2`; números `.num` à direita; zero = `–` em `--fg-subtle`; linha de total `--surface-2` + peso 600; primeira coluna sticky quando rola. Prioridade de colunas: P1 sempre, P2 ≥ 768, P3 ≥ 1280. Sem zebra. |
 | **Badge** | Neutro (hairline + `--fg-muted`) por padrão. Semântico só para estado que importa: `gain` (Ativo, Migrado, Ganho), `loss` (Perdido, Recusou, crítico), `warn` (Inativo, Nunca girou, alerta de contato). Um badge por linha no máximo. |
 | **Barra em célula / Heatmap** | Barra de dados só em tabela de ranking, uma coluna. Heatmap só nas matrizes mês × linha (giro mensal, receita mensal): `gain-soft` para lotes, `accent-soft` para receita, intensidade por raiz quadrada. |
 | **Modal** | Centro, raio lg, `--shadow-float`, título `section`, rodapé com ações à direita, fecha com Esc e clique fora. |
 | **Tabs / Segmentado** | Trilho `--surface-3`, item ativo `--surface` + `--fg`; sem sombra interna. |
-| **Menu lateral** | Mesma superfície do conteúdo, hairline à direita, 240 px; item ativo `--accent-soft` + texto `--fg` + barra 2 px `--accent`; seletor de corretora como segmentado com ponto da cor da corretora. Topo: título da página (não breadcrumb duplicado), tema e sair. |
+| **Navegação** | Desktop: cabeçalho fixo em três colunas (marca + seletor de corretora · cápsula com Início, Painel, Clientes, Giro diário, Receita, Leads e "Mais" · data e conta). Celular: barra fina no topo, menu completo como gaveta e barra de abas flutuante de vidro no pé (Início, Painel, Clientes, Leads, Menu). |
 | **Toast** | Canto inferior direito (mobile: inferior centralizado), superfície, hairline, ícone de estado, some em 4 s. Sem lib. |
 | **Skeleton / Vazio / Erro** | Skeleton segue a forma final (faixa de KPI, tabela de N linhas, gráfico). Vazio: ícone 20 px `--fg-subtle`, frase curta, ação. Erro: mensagem + "Tentar de novo". |
 
@@ -116,9 +127,9 @@ Fora da escala só por exceção documentada aqui. Cabeçalho de tabela deixa de
 - Formatos pt-BR: `1.234`, `R$ 1.234,56`, `12,3%`, `17/09/26`. Zero mostra `–`. Variação `+12,3%` /
   `−4,0%` colorida gain/loss; sem seta se já tem sinal.
 - Gráficos (recharts) leem tokens: grade só horizontal `--line`, eixos `--fg-subtle` 11 px, sem linha de
-  eixo, tooltip = `--surface-2` + hairline + `dense`, legenda só com 3+ séries. Cores das séries:
-  1ª `--accent`, 2ª `--warn`, 3ª `--fg-muted`, depois as mesmas atenuadas (60 % e 35 %); verde/vermelho só em
-  séries de ganho/perda. Sem animação de entrada. Um gráfico
+  eixo, tooltip = `--surface-2` + hairline + `dense`, legenda só com 3+ séries. Séries por valor, não por matiz:
+  1ª `--fg`, 2ª `--fg-muted`, 3ª `--fg-subtle`, depois as mesmas a 55 % e 30 %. Barra com gradiente vertical
+  (0,95 → 0,32) sobre um trilho a 4 %; grade pontilhada só horizontal; verde/vermelho nunca em série. Sem animação de entrada. Um gráfico
   "herói" por página; os demais menores e sem card próprio.
 - Página inteira sem rolagem horizontal; dentro de tabela é permitido só acima de 768 px.
 

@@ -18,8 +18,8 @@ type NavSection = { label: string; roles: Role[]; items: NavItem[] }
 const TODOS: Role[] = ['admin', 'vendedor', 'influenciador']
 const EQUIPE: Role[] = ['admin', 'vendedor']
 
-// Páginas do controle de cada corretora (na ordem do menu)
-const PAGINAS: { id: string; label: string; icon: React.ElementType; roles: Role[] }[] = [
+// Páginas do controle de cada corretora (na ordem do menu; o cabeçalho do desktop usa a mesma lista)
+export const PAGINAS: { id: string; label: string; icon: React.ElementType; roles: Role[] }[] = [
   { id: 'painel', label: 'Painel', icon: LayoutDashboard, roles: EQUIPE },
   { id: 'clientes', label: 'Clientes', icon: Users, roles: EQUIPE },
   { id: 'lotes', label: 'Giro diário', icon: BarChart3, roles: EQUIPE },
@@ -96,16 +96,14 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
     <aside
       className={cn(
         'safe-top fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-surface text-fg',
-        'transition-transform duration-200 lg:translate-x-0',
+        'transition-transform duration-200 lg:hidden',
         isOpen ? 'translate-x-0' : '-translate-x-full',
       )}
-      aria-label="Menu principal"
+      aria-label="Menu principal (celular)"
     >
       {/* Marca */}
       <div className="flex h-14 items-center gap-2.5 px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg">
-          <Marca className="h-5 w-5" />
-        </div>
+        <Marca className="h-6 w-8 shrink-0" />
         <div className="min-w-0 leading-tight">
           <p className="text-dense font-semibold tracking-tight">Zeve Controle</p>
           <p className="text-micro text-fg-subtle">Genial · XP · BTG</p>

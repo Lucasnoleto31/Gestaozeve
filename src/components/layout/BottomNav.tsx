@@ -1,7 +1,8 @@
 'use client'
 
-// Barra inferior do celular (telas menores que lg): os atalhos de todo dia e o botão
-// Menu, que abre o painel lateral completo. Respeita a área do indicador do iPhone.
+// Barra de abas do celular (telas menores que lg): flutuante no pé, de vidro, com os atalhos
+// de todo dia e o botão Menu, que abre a gaveta completa. A posição acima do indicador do
+// iPhone fica no CSS (.bottom-nav); o conteúdo ganha o respiro em .com-barra-inferior.
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Filter, Home, LayoutDashboard, Menu, Users } from 'lucide-react'
@@ -12,6 +13,8 @@ import { CORRETORA_SLUG, corretoraDoSlug, type Corretora } from '@/lib/corretora
 import { isActivePath } from './Sidebar'
 
 type Item = { label: string; href: string; icon: React.ElementType; exact?: boolean }
+
+const ITEM = 'flex h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-[20px] text-[10px] font-medium leading-3 active:scale-[.97]'
 
 export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadrao: Corretora }) {
   const pathname = usePathname()
@@ -30,32 +33,26 @@ export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadr
     : [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }]
 
   return (
-    <nav className="bottom-nav fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur lg:hidden" aria-label="Atalhos">
+    <nav
+      className="bottom-nav fixed inset-x-4 z-30 rounded-[26px] border border-line-strong/60 bg-surface/80 p-1.5 shadow-float backdrop-blur-xl backdrop-saturate-150 lg:hidden"
+      aria-label="Atalhos"
+    >
       <ul className="grid" style={{ gridTemplateColumns: `repeat(${itens.length + 1}, minmax(0, 1fr))` }}>
         {itens.map(it => {
           const ativo = !isOpen && isActivePath(pathname, it.href, it.exact)
           const Icon = it.icon
           return (
             <li key={it.href}>
-              <Link
-                href={it.href}
-                aria-current={ativo ? 'page' : undefined}
-                className={cn('flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium active:opacity-70', ativo ? 'text-accent' : 'text-fg-muted')}
-              >
-                <Icon className="h-5 w-5" aria-hidden strokeWidth={ativo ? 2.25 : 1.75} />
+              <Link href={it.href} aria-current={ativo ? 'page' : undefined} className={cn(ITEM, ativo ? 'bg-accent-soft text-fg' : 'text-fg-muted')}>
+                <Icon className="h-[22px] w-[22px]" aria-hidden strokeWidth={ativo ? 2.25 : 1.75} />
                 {it.label}
               </Link>
             </li>
           )
         })}
         <li>
-          <button
-            type="button"
-            onClick={toggle}
-            aria-expanded={isOpen}
-            className={cn('flex min-h-14 w-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium active:opacity-70', isOpen ? 'text-accent' : 'text-fg-muted')}
-          >
-            <Menu className="h-5 w-5" aria-hidden strokeWidth={isOpen ? 2.25 : 1.75} />
+          <button type="button" onClick={toggle} aria-expanded={isOpen} className={cn(ITEM, isOpen ? 'bg-accent-soft text-fg' : 'text-fg-muted')}>
+            <Menu className="h-[22px] w-[22px]" aria-hidden strokeWidth={isOpen ? 2.25 : 1.75} />
             Menu
           </button>
         </li>

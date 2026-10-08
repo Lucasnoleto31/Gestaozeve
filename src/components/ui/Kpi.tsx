@@ -66,7 +66,7 @@ export function DeltaText({ pct, menorMelhor }: { pct: number | null; menorMelho
 
 // Uma célula da faixa de KPIs: rótulo, valor grande, subtexto. Sem ícone, sem
 // cor própria — só a variação e, quando pedido, o valor em gain/loss.
-export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, className, valueClassName }: {
+export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, destaque, className, valueClassName }: {
   icon?: ElementType
   label: string
   value: ReactNode
@@ -74,13 +74,14 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, c
   tone?: Tone
   delta?: KpiDelta | null
   loading?: boolean
+  destaque?: boolean   // o card principal da página, na tinta (um por página)
   className?: string
   valueClassName?: string
 }) {
   const tom = TOM[tone]
   return (
-    <div className={cn('kpi min-w-0 px-5 py-4', className)}>
-      <p className="label">{label}</p>
+    <div className={cn('kpi min-w-0 px-5 py-4', destaque && 'bg-fg', className)}>
+      <p className={cn('label', destaque && 'text-bg/70')}>{label}</p>
       {loading ? (
         <div className="mt-2 space-y-2">
           <div className="skeleton h-7 w-28" />
@@ -88,10 +89,10 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, c
         </div>
       ) : (
         <>
-          <p className={cn('mt-1.5 truncate text-kpi font-semibold tracking-tight tabular-nums', tom === 'gain' ? 'text-gain' : tom === 'loss' ? 'text-loss' : tom === 'warn' ? 'text-warn' : 'text-fg', valueClassName)}>{value}</p>
+          <p className={cn('mt-1.5 truncate text-kpi font-bold tracking-tight tabular-nums', destaque ? 'text-bg' : tom === 'gain' ? 'text-gain' : tom === 'loss' ? 'text-loss' : tom === 'warn' ? 'text-warn' : 'text-fg', valueClassName)}>{value}</p>
           <div className="mt-1.5 flex min-h-[16px] flex-wrap items-center gap-x-2 gap-y-0.5">
             {delta && <DeltaPill delta={delta} />}
-            {sub && <span className="text-micro text-fg-muted">{sub}</span>}
+            {sub && <span className={cn('text-micro', destaque ? 'text-bg/70' : 'text-fg-muted')}>{sub}</span>}
           </div>
         </>
       )}

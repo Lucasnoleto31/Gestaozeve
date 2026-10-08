@@ -1,21 +1,22 @@
 import { cn } from '@/lib/utils'
 
-// Neutro por padrão (hairline + texto apagado). Cor só para estado que importa:
-// gain (ativo, migrado, ganho), loss (perdido, recusou, crítico), warn (atenção).
+// Chip de estado. Sempre com o fio (hairline) e o fundo da página: a semântica fica só
+// no texto — gain (Ativo, Migrado, Vinculado), loss (Recusou, Bloqueado), warn (Inativo,
+// Não vinculado). "accent" é o chip na tinta (fundo --fg), para o que precisa saltar.
 export type BadgeVariant = 'neutral' | 'gain' | 'loss' | 'warn' | 'accent' | 'default' | 'success' | 'warning' | 'danger' | 'info'
 
 const VARIANT: Record<BadgeVariant, string> = {
-  neutral: 'border border-line-strong text-fg-muted',
-  gain: 'bg-gain-soft text-gain',
-  loss: 'bg-loss-soft text-loss',
-  warn: 'bg-warn-soft text-warn',
-  accent: 'bg-accent-soft text-accent',
+  neutral: 'border border-line text-fg-muted',
+  gain: 'border border-line text-gain',
+  loss: 'border border-line text-loss',
+  warn: 'border border-line text-warn',
+  accent: 'bg-fg text-bg',
   // nomes antigos (somem quando as telas migrarem)
-  default: 'border border-line-strong text-fg-muted',
-  success: 'bg-gain-soft text-gain',
-  warning: 'bg-warn-soft text-warn',
-  danger: 'bg-loss-soft text-loss',
-  info: 'border border-line-strong text-fg-muted',
+  default: 'border border-line text-fg-muted',
+  success: 'border border-line text-gain',
+  warning: 'border border-line text-warn',
+  danger: 'border border-line text-loss',
+  info: 'border border-line text-fg-muted',
 }
 
 export function Badge({ children, variant = 'neutral', className }: {

@@ -35,10 +35,10 @@ export function TopBar() {
   const [saindo, iniciarSaida] = useTransition()
 
   return (
-    <header className="safe-top sticky top-0 z-30 flex min-h-14 items-center justify-between gap-3 border-b border-line bg-bg/90 px-4 backdrop-blur lg:px-8">
+    <header className="safe-top sticky top-0 z-30 flex min-h-14 items-center justify-between gap-3 border-b border-line bg-bg/90 px-4 backdrop-blur lg:hidden">
       <div className="flex min-w-0 items-center gap-2.5">
-        <Link href="/dashboard" className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg lg:hidden" aria-label="Início">
-          <Marca className="h-5 w-5" />
+        <Link href="/dashboard" className="flex h-8 shrink-0 items-center" aria-label="Início">
+          <Marca className="h-6 w-8" />
         </Link>
         <p className="min-w-0 truncate text-label text-fg-subtle" aria-label="Localização">
           {crumb.section} <span aria-hidden>·</span> <span className="font-medium text-fg-muted">{crumb.label}</span>

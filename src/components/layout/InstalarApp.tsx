@@ -31,7 +31,7 @@ export function InstalarApp() {
   return (
     <div className="fixed inset-x-3 z-30 rounded-lg border border-line bg-surface p-3 shadow-[var(--elev-float)] lg:hidden" style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom))' }} role="status">
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg"><Marca className="h-5 w-5" /></div>
+        <Marca className="h-7 w-9 shrink-0" />
         <div className="min-w-0 flex-1 text-dense">
           <p className="font-semibold text-fg">Use como aplicativo</p>
           <p className="text-fg-muted">

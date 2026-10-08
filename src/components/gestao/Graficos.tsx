@@ -4,6 +4,7 @@
 import {
   Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
+import { useId } from 'react'
 import { useChartColors } from '@/lib/theme'
 import { fmtBRL, fmtNum, fmtPct } from '@/lib/format'
 
@@ -45,13 +46,27 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
 }) {
   const c = useChartColors()
   const tt = useTooltipStyle()
+  // Gradiente por série (tinta .95 → .32, de cima para baixo), com id único por gráfico
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const gradId = (key: string) => `g${uid}-${key.replace(/[^a-zA-Z0-9]/g, '')}`
   const temDir = series.some(s => s.eixo === 'dir')
   const fmtEsq = formato === 'brl' ? (v: number) => `R$ ${compacto(v)}` : formato === 'pct' ? (v: number) => `${v}%` : compacto
   const fmtDirAxis = formatoDir === 'brl' ? (v: number) => `R$ ${compacto(v)}` : formatoDir === 'pct' ? (v: number) => `${v}%` : compacto
   return (
     <ResponsiveContainer width="100%" height={altura}>
       <ComposedChart data={dados} margin={{ top: 8, right: temDir ? 8 : 12, left: margemEsq ?? 0, bottom: 0 }}>
-        <CartesianGrid stroke={c.grid} vertical={false} />
+        <defs>
+          {series.filter(s => s.tipo !== 'line').map((s, i) => {
+            const cor = corDe(s.cor, c, series.indexOf(s))
+            return (
+              <linearGradient key={s.key + i} id={gradId(s.key)} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={cor} stopOpacity={0.95} />
+                <stop offset="100%" stopColor={cor} stopOpacity={0.32} />
+              </linearGradient>
+            )
+          })}
+        </defs>
+        <CartesianGrid stroke={c.grid} strokeDasharray="2 4" vertical={false} />
         <XAxis dataKey="label" tick={{ fill: c.axis, fontSize: 11 }} axisLine={{ stroke: c.grid }} tickLine={false} interval="preserveStartEnd" />
         <YAxis yAxisId="esq" tick={{ fill: c.axis, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={fmtEsq} width={54} />
         {temDir && <YAxis yAxisId="dir" orientation="right" tick={{ fill: c.axis, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={fmtDirAxis} width={54} />}
@@ -69,7 +84,7 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
           const cor = corDe(s.cor, c, i)
           return s.tipo === 'line'
             ? <Line key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} type="monotone" dataKey={s.key} name={s.nome} stroke={cor} strokeWidth={2} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />
-            : <Bar key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} dataKey={s.key} name={s.nome} fill={cor} stackId={s.empilhar} radius={s.empilhar ? 0 : [2, 2, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+            : <Bar key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} dataKey={s.key} name={s.nome} fill={`url(#${gradId(s.key)})`} stroke="none" background={s.empilhar ? undefined : { fill: c.track }} stackId={s.empilhar} radius={s.empilhar ? 0 : [4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
         })}
       </ComposedChart>
     </ResponsiveContainer>
@@ -110,15 +125,23 @@ export function GraficoBarrasH({ dados, altura, formato = 'num', cor, larguraRot
 }) {
   const c = useChartColors()
   const tt = useTooltipStyle()
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const corBarra = corDe(cor, c, 0)
   const h = altura ?? Math.max(120, dados.length * 26 + 24)
   return (
     <ResponsiveContainer width="100%" height={h}>
       <ComposedChart data={dados} layout="vertical" margin={{ top: 4, right: 48, left: 4, bottom: 0 }}>
-        <CartesianGrid stroke={c.grid} horizontal={false} />
+        <defs>
+          <linearGradient id={`gh${uid}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={corBarra} stopOpacity={0.95} />
+            <stop offset="100%" stopColor={corBarra} stopOpacity={0.45} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={c.grid} strokeDasharray="2 4" horizontal={false} />
         <XAxis type="number" tick={{ fill: c.axis, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={compacto} />
         <YAxis type="category" dataKey="nome" width={larguraRotulo} tick={{ fill: c.text, fontSize: 11 }} axisLine={false} tickLine={false} />
         <Tooltip {...tt} cursor={{ fill: c.grid }} formatter={v => [FMT[formato](Number(v)), '']} />
-        <Bar dataKey="valor" fill={corDe(cor, c, 0)} radius={[0, 2, 2, 0]} maxBarSize={16} isAnimationActive={false} label={{ position: 'right', fill: c.text, fontSize: 11, formatter: (v: unknown) => FMT[formato](Number(v)) }} />
+        <Bar dataKey="valor" fill={`url(#gh${uid})`} background={{ fill: c.track }} radius={[0, 4, 4, 0]} maxBarSize={16} isAnimationActive={false} label={{ position: 'right', fill: c.text, fontSize: 11, formatter: (v: unknown) => FMT[formato](Number(v)) }} />
       </ComposedChart>
     </ResponsiveContainer>
   )

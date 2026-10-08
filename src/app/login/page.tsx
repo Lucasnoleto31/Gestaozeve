@@ -37,34 +37,33 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-screen bg-bg lg:grid-cols-[1.1fr_1fr]">
       {/* ── Lado institucional ── */}
-      <aside className="hidden border-r border-line bg-surface lg:flex lg:flex-col">
+      {/* Capa: narrativa no escuro, dado no claro (ficha padrão) */}
+      <aside className="hidden bg-capa text-capa-fg lg:flex lg:flex-col">
         <div className="flex h-full flex-col px-14 py-12">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-fg">
-              <Marca className="h-5 w-5" />
-            </div>
+            <Marca className="h-7 w-9" />
             <div className="leading-tight">
-              <p className="text-body font-semibold tracking-tight text-fg">Zeve Controle</p>
-              <p className="text-micro text-fg-subtle">Genial · XP · BTG</p>
+              <p className="text-body font-semibold tracking-tight">Zeve Controle</p>
+              <p className="text-micro opacity-60">Genial · XP · BTG</p>
             </div>
           </div>
 
           <div className="mt-auto">
-            <p className="label mb-3">Escritório de assessoria</p>
-            <h1 className="max-w-lg text-display font-semibold tracking-tight text-fg">
+            <p className="mb-3 text-micro font-medium uppercase tracking-wider opacity-60">Escritório de assessoria</p>
+            <h1 className="max-w-lg text-display font-bold tracking-tight">
               Lotes, receita e clientes das três corretoras em um só lugar.
             </h1>
             <ul className="mt-10 space-y-5">
               {DESTAQUES.map(d => (
-                <li key={d.titulo} className="max-w-md border-l-2 border-accent pl-4">
-                  <p className="text-body font-semibold text-fg">{d.titulo}</p>
-                  <p className="mt-0.5 text-dense text-fg-muted">{d.texto}</p>
+                <li key={d.titulo} className="max-w-md border-l-2 border-capa-fg/40 pl-4">
+                  <p className="text-body font-semibold">{d.titulo}</p>
+                  <p className="mt-0.5 text-dense font-light opacity-75">{d.texto}</p>
                 </li>
               ))}
             </ul>
           </div>
 
-          <p className="mt-12 text-micro text-fg-subtle">© {new Date().getFullYear()} Zeve Controle</p>
+          <p className="mt-12 text-micro opacity-60">© {new Date().getFullYear()} Zeve Controle</p>
         </div>
       </aside>
 
@@ -73,15 +72,13 @@ export default function LoginPage() {
         <div className="absolute right-4 top-4"><ThemeToggle /></div>
 
         <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-accent-fg">
-            <Marca className="h-5 w-5" />
-          </div>
+          <Marca className="h-7 w-9" />
           <span className="text-section font-semibold tracking-tight text-fg">Zeve Controle</span>
         </div>
 
         <div className="w-full max-w-[400px]">
           <div className="mb-6">
-            <h2 className="text-title font-semibold tracking-tight text-fg">Entrar</h2>
+            <h2 className="text-title font-bold tracking-tight text-fg">Entrar</h2>
             <p className="mt-1 text-dense text-fg-muted">Acesse sua conta para continuar.</p>
           </div>
 

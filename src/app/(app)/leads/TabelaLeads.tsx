@@ -18,12 +18,29 @@ import { fmtNum, labelMesCurto } from '@/lib/format'
 import { expandir, type Compacto } from '@/lib/compacto'
 import { mesBrasil } from '@/lib/periodo'
 import { cn } from '@/lib/utils'
+import { mesmaPessoa } from '@/lib/texto'
 import { LeadForm } from './LeadForm'
 import { GanhoWizard } from './GanhoWizard'
 
 type Filtros = { busca: string; mes: string; status: string; responsavel: string; origem: string; corretora: string; alerta: boolean; clientes: string }
 
-export function TabelaLeads({ leads: compacto, responsaveis, responsaveisClientes, status, admin, filtrosIniciais, corretoras, assessores, hoje }: {
+// Quem está atendendo o lead, em destaque: chip na tinta quando é outra pessoa (não chamar),
+// contorno quando é você, "livre" quando ninguém assumiu. Fechado mostra só o nome.
+function Atendimento({ responsavel, aberto, meu }: { responsavel: string | null; aberto: boolean; meu: boolean }) {
+  if (!responsavel) return aberto ? <span className="inline-flex h-[22px] items-center rounded-sm border border-dashed border-line-strong px-2 text-micro font-medium text-fg-muted">livre</span> : <span className="text-fg-subtle">{TRACO}</span>
+  if (!aberto) return <span className="muted">{responsavel}</span>
+  return (
+    <span
+      className={cn('inline-flex h-[22px] max-w-full items-center gap-1.5 whitespace-nowrap rounded-sm px-2 text-micro font-semibold', meu ? 'border border-fg text-fg' : 'bg-fg text-bg')}
+      title={meu ? 'Você está atendendo este lead' : `${responsavel} está atendendo este lead: não chamar`}
+    >
+      <span className={cn('inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-bold', meu ? 'bg-fg text-bg' : 'bg-bg text-fg')} aria-hidden>{responsavel.charAt(0).toUpperCase()}</span>
+      {responsavel}{meu ? ' · você' : ' atende'}
+    </span>
+  )
+}
+
+export function TabelaLeads({ leads: compacto, responsaveis, responsaveisClientes, status, admin, filtrosIniciais, corretoras, assessores, hoje, usuario }: {
   leads: Compacto<LeadRow>
   responsaveis: string[]           // quem trabalha leads
   responsaveisClientes: string[]   // quem cuida de clientes (ficha do lead ganho)
@@ -33,8 +50,10 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
   corretoras: Corretora[]          // corretoras que o usuário vê (destino do lead ganho)
   assessores: AssessoresPorCorretora
   hoje: string
+  usuario: string                  // nome de quem está logado (destaca "você" nos leads que atende)
 }) {
   const router = useRouter()
+  const ehMeu = (responsavel: string | null) => mesmaPessoa(responsavel, usuario)
   const { avisar } = useToast()
   // a lista chega compacta (colunas + arrays) e vira objetos aqui
   const leads = useMemo(() => expandir(compacto), [compacto])
@@ -66,7 +85,8 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
     return leads.filter(l => {
       if (f.mes && mesPorLead.get(l.id) !== f.mes) return false
       if (f.status && l.status !== f.status) return false
-      if (f.responsavel && (l.responsavel ?? '') !== f.responsavel) return false
+      if (f.responsavel === '__livre') { if (l.responsavel) return false }
+      else if (f.responsavel && (l.responsavel ?? '') !== f.responsavel) return false
       if (f.origem && (l.origem ?? '') !== f.origem) return false
       if (f.corretora && (l.corretora ?? '') !== f.corretora) return false
       if (f.alerta && !l.alerta) return false
@@ -111,7 +131,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
         </label>
         <select className="field-sm" value={f.mes} onChange={e => sel('mes', e.target.value)} aria-label="Mês de entrada"><option value="">Mês: todos</option>{mesesOpcoes.map(([m, n]) => <option key={m} value={m}>{labelMesCurto(m + '-01')} · {fmtNum(n)}</option>)}</select>
         <select className="field-sm" value={f.status} onChange={e => sel('status', e.target.value)} aria-label="Status"><option value="">Status: todos</option>{status.map(s => <option key={s.status}>{s.status}</option>)}</select>
-        <select className="field-sm" value={f.responsavel} onChange={e => sel('responsavel', e.target.value)} aria-label="Responsável"><option value="">Responsável: todos</option>{respOpcoes.map(r => <option key={r}>{r}</option>)}</select>
+        <select className="field-sm" value={f.responsavel} onChange={e => sel('responsavel', e.target.value)} aria-label="Responsável"><option value="">Responsável: todos</option><option value="__livre">livres (sem responsável)</option>{respOpcoes.map(r => <option key={r}>{r}</option>)}</select>
         <select className="field-sm" value={f.origem} onChange={e => sel('origem', e.target.value)} aria-label="Origem"><option value="">Origem: todas</option>{origens.map(o => <option key={o}>{o}</option>)}</select>
         <select className="field-sm" value={f.corretora} onChange={e => sel('corretora', e.target.value)} aria-label="Corretora onde opera"><option value="">Opera em: todas</option>{corretorasOpera.map(c => <option key={c}>{c}</option>)}</select>
         <select className="field-sm" value={f.clientes} onChange={e => sel('clientes', e.target.value)} aria-label="Já é cliente"><option value="">Base: todos</option><option value="sim">já são clientes</option><option value="nao">não são clientes</option></select>
@@ -130,16 +150,19 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
             {visiveis.map(l => {
               const href = fichaHref(l)
               return (
-                <tr key={l.id} className="cursor-pointer" onClick={() => setEditando(l)}>
+                <tr key={l.id} className={cn('cursor-pointer', l.tipo_status === 'Aberto' && l.responsavel && !ehMeu(l.responsavel) && 'bg-accent-soft')} onClick={() => setEditando(l)}>
                   <td className="num whitespace-nowrap col-p2">{new Date(l.data_hora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
-                  <td className="max-w-[200px] truncate font-medium">{l.nome}</td>
+                  <td className="max-w-[200px] truncate font-medium">
+                    {l.nome}
+                    {l.tipo_status === 'Aberto' && l.responsavel && <div className="text-micro font-normal text-fg-muted md:hidden">{ehMeu(l.responsavel) ? 'você atende' : `${l.responsavel} atende`}</div>}
+                  </td>
                   <td className="num whitespace-nowrap">{l.whatsapp ?? TRACO}</td>
                   <td className="num muted col-p3">{l.cpf ?? TRACO}</td>
                   <td className="max-w-[180px] truncate muted col-p3">{l.email ?? TRACO}</td>
                   <td className="max-w-[140px] truncate muted col-p3">{l.ja_opera ?? TRACO}</td>
                   <td className="muted col-p2">{l.corretora ?? TRACO}</td>
                   <td className="muted col-p3">{l.origem ?? TRACO}</td>
-                  <td className="col-p2">{l.responsavel ?? <span className="text-fg-subtle">{TRACO}</span>}</td>
+                  <td className="col-p2"><Atendimento responsavel={l.responsavel} aberto={l.tipo_status === 'Aberto'} meu={ehMeu(l.responsavel)} /></td>
                   <td><StatusLeadBadge status={l.status} tipo={l.tipo_status} /></td>
                   <td className="num col-p2">{dataCurta(l.ultimo_contato)}</td>
                   <td className="num col-p3">{dataCurta(l.data_fechamento)}</td>
@@ -177,7 +200,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
           <button type="button" className="link text-label" onClick={() => setLimite(n => n + 200)}>mostrar mais ({fmtNum(filtrados.length - visiveis.length)} restantes)</button>
         </div>
       )}
-      {editando && <LeadForm key={editando.id} lead={editando} aberto onClose={() => setEditando(null)} responsaveis={responsaveis} status={status} admin={admin} />}
+      {editando && <LeadForm key={editando.id} lead={editando} aberto onClose={() => setEditando(null)} responsaveis={responsaveis} status={status} admin={admin} usuario={usuario} />}
       {ganhando && <GanhoWizard key={ganhando.id} lead={ganhando} aberto onClose={() => setGanhando(null)} corretoras={corretoras} responsaveis={responsaveisClientes} assessores={assessores} hoje={hoje} />}
       <Modal open={!!perdendo} onClose={() => setPerdendo(null)} title="Marcar como perdido" subtitle={perdendo?.nome}
         footer={<><Button variant="secondary" onClick={() => setPerdendo(null)}>Cancelar</Button><Button variant="danger" onClick={perder} loading={fechando}>Marcar perdido</Button></>}>

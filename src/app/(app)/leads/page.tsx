@@ -68,6 +68,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           corretoras={corretorasDoPerfil(profile)}
           assessores={assessores}
           hoje={fmtDate(hojeBrasil())}
+          usuario={profile.nome}
           filtrosIniciais={{ busca: f('busca'), mes: parseMes(f('mes'))?.slice(0, 7) ?? '', status: f('status'), responsavel: f('responsavel'), origem: f('origem'), corretora: f('corretora'), alerta: f('alerta') === '1', clientes: f('clientes') }}
         />
       </PageBody>

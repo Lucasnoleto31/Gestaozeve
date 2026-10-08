@@ -10,17 +10,19 @@ import { Field, Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { excluirLead, salvarLead } from '@/lib/gestao/acoes'
 import type { LeadCampos, LeadRow, StatusLead } from '@/lib/gestao/tipos'
+import { mesmaPessoa } from '@/lib/texto'
 
 const CORRETORAS_OPERA = ['Genial', 'XP', 'BTG', 'Toro', 'Outra']
 const JA_OPERA = ['Sim, já opero', 'Estou começando agora', 'Já operei e parei']
 
-export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin }: {
+export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin, usuario }: {
   lead: LeadRow | null
   aberto: boolean
   onClose: () => void
   responsaveis: string[]
   status: StatusLead[]
   admin: boolean
+  usuario?: string
 }) {
   const router = useRouter()
   const { avisar } = useToast()
@@ -60,6 +62,11 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin }:
         <Button onClick={salvar} loading={salvando}>Salvar</Button>
       </>}>
       <div className="space-y-6">
+        {lead && lead.tipo_status === 'Aberto' && lead.responsavel && (
+          mesmaPessoa(lead.responsavel, usuario)
+            ? <Alert tone="neutral" title="Você está atendendo este lead">Os outros veem o seu nome em destaque na lista.</Alert>
+            : <Alert tone="warn" title={`${lead.responsavel} está atendendo este lead`}>Combine com quem atende antes de entrar em contato.</Alert>
+        )}
         {erro && <Alert tone="loss">{erro}</Alert>}
         <div>
           <p className="label mb-3">Dados do formulário</p>

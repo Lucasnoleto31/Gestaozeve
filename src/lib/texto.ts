@@ -53,6 +53,13 @@ export function normalizarNome(s: string | null | undefined): string {
 }
 
 // Igual ao norm_texto do banco: maiúsculas, sem acento, espaços colapsados
+// O responsável do lead ("Lucas") e o nome do perfil ("Lucas Pereira") são a mesma pessoa?
+export function mesmaPessoa(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normTexto(a), nb = normTexto(b)
+  if (!na || !nb) return false
+  return na === nb || na.split(' ')[0] === nb.split(' ')[0]
+}
+
 export function normTexto(s: string | null | undefined): string {
   if (!s) return ''
   return semAcento(corrigirMojibake(String(s))).toUpperCase().replace(/\s+/g, ' ').trim()

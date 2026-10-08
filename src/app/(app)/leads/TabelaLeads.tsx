@@ -24,18 +24,20 @@ import { GanhoWizard } from './GanhoWizard'
 
 type Filtros = { busca: string; mes: string; status: string; responsavel: string; origem: string; corretora: string; alerta: boolean; clientes: string }
 
-// Quem está atendendo o lead, em destaque: chip na tinta quando é outra pessoa (não chamar),
-// contorno quando é você, "livre" quando ninguém assumiu. Fechado mostra só o nome.
+// Quem está atendendo o lead: chip leve com a inicial na tinta quando é outra pessoa (não
+// chamar), inicial só no contorno quando é você, "livre" tracejado quando ninguém assumiu.
+// Lead fechado mostra só o nome. (Chip todo na tinta ficou pesado com 46 leads de uma pessoa.)
 function Atendimento({ responsavel, aberto, meu }: { responsavel: string | null; aberto: boolean; meu: boolean }) {
   if (!responsavel) return aberto ? <span className="inline-flex h-[22px] items-center rounded-sm border border-dashed border-line-strong px-2 text-micro font-medium text-fg-muted">livre</span> : <span className="text-fg-subtle">{TRACO}</span>
   if (!aberto) return <span className="muted">{responsavel}</span>
   return (
     <span
-      className={cn('inline-flex h-[22px] max-w-full items-center gap-1.5 whitespace-nowrap rounded-sm px-2 text-micro font-semibold', meu ? 'border border-fg text-fg' : 'bg-fg text-bg')}
+      className="inline-flex h-[22px] max-w-full items-center gap-1.5 whitespace-nowrap rounded-sm border border-line bg-surface pl-1 pr-2 text-micro text-fg"
       title={meu ? 'Você está atendendo este lead' : `${responsavel} está atendendo este lead: não chamar`}
     >
-      <span className={cn('inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-bold', meu ? 'bg-fg text-bg' : 'bg-bg text-fg')} aria-hidden>{responsavel.charAt(0).toUpperCase()}</span>
-      {responsavel}{meu ? ' · você' : ' atende'}
+      <span className={cn('inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold', meu ? 'border border-fg text-fg' : 'bg-fg text-bg')} aria-hidden>{responsavel.charAt(0).toUpperCase()}</span>
+      <span className="font-semibold">{responsavel}</span>
+      <span className="text-fg-muted">{meu ? 'você' : 'atende'}</span>
     </span>
   )
 }
@@ -150,7 +152,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
             {visiveis.map(l => {
               const href = fichaHref(l)
               return (
-                <tr key={l.id} className={cn('cursor-pointer', l.tipo_status === 'Aberto' && l.responsavel && !ehMeu(l.responsavel) && 'bg-accent-soft')} onClick={() => setEditando(l)}>
+                <tr key={l.id} className="cursor-pointer" onClick={() => setEditando(l)}>
                   <td className="num whitespace-nowrap col-p2">{new Date(l.data_hora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                   <td className="max-w-[200px] truncate font-medium">
                     {l.nome}

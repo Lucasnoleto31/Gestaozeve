@@ -39,8 +39,13 @@ export type ClienteRow = {
   parceiro: string | null
   observacoes: string | null
   motivo_recusa: string | null
-  grupo_corretagem: boolean | null   // já está no grupo de corretagem certo na corretora? (null = não informado)
+  grupo_corretagem: GrupoCorretagem | null   // situação no grupo de corretagem da corretora (null = não informado)
 }
+// Grupo de corretagem: Bloqueado = o banco travou a alteração por um período; pede-se o desbloqueio
+export const GRUPOS_CORRETAGEM = ['Vinculado', 'Não vinculado', 'Bloqueado'] as const
+export type GrupoCorretagem = (typeof GRUPOS_CORRETAGEM)[number]
+export const grupoCorretagem = (v: unknown): GrupoCorretagem | null =>
+  v === true ? 'Vinculado' : v === false ? 'Não vinculado' : (GRUPOS_CORRETAGEM as readonly string[]).includes(String(v)) ? (v as GrupoCorretagem) : null
 // Campos que a tabela da tela Clientes usa (o resto fica no servidor): é só isso que trafega
 export const CAMPOS_CLIENTE_LINHA = [
   'cliente_id', 'nome', 'documento', 'telefone', 'email', 'n_contas', 'conta_principal', 'status', 'assessor_nome', 'responsavel', 'tarifa',

@@ -5,6 +5,7 @@ import { mesBrasil } from '@/lib/periodo'
 import { mesAtual } from './meses'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
+import { grupoCorretagem } from './tipos'
 import type {
   OperacaoDia,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
@@ -63,7 +64,7 @@ export const mapCliente = (r: Row): ClienteRow => ({
   meses_sem_giro: r.meses_sem_giro == null ? null : num(r.meses_sem_giro),
   situacao: (str(r.situacao) ?? 'Em processamento') as ClienteRow['situacao'], alertas: arr(r.alertas),
   parceiro: str(r.parceiro), observacoes: str(r.observacoes), motivo_recusa: str(r.motivo_recusa),
-  grupo_corretagem: r.grupo_corretagem == null ? null : bool(r.grupo_corretagem),
+  grupo_corretagem: grupoCorretagem(r.grupo_corretagem),
 })
 
 // ── Clientes ───────────────────────────────────────────────────────────────

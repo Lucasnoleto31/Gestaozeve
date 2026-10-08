@@ -12,7 +12,7 @@ import { buscarClientes, funcaoAusente, lotesNoPeriodo, todasAsLinhas } from './
 import { esquecerMesReferencia } from './pagina'
 import { ehIso } from './meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
-import type { ClienteDuplicado, LeadCampos, NovoClienteCampos, Resultado } from './tipos'
+import { GRUPOS_CORRETAGEM, type ClienteDuplicado, type LeadCampos, type NovoClienteCampos, type Resultado } from './tipos'
 
 type Row = Record<string, unknown>
 
@@ -210,7 +210,7 @@ export async function importarLeads(nomeArquivo: string, linhas: LeadImport[]) {
 export async function salvarCamposCliente(corretoraIn: string, clienteId: string, campos: {
   data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null
   status?: string | null; responsavel?: string | null; data_migracao?: string | null; assessor?: string | null
-  grupo_corretagem?: boolean | null   // vinculado ao grupo de corretagem certo? (null = não informado)
+  grupo_corretagem?: string | null    // Vinculado / Não vinculado / Bloqueado (vazio = não informado)
 }) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
@@ -232,7 +232,11 @@ export async function salvarCamposCliente(corretoraIn: string, clienteId: string
       updated_at: new Date().toISOString(),
     }
     if (campos.assessor !== undefined) registro.assessor = limpo(campos.assessor)
-    if (campos.grupo_corretagem !== undefined) registro.grupo_corretagem = campos.grupo_corretagem == null ? null : !!campos.grupo_corretagem
+    if (campos.grupo_corretagem !== undefined) {
+      const g = limpo(campos.grupo_corretagem)
+      if (g && !(GRUPOS_CORRETAGEM as readonly string[]).includes(g)) throw new Error('Grupo de corretagem inválido')
+      registro.grupo_corretagem = g
+    }
     let { error } = await db.from('cliente_corretora').upsert(registro, { onConflict: 'cliente_id,corretora' })
     // antes da S25 (assessor) e da S33 (grupo_corretagem) a coluna não existe: grava o resto mesmo assim
     for (const col of ['assessor', 'grupo_corretagem'] as const) {

@@ -63,6 +63,7 @@ export const mapCliente = (r: Row): ClienteRow => ({
   meses_sem_giro: r.meses_sem_giro == null ? null : num(r.meses_sem_giro),
   situacao: (str(r.situacao) ?? 'Em processamento') as ClienteRow['situacao'], alertas: arr(r.alertas),
   parceiro: str(r.parceiro), observacoes: str(r.observacoes), motivo_recusa: str(r.motivo_recusa),
+  grupo_corretagem: r.grupo_corretagem == null ? null : bool(r.grupo_corretagem),
 })
 
 // ── Clientes ───────────────────────────────────────────────────────────────

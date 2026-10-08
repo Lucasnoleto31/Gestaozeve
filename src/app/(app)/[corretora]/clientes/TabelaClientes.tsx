@@ -14,7 +14,7 @@ import { mesCurto, type MesRef } from '@/lib/gestao/meses'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-type Filtros = { busca: string; status: string; situacao: string; responsavel: string; assessor: string; alerta: string }
+type Filtros = { busca: string; status: string; situacao: string; responsavel: string; assessor: string; alerta: string; grupo: string }
 type Ordem = { col: keyof ClienteLinha; dir: 'asc' | 'desc' }
 
 const SITUACOES = ['Ativo', 'Inativo', 'Nunca girou', 'Em processamento', 'Recusou']
@@ -42,6 +42,9 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
       if (f.assessor && (c.assessor_nome ?? '') !== f.assessor) return false
       if (f.alerta === 'qualquer' && c.alertas.length === 0) return false
       if (f.alerta && f.alerta !== 'qualquer' && !c.alertas.some(a => (f.alerta === 'contas' ? /^\d+ contas$/.test(a) : a === f.alerta))) return false
+      if (f.grupo === 'sim' && c.grupo_corretagem !== true) return false
+      if (f.grupo === 'nao' && c.grupo_corretagem !== false) return false
+      if (f.grupo === 'vazio' && c.grupo_corretagem != null) return false
       if (termo) {
         if (soDig) return (c.documento ?? '').startsWith(dig) || (c.conta_principal ?? '').startsWith(dig) || (c.telefone ?? '').replace(/\D/g, '').includes(dig)
         return c.nome.toUpperCase().includes(termo) || (c.assessor_nome ?? '').toUpperCase().includes(termo) || (c.parceiro ?? '').toUpperCase().includes(termo)
@@ -73,8 +76,8 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
   )
 
   const exportar = () => {
-    const cab = ['Cliente', 'CPF/CNPJ', 'Conta principal', 'Contas', 'Status', 'Situação', 'Assessor', 'Responsável', 'Tarifa', 'Migração', 'Entrada', 'Parceiro', `Lotes ${mesCurto(mesRef)}`, `Receita ${mesCurto(mesRef)}`, 'Lotes 12m', 'Receita 12m', 'Último giro', 'Telefone', 'E-mail', 'Alertas']
-    const linhas = filtrados.map(c => [c.nome, c.documento ?? '', c.conta_principal ?? '', c.n_contas, c.status, c.situacao, c.assessor_nome ?? '', c.responsavel ?? '', c.tarifa, c.data_migracao ?? '', c.data_entrada ?? '', c.parceiro ?? '', c.lotes_mes, c.receita_mes, c.lotes_12m, c.receita_12m, c.ultimo_giro ?? '', c.telefone ?? '', c.email ?? '', c.alertas.join('; ')])
+    const cab = ['Cliente', 'CPF/CNPJ', 'Conta principal', 'Contas', 'Status', 'Situação', 'Assessor', 'Responsável', 'Tarifa', 'Grupo de corretagem', 'Migração', 'Entrada', 'Parceiro', `Lotes ${mesCurto(mesRef)}`, `Receita ${mesCurto(mesRef)}`, 'Lotes 12m', 'Receita 12m', 'Último giro', 'Telefone', 'E-mail', 'Alertas']
+    const linhas = filtrados.map(c => [c.nome, c.documento ?? '', c.conta_principal ?? '', c.n_contas, c.status, c.situacao, c.assessor_nome ?? '', c.responsavel ?? '', c.tarifa, c.grupo_corretagem == null ? '' : c.grupo_corretagem ? 'Sim' : 'Não', c.data_migracao ?? '', c.data_entrada ?? '', c.parceiro ?? '', c.lotes_mes, c.receita_mes, c.lotes_12m, c.receita_12m, c.ultimo_giro ?? '', c.telefone ?? '', c.email ?? '', c.alertas.join('; ')])
     const csv = [cab, ...linhas].map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
@@ -85,7 +88,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
   }
 
   const sel = (k: keyof Filtros, v: string) => setF(x => ({ ...x, [k]: v }))
-  const temFiltro = !!(f.busca || f.status || f.situacao || f.responsavel || f.assessor || f.alerta)
+  const temFiltro = !!(f.busca || f.status || f.situacao || f.responsavel || f.assessor || f.alerta || f.grupo)
 
   return (
     <Panel
@@ -115,7 +118,13 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
           <option value="qualquer">com algum alerta</option>
           {alertas.map(a => <option key={a} value={a}>{a === 'contas' ? 'mais de uma conta' : a}</option>)}
         </select>
-        {temFiltro && <button type="button" className="link text-label" onClick={() => setF({ busca: '', status: '', situacao: '', responsavel: '', assessor: '', alerta: '' })}>limpar</button>}
+        <select className="field-sm" value={f.grupo} onChange={e => sel('grupo', e.target.value)} aria-label="Grupo de corretagem">
+          <option value="">Grupo de corretagem: todos</option>
+          <option value="sim">vinculado</option>
+          <option value="nao">não vinculado</option>
+          <option value="vazio">não informado</option>
+        </select>
+        {temFiltro && <button type="button" className="link text-label" onClick={() => setF({ busca: '', status: '', situacao: '', responsavel: '', assessor: '', alerta: '', grupo: '' })}>limpar</button>}
       </div>
       <div className="tbl-wrap max-h-[70vh]">
         <table className="tbl tbl-dense">
@@ -130,6 +139,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
               {th('assessor_nome', 'Assessor', { prio: 'p2' })}
               {th('responsavel', 'Resp.', { prio: 'p3' })}
               {th('tarifa', 'Tarifa', { num: true, prio: 'p3' })}
+              {th('grupo_corretagem', 'Grupo corr.', { prio: 'p2' })}
               {th('data_migracao', 'Migração', { prio: 'p3' })}
               {th('data_entrada', 'Entrada', { prio: 'p3' })}
               {th('parceiro', 'Parceiro', { prio: 'p3' })}
@@ -143,7 +153,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
             </tr>
           </thead>
           <tbody>
-            {visiveis.length === 0 && <tr><td colSpan={comAcoes ? 19 : 18} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente com esses filtros.</td></tr>}
+            {visiveis.length === 0 && <tr><td colSpan={comAcoes ? 20 : 19} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente com esses filtros.</td></tr>}
             {visiveis.map(c => (
               <tr key={c.cliente_id}>
                 <td className="max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link></td>
@@ -155,6 +165,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
                 <td className="max-w-[180px] truncate muted col-p2">{c.assessor_nome ?? TRACO}</td>
                 <td className="muted col-p3">{c.responsavel ?? TRACO}</td>
                 <td className="num col-p3">{n2(c.tarifa)}</td>
+                <td className={cn('col-p2', c.grupo_corretagem === true ? 'text-gain' : c.grupo_corretagem === false ? 'text-warn' : 'subtle')} title="Vinculado ao grupo de corretagem?">{c.grupo_corretagem == null ? TRACO : c.grupo_corretagem ? 'Sim' : 'Não'}</td>
                 <td className="num col-p3">{dataCurta(c.data_migracao)}</td>
                 <td className="num col-p3">{dataCurta(c.data_entrada)}</td>
                 <td className="muted col-p3">{c.parceiro ?? TRACO}</td>

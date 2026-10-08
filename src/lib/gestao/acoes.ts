@@ -210,6 +210,7 @@ export async function importarLeads(nomeArquivo: string, linhas: LeadImport[]) {
 export async function salvarCamposCliente(corretoraIn: string, clienteId: string, campos: {
   data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null
   status?: string | null; responsavel?: string | null; data_migracao?: string | null; assessor?: string | null
+  grupo_corretagem?: boolean | null   // vinculado ao grupo de corretagem certo? (null = não informado)
 }) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
@@ -231,11 +232,14 @@ export async function salvarCamposCliente(corretoraIn: string, clienteId: string
       updated_at: new Date().toISOString(),
     }
     if (campos.assessor !== undefined) registro.assessor = limpo(campos.assessor)
+    if (campos.grupo_corretagem !== undefined) registro.grupo_corretagem = campos.grupo_corretagem == null ? null : !!campos.grupo_corretagem
     let { error } = await db.from('cliente_corretora').upsert(registro, { onConflict: 'cliente_id,corretora' })
-    // antes da S25 a coluna assessor não existe: grava o resto mesmo assim
-    if (error && 'assessor' in registro && /assessor/i.test(error.message)) {
-      delete registro.assessor
-      ;({ error } = await db.from('cliente_corretora').upsert(registro, { onConflict: 'cliente_id,corretora' }))
+    // antes da S25 (assessor) e da S33 (grupo_corretagem) a coluna não existe: grava o resto mesmo assim
+    for (const col of ['assessor', 'grupo_corretagem'] as const) {
+      if (error && col in registro && new RegExp(col, 'i').test(error.message)) {
+        delete registro[col]
+        ;({ error } = await db.from('cliente_corretora').upsert(registro, { onConflict: 'cliente_id,corretora' }))
+      }
     }
     if (error) falha(error, 'cliente_corretora')
 

@@ -39,11 +39,12 @@ export type ClienteRow = {
   parceiro: string | null
   observacoes: string | null
   motivo_recusa: string | null
+  grupo_corretagem: boolean | null   // já está no grupo de corretagem certo na corretora? (null = não informado)
 }
 // Campos que a tabela da tela Clientes usa (o resto fica no servidor): é só isso que trafega
 export const CAMPOS_CLIENTE_LINHA = [
   'cliente_id', 'nome', 'documento', 'telefone', 'email', 'n_contas', 'conta_principal', 'status', 'assessor_nome', 'responsavel', 'tarifa',
-  'data_migracao', 'data_entrada', 'lotes_mes', 'receita_mes', 'lotes_12m', 'receita_12m', 'ultimo_giro', 'meses_sem_giro', 'situacao', 'alertas', 'parceiro',
+  'data_migracao', 'data_entrada', 'lotes_mes', 'receita_mes', 'lotes_12m', 'receita_12m', 'ultimo_giro', 'meses_sem_giro', 'situacao', 'alertas', 'parceiro', 'grupo_corretagem',
 ] as const satisfies readonly (keyof ClienteRow)[]
 export type ClienteLinha = Pick<ClienteRow, (typeof CAMPOS_CLIENTE_LINHA)[number]>
 // Idem para a tabela da tela Receita

@@ -61,9 +61,11 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
     { estado: cadastro.telefone ? 'ok' : 'warn', texto: cadastro.telefone ? 'Telefone cadastrado' : 'Sem telefone' },
     { estado: resumo?.status === 'Migrado' && !resumo.data_migracao ? 'warn' : 'ok', texto: resumo?.status === 'Migrado' && !resumo.data_migracao ? 'Migrado sem data de migração' : 'Datas consistentes' },
     { estado: resumo?.data_entrada ? 'ok' : 'info', texto: resumo?.data_entrada ? 'Data de entrada preenchida' : 'Sem data de entrada (campo manual)' },
+    { estado: resumo?.grupo_corretagem === true ? 'ok' : resumo?.grupo_corretagem === false ? 'warn' : 'info',
+      texto: resumo?.grupo_corretagem === true ? 'Vinculado ao grupo de corretagem' : resumo?.grupo_corretagem === false ? 'Fora do grupo de corretagem' : 'Grupo de corretagem não informado (campo manual)' },
     ...(assessoresContas.size > 1 ? [{ estado: 'info' as const, texto: `Contas com assessores diferentes: ${[...assessoresContas].filter(Boolean).join(', ')}` }] : []),
     ...(contas.length > 1 ? [{ estado: 'info' as const, texto: `${contas.length} contas · a ficha usa a principal; lotes e receita somam todas` }] : []),
-    ...(resumo?.alertas.filter(a => !/^\d+ contas$/.test(a) && a !== 'sem CPF/CNPJ' && a !== 'sem telefone' && a !== 'sem data de entrada' && a !== 'migrado sem data').map(a => ({ estado: 'warn' as const, texto: a[0].toUpperCase() + a.slice(1) })) ?? []),
+    ...(resumo?.alertas.filter(a => !/^\d+ contas$/.test(a) && a !== 'sem CPF/CNPJ' && a !== 'sem telefone' && a !== 'sem data de entrada' && a !== 'migrado sem data' && a !== 'fora do grupo de corretagem').map(a => ({ estado: 'warn' as const, texto: a[0].toUpperCase() + a.slice(1) })) ?? []),
   ]
   const ICONE = { ok: Check, info: Info, warn: AlertTriangle } as const
   const COR = { ok: 'text-gain', info: 'text-fg-subtle', warn: 'text-warn' } as const
@@ -108,7 +110,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
               {whatsapp && <a href={whatsapp} target="_blank" rel="noreferrer" className={buttonClasses('secondary', 'sm')}><MessageCircle className="h-4 w-4" aria-hidden />WhatsApp</a>}
               <FichaEditavel
                 corretora={corretora} clienteId={id} admin={admin} cadastro={cadastro}
-                manuais={{ data_entrada: resumo?.data_entrada ?? null, parceiro: resumo?.parceiro ?? null, observacoes: resumo?.observacoes ?? null, motivo_recusa: resumo?.motivo_recusa ?? null }}
+                manuais={{ data_entrada: resumo?.data_entrada ?? null, parceiro: resumo?.parceiro ?? null, observacoes: resumo?.observacoes ?? null, motivo_recusa: resumo?.motivo_recusa ?? null, grupo_corretagem: resumo?.grupo_corretagem ?? null }}
                 manual={ficha.manual}
                 responsaveis={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
                 assessores={assessoresTodos[corretora]}
@@ -263,6 +265,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 <dt className="text-fg-subtle">Rendimentos</dt><dd className="tabular-nums">{cadastro.rendimentos != null ? rCurto(cadastro.rendimentos) : TRACO}</dd>
                 <dt className="text-fg-subtle">Patrimônio</dt><dd className="tabular-nums">{cadastro.patrimonio != null ? rCurto(cadastro.patrimonio) : TRACO}</dd>
                 <dt className="text-fg-subtle">Parceiro</dt><dd>{resumo?.parceiro ?? 'Direto'}</dd>
+                <dt className="text-fg-subtle">Grupo de corretagem</dt><dd className={resumo?.grupo_corretagem === false ? 'text-warn' : undefined}>{resumo?.grupo_corretagem == null ? 'Não informado' : resumo.grupo_corretagem ? 'Vinculado' : 'Não vinculado'}</dd>
               </dl>
               {(resumo?.observacoes || resumo?.motivo_recusa) && (
                 <div className="mt-4 space-y-2 border-t border-line pt-3 text-dense">

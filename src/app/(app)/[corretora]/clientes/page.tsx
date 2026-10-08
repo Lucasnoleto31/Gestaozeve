@@ -57,7 +57,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
         <TabelaClientes
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
-          filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '' }}
+          filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '', grupo: q.grupo ?? '' }}
         />
       </PageBody>
     </>

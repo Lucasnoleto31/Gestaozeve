@@ -13,7 +13,7 @@ import { salvarCadastroCliente, salvarCamposCliente, salvarContasCliente, unific
 import { CORRETORA_LABEL, CORRETORA_SLUG, isCorretora, temListaPropria, termosDaCorretora, type Corretora } from '@/lib/corretoras'
 import type { ClienteCadastro, ClienteDuplicado } from '@/lib/gestao/tipos'
 
-type Manuais = { data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null }
+type Manuais = { data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null; grupo_corretagem: boolean | null }
 // Status manual (vazio = automático), responsável interno, assessor informado à mão e data de migração manual
 type Manual = { status: string | null; responsavel: string | null; assessor: string | null; data_migracao: string | null }
 
@@ -43,6 +43,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   const [unificando, setUnificando] = useState(false)
   const [m, setM] = useState({
     data_entrada: manuais.data_entrada ?? '', parceiro: manuais.parceiro ?? '', observacoes: manuais.observacoes ?? '', motivo_recusa: manuais.motivo_recusa ?? '',
+    grupo_corretagem: manuais.grupo_corretagem == null ? '' : manuais.grupo_corretagem ? 'sim' : 'nao',
     status: manual.status ?? '', responsavel: manual.responsavel ?? '', assessor: manual.assessor ?? '', data_migracao: manual.data_migracao ?? '',
   })
   const [c, setC] = useState({ nome: cadastro.nome, documento: cadastro.documento ?? '', telefone: cadastro.telefone ?? '', email: cadastro.email ?? '' })
@@ -77,6 +78,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
     setSalvando(true); setErro(null); setDuplicado(null)
     const r1 = await salvarCamposCliente(corretora, clienteId, {
       data_entrada: m.data_entrada || null, parceiro: m.parceiro, observacoes: m.observacoes, motivo_recusa: m.motivo_recusa,
+      grupo_corretagem: m.grupo_corretagem === 'sim' ? true : m.grupo_corretagem === 'nao' ? false : null,
       status: m.status || null, responsavel: m.responsavel || null, data_migracao: m.data_migracao || null,
       ...(listaPropria ? {} : { assessor: m.assessor || null }),
     })
@@ -134,6 +136,12 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
             <Input label="Data de migração" type="date" value={m.data_migracao} onChange={e => setM({ ...m, data_migracao: e.target.value })} hint="Só conta com status Migrado" />
             <Input label="Data de entrada" type="date" value={m.data_entrada} onChange={e => setM({ ...m, data_entrada: e.target.value })} hint="Quando o cliente foi levado para a corretora" />
             <Input label="Parceiro" value={m.parceiro} onChange={e => setM({ ...m, parceiro: e.target.value })} placeholder="Direto, Aikon…" />
+            <Select label="Grupo de corretagem vinculado?" value={m.grupo_corretagem} onChange={e => setM({ ...m, grupo_corretagem: e.target.value })}
+              hint={`O cliente já está no grupo de corretagem certo na ${CORRETORA_LABEL[corretora]}?`}>
+              <option value="">Não informado</option>
+              <option value="sim">Sim</option>
+              <option value="nao">Não</option>
+            </Select>
             <Input label="Motivo da recusa" value={m.motivo_recusa} onChange={e => setM({ ...m, motivo_recusa: e.target.value })} />
             <Field label="Observações" className="sm:col-span-2">
               <textarea rows={3} value={m.observacoes} onChange={e => setM({ ...m, observacoes: e.target.value })} />

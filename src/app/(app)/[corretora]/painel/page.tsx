@@ -142,9 +142,9 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           <KpiCard label="% ativos da base migrada" value={fmtPct(pctAtivosMigrados)} sub={`${fmtPct(pctAtivosLevados)} do total levado`} />
           <KpiCard label="Lotes no mês" value={fmtNum(r.lotes_mes)} sub={`${fmtNum(r.zerados_mes)} zerados · ${rCurto(r.receita_mes)}${mesAtual?.acoes_operacoes ? ` · ${fmtNum(mesAtual.acoes_operacoes)} op. de ações` : ''}${mesAtual?.posicao ? ` · ${fmtNum(mesAtual.posicao)} em posição` : ''}`} />
           {comRepasse ? (
-            <KpiCard label="Comissão líquida no mês" value={rCurto(repasseMes.liquido)} sub={`comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`} />
+            <KpiCard destaque label="Comissão líquida no mês" value={rCurto(repasseMes.liquido)} sub={`comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`} />
           ) : atp ? (
-            <KpiCard label="Receita no mês" value={rCurto(mesAtual?.receita ?? 0)} sub="corretagem + zeragem" />
+            <KpiCard destaque label="Receita no mês" value={rCurto(mesAtual?.receita ?? 0)} sub="corretagem + zeragem" />
           ) : (
             <KpiCard label="Incentivo no mês" value={rCurto(mesAtual?.incentivo ?? 0)} sub={`${fmtNum(mesAtual?.clientes_com_faixa ?? 0)} clientes com faixa`} />
           )}

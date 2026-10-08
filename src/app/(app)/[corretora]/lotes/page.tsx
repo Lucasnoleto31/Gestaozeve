@@ -89,7 +89,7 @@ export default async function GiroDiarioPage({ params, searchParams }: { params:
       />
       <PageBody>
         <KpiRow cols={6}>
-          <KpiCard label="Lotes no período" value={fmtNum(lotes)} sub={`${dias.length} dias com giro · ${fmtNum(zerados)} zerados`} />
+          <KpiCard destaque label="Lotes no período" value={fmtNum(lotes)} sub={`${dias.length} dias com giro · ${fmtNum(zerados)} zerados`} />
           <KpiCard label="Média por dia" value={fmtNum(Math.round(media))} sub={melhor ? `maior dia ${fmtNum(melhor.lotes)} em ${dataCurta(melhor.dia)}` : undefined} />
           <KpiCard label="Receita no período" value={rCurto(receita)} sub={`${n2(lotes ? receita / lotes : 0)} R$/lote`} />
           <KpiCard label="Vs período anterior" value={lotesAnt ? fmtDelta(((lotes - lotesAnt) / lotesAnt) * 100) : TRACO} sub={`${fmtNum(lotesAnt)} lotes de ${dataCurta(antIni)} a ${dataCurta(antFim)}`} tone={lotesAnt ? (lotes >= lotesAnt ? 'gain' : 'loss') : 'neutral'} />

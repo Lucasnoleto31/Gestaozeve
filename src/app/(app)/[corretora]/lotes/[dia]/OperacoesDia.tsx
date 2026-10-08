@@ -99,7 +99,7 @@ export function OperacoesDia({ corretora, dia, linhas, admin }: {
         <KpiCard label="Lotes no dia" value={fmtNum(lotes)} sub={`${fmtNum(zerados)} zerados${posicao ? ` · ${fmtNum(posicao)} em posição` : ''}`} />
         <KpiCard label="Operações" value={fmtNum(contam.length)} sub={opAcoes ? `${fmtNum(opAcoes)} em ações e cripto` : `${fmtNum(linhas.length - contam.length) || 'nenhuma'} fora da receita`} />
         <KpiCard label="Clientes operando" value={fmtNum(clientes)} sub="com lotes ou ações no dia" />
-        <KpiCard label="Receita do dia" value={rCurto(receita)} sub={alteradas.length ? 'com as alterações ainda não salvas' : lotes ? `${n2(Math.round((receita / lotes) * 1000) / 1000)} R$/lote` : undefined} tone={alteradas.length ? 'warn' : 'neutral'} />
+        <KpiCard destaque label="Receita do dia" value={rCurto(receita)} sub={alteradas.length ? 'com as alterações ainda não salvas' : lotes ? `${n2(Math.round((receita / lotes) * 1000) / 1000)} R$/lote` : undefined} tone={alteradas.length ? 'warn' : 'neutral'} />
         <KpiCard label="Corretagens manuais" value={fmtNum(manuais)} sub={manuais ? 'diferentes do cadastro' : 'tudo pelo cadastro'} />
       </KpiRow>
 

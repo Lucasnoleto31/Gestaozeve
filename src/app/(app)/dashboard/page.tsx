@@ -67,7 +67,7 @@ export default async function DashboardPage() {
                         <KpiCard label="Clientes levados" value={fmtNum(k.clientes_levados)} sub={`${fmtNum(k.migrados)} migrados · ${k.clientes_levados ? fmtPct((k.migrados / k.clientes_levados) * 100, 0) : '0%'}`} />
                         <KpiCard label="Ativos no mês" value={fmtNum(k.ativos_mes)} sub={`${k.migrados ? fmtPct((k.ativos_mes / k.migrados) * 100) : '0%'} da base migrada`} />
                         <KpiCard label="Lotes no mês" value={fmtNum(k.lotes_mes)} sub={`${fmtNum(k.zerados_mes)} zerados${k.acoes_operacoes_mes ? ` · ${fmtNum(k.acoes_operacoes_mes)} op. de ações` : ''}${k.posicao_mes ? ` · ${fmtNum(k.posicao_mes)} em posição` : ''}`} />
-                        <KpiCard label="Receita no mês" value={rCurto(k.receita_mes)} sub={`+ incentivo ${rCurto(k.incentivo_mes)}`} />
+                        <KpiCard destaque={i === 0} label="Receita no mês" value={rCurto(k.receita_mes)} sub={`+ incentivo ${rCurto(k.incentivo_mes)}`} />
                         <KpiCard label="Sem giro · inativos" value={`${fmtNum(k.migrados_sem_giro)} · ${fmtNum(k.inativos)}`} sub="migrados que nunca giraram · pararam" />
                         <KpiCard label="Pendências" value={fmtNum(k.linhas_nao_cadastradas)} sub={`linhas sem cliente · ${fmtNum(k.com_alertas)} com alertas`} tone={k.linhas_nao_cadastradas ? 'warn' : 'neutral'} />
                       </KpiRow>

@@ -140,7 +140,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
         <KpiRow cols={6}>
           <KpiCard label={`Lotes em ${mesCurto(mesRef)}`} value={n0(resumo?.lotes_mes)} sub={`${n0(resumo?.zerados_mes)} zerados${mediaAtivos && resumo?.lotes_mes ? ` · ${(resumo.lotes_mes / mediaAtivos).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}× a média dos ativos` : ''}`} />
           <KpiCard label={`Receita em ${mesCurto(mesRef)}`} value={rCurto(resumo?.receita_mes)} sub={receitaTotalMes && resumo?.receita_mes ? `${fmtPct((resumo.receita_mes / receitaTotalMes) * 100)} da receita do mês` : undefined} />
-          <KpiCard label="Lotes 12 meses" value={n0(resumo?.lotes_12m)} sub={posicao != null ? `${posicao}º de ${fmtNum(contexto360.com_giro)} clientes` : 'sem giro na janela'} />
+          <KpiCard destaque label="Lotes 12 meses" value={n0(resumo?.lotes_12m)} sub={posicao != null ? `${posicao}º de ${fmtNum(contexto360.com_giro)} clientes` : 'sem giro na janela'} />
           <KpiCard label="Receita 12 meses" value={rCurto(resumo?.receita_12m)} sub={`${n0(total12.pontos)} pontos de incentivo`} />
           <KpiCard label="Lotes no histórico" value={n0(resumo?.lotes_total)} sub={`${n0(total12.zerados)} zerados em 12 m`} />
           <KpiCard label="Tarifa vigente" value={resumo ? `${n2(resumo.tarifa)} R$/lote` : TRACO} sub={tarifas.length ? 'tarifa própria do cliente' : 'tarifa do assessor'} />

@@ -692,7 +692,7 @@ export async function salvarParametro(corretoraIn: string, chave: string, valor:
   })
 }
 
-export async function salvarAssessor(corretoraIn: string, a: { id?: string | null; nome: string; id_assessor: string | null; corretagem: number; tipo_zeragem: 'PADRAO' | 'FIXA'; zeragem_fixa: number; responsavel: string | null; ativo: boolean }) {
+export async function salvarAssessor(corretoraIn: string, a: { id?: string | null; nome: string; id_assessor: string | null; corretagem: number; tipo_zeragem: 'PADRAO' | 'FIXA'; zeragem_fixa: number; responsavel: string | null; parceiro?: string | null; ativo: boolean }) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
@@ -703,10 +703,18 @@ export async function salvarAssessor(corretoraIn: string, a: { id?: string | nul
       corretora, nome, nome_norm: normTexto(nome), id_assessor: a.id_assessor?.trim() || null, corretagem: a.corretagem,
       tipo_zeragem: a.tipo_zeragem, zeragem_fixa: a.tipo_zeragem === 'FIXA' ? a.zeragem_fixa : 0, responsavel: a.responsavel?.trim() || null,
       ativo: a.ativo, updated_at: new Date().toISOString(),
+      ...(a.parceiro !== undefined ? { parceiro: a.parceiro?.trim() || null } : {}),
     }
-    const { error } = a.id
-      ? await db.from('assessores').update(registro).eq('id', a.id)
-      : await db.from('assessores').upsert(registro, { onConflict: 'corretora,nome_norm' })
+    const gravar = (reg: Record<string, unknown>) => (a.id
+      ? db.from('assessores').update(reg).eq('id', a.id)
+      : db.from('assessores').upsert(reg, { onConflict: 'corretora,nome_norm' }))
+    let { error } = await gravar(registro)
+    // antes da S40 a coluna parceiro não existe: grava o resto mesmo assim
+    if (error && 'parceiro' in registro && /parceiro/i.test(error.message)) {
+      const sem: Record<string, unknown> = { ...registro }
+      delete sem.parceiro
+      ;({ error } = await gravar(sem))
+    }
     if (error) falha(error, 'assessores')
     await recalcular(db, corretora)
     revalidarCorretora(corretora)

@@ -382,7 +382,7 @@ export async function parametrosDaCorretora(corretora: Corretora) {
     assessores: ((a.data ?? []) as Row[]).map<AssessorParam>(r => ({
       id: String(r.id), corretora, nome: String(r.nome), id_assessor: str(r.id_assessor), corretagem: num(r.corretagem),
       tipo_zeragem: (str(r.tipo_zeragem) ?? 'PADRAO') as AssessorParam['tipo_zeragem'], zeragem_fixa: num(r.zeragem_fixa),
-      responsavel: str(r.responsavel), ativo: r.ativo !== false,
+      responsavel: str(r.responsavel), parceiro: str(r.parceiro), ativo: r.ativo !== false,
     })),
     statusConta: ((m.data ?? []) as Row[]).map<StatusContaMapa>(r => ({ situacao: String(r.situacao), status: String(r.status) as StatusContaMapa['status'] })),
     multiplicadores: ((mu.data ?? []) as Row[]).map<Multiplicador>(r => ({ produto: String(r.produto), pontos: num(r.pontos) })),
@@ -574,7 +574,7 @@ export async function comissaoItens(parceiro: string, corretora: Corretora | nul
   const { db } = await equipe()
   try {
     return linhas(await rpc(db, 'comissao_itens', { p_parceiro: parceiro, p_corretora: corretora }), r => ({
-      cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), origem: (r.origem === 'parceiro' ? 'parceiro' : 'lead') as ComissaoItem['origem'],
+      cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), origem: (r.origem === 'parceiro' || r.origem === 'assessor' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
       data_lead: str(r.data_lead), status: String(r.status ?? ''), data_abertura: str(r.data_abertura), data_ativacao: str(r.data_ativacao),
       prazo_dias: num(r.prazo_dias), limite_ativacao: str(r.limite_ativacao), ativou_no_prazo: bool(r.ativou_no_prazo),
       mes_abertura: str(r.mes_abertura), mes_ativacao: str(r.mes_ativacao), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),

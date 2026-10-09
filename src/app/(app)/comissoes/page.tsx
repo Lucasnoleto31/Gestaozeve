@@ -115,7 +115,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
           />
         </Panel>
 
-        <Panel title={`Contas de ${parceiro} · ${fmtNum(itens.length)}`} subtitle="Lead que virou cliente ou cliente com o parceiro marcado na ficha. Clique no nome para abrir a ficha.">
+        <Panel title={`Contas de ${parceiro} · ${fmtNum(itens.length)}`} subtitle="Lead que virou cliente, cliente com o parceiro marcado na ficha ou cliente de um assessor ligado ao parceiro (Parâmetros › Assessores). Clique no nome para abrir a ficha.">
           <div className="tbl-wrap max-h-[70vh]">
             <table className="tbl tbl-dense">
               <thead>
@@ -131,7 +131,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
                     <tr key={`${i.cliente_id}:${i.corretora}`}>
                       <td className="max-w-[240px] truncate font-medium">{slug ? <Link href={`/${slug}/clientes/${i.cliente_id}`} className="link">{i.nome}</Link> : i.nome}</td>
                       <td className="muted col-p2">{isCorretora(i.corretora) ? CORRETORA_LABEL[i.corretora] : i.corretora}</td>
-                      <td className="muted col-p3">{i.origem === 'lead' ? `lead em ${dataCurta(i.data_lead)}` : 'parceiro na ficha'}</td>
+                      <td className="muted col-p3">{i.origem === 'lead' ? `lead em ${dataCurta(i.data_lead)}` : i.origem === 'assessor' ? `assessor ${i.assessor_nome ?? ''}` : 'parceiro na ficha'}</td>
                       <td className="num col-p2">{dataCurta(i.data_abertura)}</td>
                       <td className="num col-p2">{dataCurta(i.data_ativacao)}</td>
                       <td className="num col-p3">{i.data_abertura ? dataCurta(i.limite_ativacao) : TRACO}</td>

@@ -49,7 +49,7 @@ export function Parametros({ corretora, label, dados }: { corretora: Corretora; 
         <SecaoManutencao corretora={corretora} />
         {corretora === 'BTG' && <SecaoBtg corretora={corretora} label={label} parametros={dados.parametros} />}
       </div>
-      <SecaoAssessores corretora={corretora} assessores={dados.assessores} naoCadastrados={dados.assessoresNaoCadastrados} responsaveis={dados.responsaveis.filter(r => r.ativo && r.atende_clientes).map(r => r.nome)} />
+      <SecaoAssessores corretora={corretora} assessores={dados.assessores} naoCadastrados={dados.assessoresNaoCadastrados} responsaveis={dados.responsaveis.filter(r => r.ativo && r.atende_clientes).map(r => r.nome)} parceiros={dados.responsaveis.filter(r => r.ativo && r.comissionado).map(r => r.nome)} />
       <div className="grid gap-5 xl:grid-cols-2">
         <SecaoStatusConta corretora={corretora} mapa={dados.statusConta} naoMapeadas={dados.situacoesNaoMapeadas} />
         <SecaoConsolidados corretora={corretora} itens={dados.consolidados} />
@@ -159,18 +159,18 @@ function SecaoManutencao({ corretora }: { corretora: Corretora }) {
 }
 
 // ── Assessores ─────────────────────────────────────────────────────────────
-type FormAssessor = { id: string | null; nome: string; id_assessor: string; corretagem: string; tipo_zeragem: 'PADRAO' | 'FIXA'; zeragem_fixa: string; responsavel: string; ativo: boolean }
-const formVazio = (nome = ''): FormAssessor => ({ id: null, nome, id_assessor: '', corretagem: '0,25', tipo_zeragem: 'PADRAO', zeragem_fixa: '0', responsavel: '', ativo: true })
+type FormAssessor = { id: string | null; nome: string; id_assessor: string; corretagem: string; tipo_zeragem: 'PADRAO' | 'FIXA'; zeragem_fixa: string; responsavel: string; parceiro: string; ativo: boolean }
+const formVazio = (nome = ''): FormAssessor => ({ id: null, nome, id_assessor: '', corretagem: '0,25', tipo_zeragem: 'PADRAO', zeragem_fixa: '0', responsavel: '', parceiro: '', ativo: true })
 
-function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis }: { corretora: Corretora; assessores: AssessorParam[]; naoCadastrados: Dados['assessoresNaoCadastrados']; responsaveis: string[] }) {
+function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis, parceiros }: { corretora: Corretora; assessores: AssessorParam[]; naoCadastrados: Dados['assessoresNaoCadastrados']; responsaveis: string[]; parceiros: string[] }) {
   const { erro, ocupado, rodar } = useAcao()
   const [form, setForm] = useState<FormAssessor | null>(null)
 
   const salvar = () => form && rodar(() => salvarAssessor(corretora, {
     id: form.id, nome: form.nome, id_assessor: form.id_assessor || null, corretagem: numeroBR(form.corretagem), tipo_zeragem: form.tipo_zeragem,
-    zeragem_fixa: numeroBR(form.zeragem_fixa), responsavel: form.responsavel || null, ativo: form.ativo,
+    zeragem_fixa: numeroBR(form.zeragem_fixa), responsavel: form.responsavel || null, parceiro: form.parceiro || null, ativo: form.ativo,
   }), () => setForm(null), 'Assessor salvo')
-  const editar = (a: AssessorParam) => setForm({ id: a.id, nome: a.nome, id_assessor: a.id_assessor ?? '', corretagem: String(a.corretagem).replace('.', ','), tipo_zeragem: a.tipo_zeragem, zeragem_fixa: String(a.zeragem_fixa).replace('.', ','), responsavel: a.responsavel ?? '', ativo: a.ativo })
+  const editar = (a: AssessorParam) => setForm({ id: a.id, nome: a.nome, id_assessor: a.id_assessor ?? '', corretagem: String(a.corretagem).replace('.', ','), tipo_zeragem: a.tipo_zeragem, zeragem_fixa: String(a.zeragem_fixa).replace('.', ','), responsavel: a.responsavel ?? '', parceiro: a.parceiro ?? '', ativo: a.ativo })
   const excluir = (a: AssessorParam) => confirm(`Excluir ${a.nome}? Os lotes dele passam a usar tarifa 0 até ser cadastrado de novo.`) && rodar(() => excluirAssessor(corretora, a.id), undefined, 'Assessor excluído')
 
   const linhaForm = (
@@ -189,6 +189,11 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis }
           <option value="">—</option>{responsaveis.map(r => <option key={r}>{r}</option>)}
         </select>
       </td>
+      <td className="col-p2">
+        <select className="field-sm" value={form?.parceiro ?? ''} onChange={e => form && setForm({ ...form, parceiro: e.target.value })} aria-label="Parceiro comissionado" title="Os clientes deste assessor contam na comissão do parceiro">
+          <option value="">—</option>{parceiros.map(p => <option key={p}>{p}</option>)}
+        </select>
+      </td>
       <td className="col-p3"><input type="checkbox" checked={form?.ativo ?? true} onChange={e => form && setForm({ ...form, ativo: e.target.checked })} aria-label="Ativo" /></td>
       <td className="whitespace-nowrap text-right">
         <IconButton tone="success" aria-label="Salvar" disabled={ocupado} onClick={salvar}><Check className="h-4 w-4" aria-hidden /></IconButton>
@@ -198,7 +203,7 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis }
   )
 
   return (
-    <Panel title="Assessores" subtitle="Corretagem em R$ por lote operado. Zeragem padrão usa o ZeragemRS; fixa usa o valor do assessor. O responsável é herdado pelos clientes do assessor."
+    <Panel title="Assessores" subtitle="Corretagem em R$ por lote operado. Zeragem padrão usa o ZeragemRS; fixa usa o valor do assessor. O responsável é herdado pelos clientes do assessor; o parceiro recebe a comissão de abertura e ativação dos clientes dele."
       action={<Button size="sm" onClick={() => setForm(formVazio())} disabled={!!form}><Plus className="h-4 w-4" aria-hidden />Assessor</Button>}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       {naoCadastrados.length > 0 && (
@@ -214,7 +219,7 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis }
       )}
       <div className="tbl-wrap">
         <table className="tbl tbl-dense">
-          <thead><tr><th>Assessor</th><th className="col-p3">ID</th><th className="num">R$/lote</th><th className="col-p2">Zeragem</th><th className="num col-p2">Zeragem fixa</th><th className="col-p2">Responsável</th><th className="col-p3">Ativo</th><th><span className="sr-only">Ações</span></th></tr></thead>
+          <thead><tr><th>Assessor</th><th className="col-p3">ID</th><th className="num">R$/lote</th><th className="col-p2">Zeragem</th><th className="num col-p2">Zeragem fixa</th><th className="col-p2">Responsável</th><th className="col-p2">Parceiro</th><th className="col-p3">Ativo</th><th><span className="sr-only">Ações</span></th></tr></thead>
           <tbody>
             {form && !form.id && linhaForm}
             {assessores.map(a => form?.id === a.id ? <FragmentRow key={a.id}>{linhaForm}</FragmentRow> : (
@@ -225,6 +230,7 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis }
                 <td className="col-p2">{a.tipo_zeragem === 'FIXA' ? <Badge variant="accent">fixa</Badge> : <span className="muted">padrão</span>}</td>
                 <td className={cn('num col-p2', a.tipo_zeragem !== 'FIXA' && 'subtle')}>{a.tipo_zeragem === 'FIXA' ? n2(a.zeragem_fixa) : TRACO}</td>
                 <td className="col-p2">{a.responsavel ?? TRACO}</td>
+                <td className="col-p2">{a.parceiro ?? TRACO}</td>
                 <td className="col-p3">{a.ativo ? 'sim' : 'não'}</td>
                 <td className="whitespace-nowrap text-right">
                   <Button variant="ghost" size="xs" onClick={() => editar(a)}>Editar</Button>

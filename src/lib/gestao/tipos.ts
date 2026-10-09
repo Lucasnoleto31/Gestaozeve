@@ -412,6 +412,7 @@ export type AssessorParam = {
   tipo_zeragem: 'PADRAO' | 'FIXA'
   zeragem_fixa: number
   responsavel: string | null
+  parceiro: string | null        // parceiro comissionado dono dos clientes deste assessor (S40)
   ativo: boolean
 }
 export type StatusContaMapa = { situacao: string; status: StatusConta }
@@ -426,8 +427,9 @@ export type ComissaoItem = {
   cliente_id: string
   nome: string
   corretora: string
-  origem: 'lead' | 'parceiro'
+  origem: 'lead' | 'parceiro' | 'assessor'
   data_lead: string | null
+  assessor_nome: string | null     // quando a origem é o assessor
   status: string
   data_abertura: string | null     // migração que conta como abertura
   data_ativacao: string | null     // primeira operação depois da abertura

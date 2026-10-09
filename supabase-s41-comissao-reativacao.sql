@@ -100,29 +100,30 @@ AS $$
       WHERE v.cliente_id = b.cliente_id AND v.corretora = b.corretora AND v.lotes_operados > 0
     ) d ON true
   ),
-  primeira AS (
-    -- primeira operação depois da abertura (candidata a ativação)
+  ativ AS (
+    -- ativação: primeira operação depois da abertura, dentro do prazo
     SELECT d.cliente_id, d.corretora, MIN(d.data) AS data
     FROM dias d JOIN b ON b.cliente_id = d.cliente_id AND b.corretora = d.corretora
     WHERE b.data_abertura IS NOT NULL AND d.data >= b.data_abertura
-    GROUP BY 1, 2
+    GROUP BY 1, 2, b.data_abertura, b.prazo_dias
+    HAVING MIN(d.data) <= b.data_abertura + b.prazo_dias
   ),
   eventos AS (
     SELECT b.cliente_id, b.corretora, 'abertura'::text AS tipo, b.data_abertura AS data FROM b WHERE b.data_abertura IS NOT NULL
     UNION ALL
-    SELECT b.cliente_id, b.corretora, 'ativacao', p.data
-    FROM b JOIN primeira p ON p.cliente_id = b.cliente_id AND p.corretora = b.corretora
-    WHERE b.data_abertura IS NOT NULL AND p.data <= b.data_abertura + b.prazo_dias
+    SELECT a.cliente_id, a.corretora, 'ativacao', a.data FROM ativ a
     UNION ALL
-    -- reativação: voltou a girar N meses (de calendário) depois do último giro, ou da migração se nunca girou
+    -- reativação: voltou a girar N meses (de calendário) depois do último giro, ou da migração se nunca girou.
+    -- Só não conta no dia da ativação de verdade (1ª operação dentro do prazo): a conta dormente, cuja
+    -- 1ª operação veio fora do prazo e N meses depois da migração, conta como reativação.
     SELECT b.cliente_id, b.corretora, 'reativacao', d.data
     FROM b
     JOIN dias d ON d.cliente_id = b.cliente_id AND d.corretora = b.corretora
-    LEFT JOIN primeira p ON p.cliente_id = b.cliente_id AND p.corretora = b.corretora
+    LEFT JOIN ativ a ON a.cliente_id = b.cliente_id AND a.corretora = b.corretora
     WHERE d.data > b.data_migracao
       AND (b.data_abertura IS NOT NULL OR b.data_lead IS NULL OR d.data >= b.data_lead)   -- conta anterior ao lead: só depois do lead
       AND date_trunc('month', d.data) >= date_trunc('month', COALESCE(d.dia_anterior, b.data_migracao)) + make_interval(months => b.reativacao_meses)
-      AND (p.data IS NULL OR d.data <> p.data)
+      AND (a.data IS NULL OR d.data <> a.data)
   ),
   com_mes AS (
     SELECT e.*, date_trunc('month', e.data)::date AS mes_ref FROM eventos e
@@ -245,7 +246,9 @@ END $$;
 NOTIFY pgrst, 'reload schema';
 
 -- Conferência: eventos do Aikon por tipo e mês, e as reativações mais recentes (esperado em set/26:
--- 3 aberturas, 4 ativações e 3 reativações — Ramer Dinucci 16/09, Lucas Lina 03/09, Saulo Roveres 30/09)
+-- 3 aberturas, 4 ativações e pelo menos 3 reativações — Ramer Dinucci 16/09, Lucas Lina 03/09, Saulo Roveres 30/09).
+-- Correção 09/10 (2ª rodada): a 1ª versão excluía da reativação qualquer 1ª operação, e as contas dormentes
+-- ficavam de fora (0 reativações); agora só o dia da ativação dentro do prazo é excluído.
 SELECT mes_ref, corretora, tipo, COUNT(*) AS eventos, SUM(valor) AS valor
 FROM public.comissao_eventos('Aikon')
 WHERE mes_ref >= DATE '2026-01-01'

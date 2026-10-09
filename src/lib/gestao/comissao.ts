@@ -32,9 +32,14 @@ export function faixasValidas(texto: string): boolean {
 export function resumirComissao(itens: ComissaoItem[], mensal: ComissaoMensalRow[], pagamentos: ComissaoPagamento[], mesRef: string, valorAtivacaoBase: (corretora: string) => number) {
   const doMes = mensal.filter(m => m.mes_ref === mesRef)
   const abertasMes = doMes.reduce((s, m) => s + m.aberturas, 0)
+  const ativacoesMes = doMes.reduce((s, m) => s + m.ativacoes, 0)                 // primeira operação no prazo
   const reativadasMes = doMes.reduce((s, m) => s + m.reativacoes, 0)
-  const ativadasMes = doMes.reduce((s, m) => s + m.ativacoes, 0) + reativadasMes   // reativação conta como ativação
+  const ativadasMes = ativacoesMes + reativadasMes                                   // reativação conta como ativação
   const comissaoMes = doMes.reduce((s, m) => s + m.valor_abertura + m.valor_ativacao, 0)
+  const contasMes = doMes.reduce((s, m) => s + m.contas_mes, 0)
+  const receitaMes = doMes.reduce((s, m) => s + m.receita_contas, 0)               // receita bruta das contas do mês
+  const receitaCarteiraMes = doMes.reduce((s, m) => s + m.receita_carteira, 0)
+  const liquidoMes = receitaMes - comissaoMes                                        // o que ficou para o escritório
   const abertasTotal = itens.filter(i => i.data_abertura).length
   const reativadasTotal = itens.reduce((s, i) => s + i.reativacoes, 0)
   const ativadasTotal = itens.filter(i => i.ativou_no_prazo).length + reativadasTotal
@@ -42,5 +47,8 @@ export function resumirComissao(itens: ComissaoItem[], mensal: ComissaoMensalRow
   const pendentes = itens.filter(i => i.situacao === 'Aberto, no prazo')
   const previsao = pendentes.reduce((s, i) => s + valorAtivacaoBase(i.corretora), 0)
   const pago = pagamentos.reduce((s, p) => s + p.valor, 0)
-  return { abertasMes, ativadasMes, reativadasMes, comissaoMes, abertasTotal, ativadasTotal, reativadasTotal, geradoTotal, pendentes: pendentes.length, previsao, pago, saldo: geradoTotal - pago }
+  return {
+    abertasMes, ativacoesMes, reativadasMes, ativadasMes, comissaoMes, contasMes, receitaMes, receitaCarteiraMes, liquidoMes,
+    abertasTotal, ativadasTotal, reativadasTotal, geradoTotal, pendentes: pendentes.length, previsao, pago, saldo: geradoTotal - pago,
+  }
 }

@@ -427,9 +427,9 @@ export type ComissaoItem = {
   cliente_id: string
   nome: string
   corretora: string
-  origem: 'lead' | 'parceiro' | 'assessor'
+  origem: 'lead' | 'parceiro' | 'assessor' | 'responsavel'   // responsavel = responsável interno é o parceiro (ficha ou herdado do assessor)
   data_lead: string | null
-  assessor_nome: string | null     // quando a origem é o assessor
+  assessor_nome: string | null     // assessor do cliente, quando a origem é o assessor ou o responsável
   status: string
   data_abertura: string | null     // migração que conta como abertura
   data_ativacao: string | null     // primeira operação depois da abertura
@@ -444,7 +444,19 @@ export type ComissaoItem = {
   reativacoes: number              // voltas a operar depois de N meses parado (contam como ativação)
   ultima_reativacao: string | null
 }
-export type ComissaoMensalRow = { mes_ref: string; parceiro: string; corretora: string; aberturas: number; ativacoes: number; reativacoes: number; valor_abertura: number; valor_ativacao: number }
+export type ComissaoMensalRow = {
+  mes_ref: string; parceiro: string; corretora: string
+  aberturas: number; ativacoes: number; reativacoes: number; valor_abertura: number; valor_ativacao: number
+  contas_mes: number        // contas distintas com evento no mês
+  receita_contas: number    // receita bruta dessas contas no mês (corretagem + zeragem + avulsas, antes de repasse e impostos)
+  receita_carteira: number  // receita bruta da carteira inteira do parceiro no mês
+}
+// Um evento (abertura, ativação ou reativação) de uma conta, com a receita que a conta gerou
+export type ComissaoContaMes = {
+  mes_ref: string; cliente_id: string; nome: string; corretora: string; origem: ComissaoItem['origem']; assessor_nome: string | null
+  tipo: 'abertura' | 'ativacao' | 'reativacao'; data: string; valor: number
+  lotes_mes: number; receita_mes: number; receita_desde: number   // no mês do evento · acumulada do mês do evento até hoje
+}
 export type ComissaoPagamento = { id: string; parceiro: string; corretora: string | null; mes_ref: string; valor: number; data_pagamento: string; observacao: string | null; criado_por_nome: string | null }
 export type ComissaoRegra = { id: string; parceiro: string; corretora: string; vigencia: string; prazo_ativacao_dias: number; reativacao_meses: number; metas_abertura: string; metas_ativacao: string }
 export type SituacaoNaoMapeada = { situacao: string; contas: number }

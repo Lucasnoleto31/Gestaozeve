@@ -8,7 +8,7 @@ import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from 
 import { grupoCorretagem } from './tipos'
 import type {
   OperacaoDia,
-  ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra,
+  ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
   IncentivoRow, LeadAcao, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
@@ -574,7 +574,7 @@ export async function comissaoItens(parceiro: string, corretora: Corretora | nul
   const { db } = await equipe()
   try {
     return linhas(await rpc(db, 'comissao_itens', { p_parceiro: parceiro, p_corretora: corretora }), r => ({
-      cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), origem: (r.origem === 'parceiro' || r.origem === 'assessor' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
+      cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
       data_lead: str(r.data_lead), status: String(r.status ?? ''), data_abertura: str(r.data_abertura), data_ativacao: str(r.data_ativacao),
       prazo_dias: num(r.prazo_dias), limite_ativacao: str(r.limite_ativacao), ativou_no_prazo: bool(r.ativou_no_prazo),
       mes_abertura: str(r.mes_abertura), mes_ativacao: str(r.mes_ativacao), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),
@@ -592,6 +592,23 @@ export async function comissaoMensal(mesRef: string, meses: number, parceiro: st
     return linhas(await rpc(db, 'comissao_mensal', { p_mes_ref: mesRef, p_meses: meses, p_parceiro: parceiro, p_corretora: corretora }), r => ({
       mes_ref: String(r.mes_ref), parceiro: String(r.parceiro ?? ''), corretora: String(r.corretora ?? ''),
       aberturas: num(r.aberturas), ativacoes: num(r.ativacoes), reativacoes: num(r.reativacoes), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),
+      contas_mes: num(r.contas_mes), receita_contas: num(r.receita_contas), receita_carteira: num(r.receita_carteira),
+    }))
+  } catch (e) {
+    if (e instanceof Error && semS39({ message: e.message })) return []
+    throw e
+  }
+}
+
+// Eventos dos últimos N meses até mesRef, um por linha, com a receita bruta da conta (S43)
+export async function comissaoContasMes(parceiro: string, corretora: Corretora | null, mesRef: string, meses: number): Promise<ComissaoContaMes[]> {
+  const { db } = await equipe()
+  try {
+    return linhas(await rpc(db, 'comissao_contas_mes', { p_parceiro: parceiro, p_corretora: corretora, p_mes_ref: mesRef, p_meses: meses }), r => ({
+      mes_ref: String(r.mes_ref), cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''),
+      origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
+      tipo: (r.tipo === 'abertura' || r.tipo === 'reativacao' ? r.tipo : 'ativacao') as ComissaoContaMes['tipo'], data: String(r.data ?? ''), valor: num(r.valor),
+      lotes_mes: num(r.lotes_mes), receita_mes: num(r.receita_mes), receita_desde: num(r.receita_desde),
     }))
   } catch (e) {
     if (e instanceof Error && semS39({ message: e.message })) return []

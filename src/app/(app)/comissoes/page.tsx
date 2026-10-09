@@ -21,7 +21,7 @@ import { PagamentosComissao } from './PagamentosComissao'
 import { RegrasComissao } from './RegrasComissao'
 
 const SITUACAO: Record<string, BadgeVariant> = {
-  'Ativado': 'gain', 'Aberto, no prazo': 'accent', 'Prazo vencido': 'warn', 'Operou fora do prazo': 'warn',
+  'Ativado': 'gain', 'Reativado': 'gain', 'Aberto, no prazo': 'accent', 'Prazo vencido': 'warn', 'Operou fora do prazo': 'warn',
   'Conta anterior ao lead': 'neutral', 'Em processamento': 'neutral', 'Recusou': 'loss',
 }
 
@@ -62,13 +62,13 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   const pagamentosVisiveis = corretora ? pagamentos.filter(p => !p.corretora || p.corretora === corretora) : pagamentos
   const res = resumirComissao(itens, mensal, pagamentosVisiveis, mesRef, valorAtivacaoBase)
 
-  const porMes = new Map<string, { aberturas: number; ativacoes: number; comissao: number }>()
+  const porMes = new Map<string, { aberturas: number; ativacoes: number; reativacoes: number; comissao: number }>()
   for (const m of mensal) {
-    const x = porMes.get(m.mes_ref) ?? { aberturas: 0, ativacoes: 0, comissao: 0 }
-    x.aberturas += m.aberturas; x.ativacoes += m.ativacoes; x.comissao += m.valor_abertura + m.valor_ativacao
+    const x = porMes.get(m.mes_ref) ?? { aberturas: 0, ativacoes: 0, reativacoes: 0, comissao: 0 }
+    x.aberturas += m.aberturas; x.ativacoes += m.ativacoes; x.reativacoes += m.reativacoes; x.comissao += m.valor_abertura + m.valor_ativacao
     porMes.set(m.mes_ref, x)
   }
-  const grafico = meses.map(m => { const x = porMes.get(m); return { label: mesCurto(m), aberturas: x?.aberturas ?? 0, ativacoes: x?.ativacoes ?? 0, comissao: Math.round((x?.comissao ?? 0) * 100) / 100 } })
+  const grafico = meses.map(m => { const x = porMes.get(m); return { label: mesCurto(m), aberturas: x?.aberturas ?? 0, ativacoes: x?.ativacoes ?? 0, reativacoes: x?.reativacoes ?? 0, comissao: Math.round((x?.comissao ?? 0) * 100) / 100 } })
   const totalAbertura = itens.reduce((s, i) => s + i.valor_abertura, 0)
   const totalAtivacao = itens.reduce((s, i) => s + i.valor_ativacao, 0)
   const corretorasComRegra = CORRETORAS.filter(c => regras.some(r => r.corretora === c))
@@ -79,7 +79,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
       <PageHeader
         eyebrow="Parceiros · todas as corretoras"
         title="Comissão de parceiros"
-        description={<>Abertura = cliente migrado na corretora. Ativação = primeira operação em até {regras[0]?.prazo_ativacao_dias ?? 60} dias da abertura, uma vez por cliente. O valor por conta segue a faixa alcançada no mês (meta) e vale para todas as contas daquele mês. Conta vinda de lead só conta se a migração for depois do lead.</>}
+        description={<>Abertura = cliente migrado na corretora. Ativação = primeira operação em até {regras[0]?.prazo_ativacao_dias ?? 60} dias da abertura, uma vez por cliente. O valor por conta segue a faixa alcançada no mês (meta) e vale para todas as contas daquele mês. Reativação = cliente da base que fica {regras[0]?.reativacao_meses ?? 4} meses sem girar (ou nunca girou desde a migração) e volta a operar: vale o valor da ativação e entra na meta do mês. Conta vinda de lead só conta abertura se a migração for depois do lead; se a conta é anterior, só a reativação conta.</>}
         actions={<>
           <SelectParam param="parceiro" valor={parceiro} opcoes={parceiros.map(p => ({ valor: p, label: p }))} label="Parceiro" todos={null} />
           <SelectParam param="corretora" valor={corretora ?? ''} opcoes={CORRETORAS.map(c => ({ valor: c, label: CORRETORA_LABEL[c] }))} label="Corretora" todos="Todas" />
@@ -95,19 +95,20 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
 
         <KpiRow cols={6}>
           <KpiCard label={`Contas abertas em ${mesCurto(mesRef)}`} value={fmtNum(res.abertasMes)} sub={`${fmtNum(res.abertasTotal)} no total`} />
-          <KpiCard label={`Ativadas em ${mesCurto(mesRef)}`} value={fmtNum(res.ativadasMes)} sub={`${fmtNum(res.ativadasTotal)} no total · ${fmtNum(res.pendentes)} abertas ainda no prazo`} />
+          <KpiCard label={`Ativações em ${mesCurto(mesRef)}`} value={fmtNum(res.ativadasMes)} sub={`${fmtNum(res.reativadasMes)} reativações · ${fmtNum(res.ativadasTotal)} no total · ${fmtNum(res.pendentes)} abertas no prazo`} />
           <KpiCard label={`Comissão em ${mesCurto(mesRef)}`} value={rCurto(res.comissaoMes)} sub="abertura + ativação do mês" />
           <KpiCard label="Previsão de ativações" value={rCurto(res.previsao)} sub={`${fmtNum(res.pendentes)} contas no prazo × valor da ativação`} />
           <KpiCard label="Pago" value={rCurto(res.pago)} sub={`${fmtNum(pagamentosVisiveis.length)} ${pagamentosVisiveis.length === 1 ? 'pagamento' : 'pagamentos'} · gerado ${rCurto(res.geradoTotal)}`} />
           <KpiCard destaque label="Saldo a pagar" value={rCurto(res.saldo)} sub={res.saldo < 0 ? 'pago acima do gerado' : 'gerado até hoje menos o pago'} />
         </KpiRow>
 
-        <Panel title="Aberturas, ativações e comissão por mês" subtitle={`12 meses até ${mesLongo(mesRef)} · barras = contas, linha = comissão`}>
+        <Panel title="Aberturas, ativações e comissão por mês" subtitle={`12 meses até ${mesLongo(mesRef)} · barras = contas e eventos, linha = comissão`}>
           <GraficoSeries
             dados={grafico}
             series={[
               { key: 'aberturas', nome: 'Contas abertas', tipo: 'bar' },
-              { key: 'ativacoes', nome: 'Contas ativadas', tipo: 'bar' },
+              { key: 'ativacoes', nome: 'Ativações', tipo: 'bar' },
+              { key: 'reativacoes', nome: 'Reativações', tipo: 'bar' },
               { key: 'comissao', nome: 'Comissão', tipo: 'line', eixo: 'dir', formato: 'brl' },
             ]}
             formatoDir="brl"
@@ -120,11 +121,11 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
             <table className="tbl tbl-dense">
               <thead>
                 <tr>
-                  <th>Cliente</th><th className="col-p2">Corretora</th><th className="col-p3">Origem</th><th className="col-p2">Abertura</th><th className="col-p2">Ativação</th><th className="col-p3">Prazo até</th><th>Situação</th><th className="num">R$ abertura</th><th className="num">R$ ativação</th>
+                  <th>Cliente</th><th className="col-p2">Corretora</th><th className="col-p3">Origem</th><th className="col-p2">Abertura</th><th className="col-p2">Ativação</th><th className="col-p3">Prazo até</th><th>Situação</th><th className="col-p2">Reativações</th><th className="num">R$ abertura</th><th className="num">R$ ativação</th>
                 </tr>
               </thead>
               <tbody>
-                {itens.length === 0 && <LinhaVazia colunas={9}>Nenhuma conta atribuída a {parceiro}{corretora ? ` na ${CORRETORA_LABEL[corretora]}` : ''}.</LinhaVazia>}
+                {itens.length === 0 && <LinhaVazia colunas={10}>Nenhuma conta atribuída a {parceiro}{corretora ? ` na ${CORRETORA_LABEL[corretora]}` : ''}.</LinhaVazia>}
                 {itens.map(i => {
                   const slug = isCorretora(i.corretora) ? CORRETORA_SLUG[i.corretora] : null
                   return (
@@ -136,6 +137,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
                       <td className="num col-p2">{dataCurta(i.data_ativacao)}</td>
                       <td className="num col-p3">{i.data_abertura ? dataCurta(i.limite_ativacao) : TRACO}</td>
                       <td><Badge variant={SITUACAO[i.situacao] ?? 'neutral'}>{i.situacao}</Badge></td>
+                      <td className={cn('col-p2', !i.reativacoes && 'subtle')}>{i.reativacoes ? `${fmtNum(i.reativacoes)} · última ${dataCurta(i.ultima_reativacao)}` : TRACO}</td>
                       <td className={cn('num', !i.valor_abertura && 'subtle')}>{r0(i.valor_abertura)}</td>
                       <td className={cn('num', !i.valor_ativacao && 'subtle')}>{r0(i.valor_ativacao)}</td>
                     </tr>
@@ -145,8 +147,9 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
               {itens.length > 0 && (
                 <tfoot>
                   <tr className="total">
-                    <td colSpan={6}>{fmtNum(res.abertasTotal)} abertas · {fmtNum(res.ativadasTotal)} ativadas</td>
+                    <td colSpan={6}>{fmtNum(res.abertasTotal)} abertas · {fmtNum(res.ativadasTotal)} ativações</td>
                     <td>{n0(res.pendentes)} no prazo</td>
+                    <td className="col-p2">{n0(res.reativadasTotal)} reativações</td>
                     <td className="num">{r0(totalAbertura)}</td>
                     <td className="num">{r0(totalAtivacao)}</td>
                   </tr>

@@ -32,13 +32,15 @@ export function faixasValidas(texto: string): boolean {
 export function resumirComissao(itens: ComissaoItem[], mensal: ComissaoMensalRow[], pagamentos: ComissaoPagamento[], mesRef: string, valorAtivacaoBase: (corretora: string) => number) {
   const doMes = mensal.filter(m => m.mes_ref === mesRef)
   const abertasMes = doMes.reduce((s, m) => s + m.aberturas, 0)
-  const ativadasMes = doMes.reduce((s, m) => s + m.ativacoes, 0)
+  const reativadasMes = doMes.reduce((s, m) => s + m.reativacoes, 0)
+  const ativadasMes = doMes.reduce((s, m) => s + m.ativacoes, 0) + reativadasMes   // reativação conta como ativação
   const comissaoMes = doMes.reduce((s, m) => s + m.valor_abertura + m.valor_ativacao, 0)
   const abertasTotal = itens.filter(i => i.data_abertura).length
-  const ativadasTotal = itens.filter(i => i.ativou_no_prazo).length
+  const reativadasTotal = itens.reduce((s, i) => s + i.reativacoes, 0)
+  const ativadasTotal = itens.filter(i => i.ativou_no_prazo).length + reativadasTotal
   const geradoTotal = itens.reduce((s, i) => s + i.valor_abertura + i.valor_ativacao, 0)
   const pendentes = itens.filter(i => i.situacao === 'Aberto, no prazo')
   const previsao = pendentes.reduce((s, i) => s + valorAtivacaoBase(i.corretora), 0)
   const pago = pagamentos.reduce((s, p) => s + p.valor, 0)
-  return { abertasMes, ativadasMes, comissaoMes, abertasTotal, ativadasTotal, geradoTotal, pendentes: pendentes.length, previsao, pago, saldo: geradoTotal - pago }
+  return { abertasMes, ativadasMes, reativadasMes, comissaoMes, abertasTotal, ativadasTotal, reativadasTotal, geradoTotal, pendentes: pendentes.length, previsao, pago, saldo: geradoTotal - pago }
 }

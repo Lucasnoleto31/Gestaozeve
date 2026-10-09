@@ -440,11 +440,13 @@ export type ComissaoItem = {
   mes_ativacao: string | null
   valor_abertura: number
   valor_ativacao: number
-  situacao: string                 // Ativado · Aberto, no prazo · Prazo vencido · Operou fora do prazo · Conta anterior ao lead · Em processamento · Recusou
+  situacao: string                 // Ativado · Reativado · Aberto, no prazo · Prazo vencido · Operou fora do prazo · Conta anterior ao lead · Em processamento · Recusou
+  reativacoes: number              // voltas a operar depois de N meses parado (contam como ativação)
+  ultima_reativacao: string | null
 }
-export type ComissaoMensalRow = { mes_ref: string; parceiro: string; corretora: string; aberturas: number; ativacoes: number; valor_abertura: number; valor_ativacao: number }
+export type ComissaoMensalRow = { mes_ref: string; parceiro: string; corretora: string; aberturas: number; ativacoes: number; reativacoes: number; valor_abertura: number; valor_ativacao: number }
 export type ComissaoPagamento = { id: string; parceiro: string; corretora: string | null; mes_ref: string; valor: number; data_pagamento: string; observacao: string | null; criado_por_nome: string | null }
-export type ComissaoRegra = { id: string; parceiro: string; corretora: string; vigencia: string; prazo_ativacao_dias: number; metas_abertura: string; metas_ativacao: string }
+export type ComissaoRegra = { id: string; parceiro: string; corretora: string; vigencia: string; prazo_ativacao_dias: number; reativacao_meses: number; metas_abertura: string; metas_ativacao: string }
 export type SituacaoNaoMapeada = { situacao: string; contas: number }
 export type AssessorNaoCadastrado = { assessor_nome: string; contas: number; lotes: number }
 

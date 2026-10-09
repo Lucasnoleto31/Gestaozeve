@@ -977,7 +977,7 @@ export async function excluirPagamentoComissao(id: string) {
   })
 }
 
-export async function salvarRegraComissao(r: { parceiro: string; corretora: string; vigencia: string; prazo_ativacao_dias: number; metas_abertura: string; metas_ativacao: string }) {
+export async function salvarRegraComissao(r: { parceiro: string; corretora: string; vigencia: string; prazo_ativacao_dias: number; reativacao_meses?: number; metas_abertura: string; metas_ativacao: string }) {
   return tentar(async () => {
     const { db } = await somenteAdmin()
     const parceiro = r.parceiro.trim()
@@ -986,11 +986,19 @@ export async function salvarRegraComissao(r: { parceiro: string; corretora: stri
     if (!ehIso(r.vigencia)) throw new Error('Informe a vigência')
     const prazo = Math.round(Number(r.prazo_ativacao_dias))
     if (!Number.isFinite(prazo) || prazo < 0 || prazo > 3650) throw new Error('Prazo da ativação inválido')
+    const reativacao = Math.round(Number(r.reativacao_meses ?? 4))
+    if (!Number.isFinite(reativacao) || reativacao < 1 || reativacao > 60) throw new Error('Meses sem operar para contar reativação: de 1 a 60')
     if (!faixasValidas(r.metas_abertura)) throw new Error('Faixas de abertura no formato mínimo:R$ separadas por ponto e vírgula (ex.: 0:20;5:25)')
     if (!faixasValidas(r.metas_ativacao)) throw new Error('Faixas de ativação no formato mínimo:R$ separadas por ponto e vírgula (ex.: 0:100;3:120)')
-    const { error } = await db.from('comissao_regras').upsert({
-      parceiro, corretora, vigencia: r.vigencia, prazo_ativacao_dias: prazo, metas_abertura: r.metas_abertura.trim(), metas_ativacao: r.metas_ativacao.trim(),
-    }, { onConflict: 'parceiro,corretora,vigencia' })
+    const registro: Record<string, unknown> = {
+      parceiro, corretora, vigencia: r.vigencia, prazo_ativacao_dias: prazo, reativacao_meses: reativacao, metas_abertura: r.metas_abertura.trim(), metas_ativacao: r.metas_ativacao.trim(),
+    }
+    let { error } = await db.from('comissao_regras').upsert(registro, { onConflict: 'parceiro,corretora,vigencia' })
+    // antes da S41 a coluna reativacao_meses não existe: grava o resto mesmo assim
+    if (error && /reativacao_meses/i.test(error.message)) {
+      delete registro.reativacao_meses
+      ;({ error } = await db.from('comissao_regras').upsert(registro, { onConflict: 'parceiro,corretora,vigencia' }))
+    }
     if (error) falha(error, 'comissao_regras')
     revalidatePath('/', 'layout')
     return { ok: true }

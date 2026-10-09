@@ -76,7 +76,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const comissaoPorMes = new Map<string, { valor: number; aberturas: number; ativacoes: number }>()
   for (const c of comissoes) {
     const x = comissaoPorMes.get(c.mes_ref) ?? { valor: 0, aberturas: 0, ativacoes: 0 }
-    x.valor += c.valor_abertura + c.valor_ativacao; x.aberturas += c.aberturas; x.ativacoes += c.ativacoes
+    x.valor += c.valor_abertura + c.valor_ativacao; x.aberturas += c.aberturas; x.ativacoes += c.ativacoes + c.reativacoes
     comissaoPorMes.set(c.mes_ref, x)
   }
   const mensalPorMes = new Map(mensal.map(m => [m.mes_ref, m]))
@@ -127,7 +127,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
     ...(comissoes.length ? [
       { label: 'Comissão de parceiros (abertura e ativação de conta)', valores: meses.map(m => comissaoPorMes.get(m)?.valor ?? null), fmt: rr, total: true } as Linha,
       { label: 'contas abertas por parceiros', valores: meses.map(m => comissaoPorMes.get(m)?.aberturas ?? null), fmt: nn, destaque: 'sub', total: true } as Linha,
-      { label: 'contas ativadas por parceiros', valores: meses.map(m => comissaoPorMes.get(m)?.ativacoes ?? null), fmt: nn, destaque: 'sub', total: true } as Linha,
+      { label: 'ativações por parceiros (inclui reativações)', valores: meses.map(m => comissaoPorMes.get(m)?.ativacoes ?? null), fmt: nn, destaque: 'sub', total: true } as Linha,
     ] : []),
     { label: 'Leads recebidos', valores: col((_, f) => f?.recebidos ?? null), fmt: nn, total: true },
     { label: 'dos quais já eram clientes', valores: col((_, f) => f?.ja_clientes ?? null), fmt: nn, destaque: 'sub', total: true },

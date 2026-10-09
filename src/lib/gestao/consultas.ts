@@ -578,7 +578,7 @@ export async function comissaoItens(parceiro: string, corretora: Corretora | nul
       data_lead: str(r.data_lead), status: String(r.status ?? ''), data_abertura: str(r.data_abertura), data_ativacao: str(r.data_ativacao),
       prazo_dias: num(r.prazo_dias), limite_ativacao: str(r.limite_ativacao), ativou_no_prazo: bool(r.ativou_no_prazo),
       mes_abertura: str(r.mes_abertura), mes_ativacao: str(r.mes_ativacao), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),
-      situacao: String(r.situacao ?? ''),
+      situacao: String(r.situacao ?? ''), reativacoes: num(r.reativacoes), ultima_reativacao: str(r.ultima_reativacao),
     }))
   } catch (e) {
     if (e instanceof Error && semS39({ message: e.message })) return []
@@ -591,7 +591,7 @@ export async function comissaoMensal(mesRef: string, meses: number, parceiro: st
   try {
     return linhas(await rpc(db, 'comissao_mensal', { p_mes_ref: mesRef, p_meses: meses, p_parceiro: parceiro, p_corretora: corretora }), r => ({
       mes_ref: String(r.mes_ref), parceiro: String(r.parceiro ?? ''), corretora: String(r.corretora ?? ''),
-      aberturas: num(r.aberturas), ativacoes: num(r.ativacoes), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),
+      aberturas: num(r.aberturas), ativacoes: num(r.ativacoes), reativacoes: num(r.reativacoes), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),
     }))
   } catch (e) {
     if (e instanceof Error && semS39({ message: e.message })) return []
@@ -615,6 +615,6 @@ export async function comissaoRegras(parceiro: string): Promise<ComissaoRegra[]>
   if (error) { if (semS39(error)) return []; falha(error, 'comissao_regras') }
   return ((data ?? []) as Row[]).map(r => ({
     id: String(r.id), parceiro: String(r.parceiro), corretora: String(r.corretora), vigencia: String(r.vigencia), prazo_ativacao_dias: num(r.prazo_ativacao_dias),
-    metas_abertura: String(r.metas_abertura ?? ''), metas_ativacao: String(r.metas_ativacao ?? ''),
+    reativacao_meses: num(r.reativacao_meses) || 4, metas_abertura: String(r.metas_abertura ?? ''), metas_ativacao: String(r.metas_ativacao ?? ''),
   }))
 }

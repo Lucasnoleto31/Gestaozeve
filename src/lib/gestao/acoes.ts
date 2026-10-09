@@ -10,7 +10,8 @@ import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from
 import { normTexto } from '@/lib/texto'
 import { buscarClientes, funcaoAusente, lotesNoPeriodo, todasAsLinhas } from './consultas'
 import { esquecerMesReferencia } from './pagina'
-import { ehIso } from './meses'
+import { ehIso, parseMes } from './meses'
+import { faixasValidas } from './comissao'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { GRUPOS_CORRETAGEM, type ClienteDuplicado, type LeadCampos, type NovoClienteCampos, type Resultado } from './tipos'
 
@@ -853,12 +854,19 @@ export async function excluirStatusLead(status: string) {
   })
 }
 
-export async function salvarResponsavel(r: { nome: string; atende_clientes: boolean; atende_leads: boolean; ativo: boolean }) {
+export async function salvarResponsavel(r: { nome: string; atende_clientes: boolean; atende_leads: boolean; ativo: boolean; comissionado?: boolean }) {
   return tentar(async () => {
     const { db } = await somenteAdmin()
     const nome = r.nome.trim()
     if (!nome) throw new Error('Informe o nome')
-    const { error } = await db.from('responsaveis').upsert({ nome, atende_clientes: r.atende_clientes, atende_leads: r.atende_leads, ativo: r.ativo }, { onConflict: 'nome' })
+    const registro: Record<string, unknown> = { nome, atende_clientes: r.atende_clientes, atende_leads: r.atende_leads, ativo: r.ativo }
+    if (r.comissionado !== undefined) registro.comissionado = r.comissionado
+    let { error } = await db.from('responsaveis').upsert(registro, { onConflict: 'nome' })
+    // antes da S39 a coluna comissionado não existe
+    if (error && 'comissionado' in registro && /comissionado/i.test(error.message)) {
+      delete registro.comissionado
+      ;({ error } = await db.from('responsaveis').upsert(registro, { onConflict: 'nome' }))
+    }
     if (error) falha(error, 'responsaveis')
     revalidatePath('/', 'layout')
     return { ok: true }
@@ -927,5 +935,66 @@ export async function salvarCorretagensDia(corretoraIn: string, dia: string, ite
     if (error) falha(error, 'definir_corretagem_dia')
     revalidarCorretora(corretora)
     return { alteradas: num(data) }
+  })
+}
+
+// ── Comissão de parceiros (S39) ───────────────────────────────────────────────
+export async function salvarPagamentoComissao(c: { parceiro: string; corretora: string | null; mes: string; valor: number; data_pagamento: string; observacao: string | null }) {
+  return tentar(async () => {
+    const { db, profile } = await somenteAdmin()
+    const parceiro = c.parceiro.trim()
+    if (!parceiro) throw new Error('Informe o parceiro')
+    const mes = parseMes(c.mes)
+    if (!mes) throw new Error('Informe o mês de referência')
+    if (!Number.isFinite(c.valor) || c.valor <= 0) throw new Error('Informe o valor pago')
+    if (!ehIso(c.data_pagamento)) throw new Error('Informe a data do pagamento')
+    const corretora = c.corretora ? await corretoraValida(c.corretora) : null
+    const { error } = await db.from('comissao_pagamentos').insert({
+      parceiro, corretora, mes_ref: mes, valor: Math.round(c.valor * 100) / 100, data_pagamento: c.data_pagamento,
+      observacao: c.observacao?.trim() || null, criado_por_nome: profile.nome,
+    })
+    if (error) falha(error, 'comissao_pagamentos')
+    revalidatePath('/', 'layout')
+    return { ok: true }
+  })
+}
+
+export async function excluirPagamentoComissao(id: string) {
+  return tentar(async () => {
+    const { db } = await somenteAdmin()
+    const { error } = await db.from('comissao_pagamentos').delete().eq('id', id)
+    if (error) falha(error, 'comissao_pagamentos')
+    revalidatePath('/', 'layout')
+    return { ok: true }
+  })
+}
+
+export async function salvarRegraComissao(r: { parceiro: string; corretora: string; vigencia: string; prazo_ativacao_dias: number; metas_abertura: string; metas_ativacao: string }) {
+  return tentar(async () => {
+    const { db } = await somenteAdmin()
+    const parceiro = r.parceiro.trim()
+    if (!parceiro) throw new Error('Informe o parceiro')
+    const corretora = await corretoraValida(r.corretora)
+    if (!ehIso(r.vigencia)) throw new Error('Informe a vigência')
+    const prazo = Math.round(Number(r.prazo_ativacao_dias))
+    if (!Number.isFinite(prazo) || prazo < 0 || prazo > 3650) throw new Error('Prazo da ativação inválido')
+    if (!faixasValidas(r.metas_abertura)) throw new Error('Faixas de abertura no formato mínimo:R$ separadas por ponto e vírgula (ex.: 0:20;5:25)')
+    if (!faixasValidas(r.metas_ativacao)) throw new Error('Faixas de ativação no formato mínimo:R$ separadas por ponto e vírgula (ex.: 0:100;3:120)')
+    const { error } = await db.from('comissao_regras').upsert({
+      parceiro, corretora, vigencia: r.vigencia, prazo_ativacao_dias: prazo, metas_abertura: r.metas_abertura.trim(), metas_ativacao: r.metas_ativacao.trim(),
+    }, { onConflict: 'parceiro,corretora,vigencia' })
+    if (error) falha(error, 'comissao_regras')
+    revalidatePath('/', 'layout')
+    return { ok: true }
+  })
+}
+
+export async function excluirRegraComissao(id: string) {
+  return tentar(async () => {
+    const { db } = await somenteAdmin()
+    const { error } = await db.from('comissao_regras').delete().eq('id', id)
+    if (error) falha(error, 'comissao_regras')
+    revalidatePath('/', 'layout')
+    return { ok: true }
   })
 }

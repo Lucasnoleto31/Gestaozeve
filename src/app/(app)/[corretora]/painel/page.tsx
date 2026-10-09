@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { funilMensal, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal, painelResumo, parametrosDaCorretora } from '@/lib/gestao/consultas'
+import { comissaoMensal, funilMensal, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal, painelResumo, parametrosDaCorretora } from '@/lib/gestao/consultas'
 import { calcularRepasse, configBtg } from '@/lib/gestao/btg'
 import { temListaPropria, termosDaCorretora } from '@/lib/corretoras'
 import { janelaMeses, limitesDoMes, mesCurto, mesLongo } from '@/lib/gestao/meses'
@@ -28,7 +28,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const termos = termosDaCorretora(corretora)
 
   // Tudo em paralelo; os agregados da base de clientes vêm prontos do banco (painel_resumo)
-  const [painel, mensal, porCliente, naoCad, mix, funil, par] = await Promise.all([
+  const [painel, mensal, porCliente, naoCad, mix, funil, par, comissoes] = await Promise.all([
     painelResumo(corretora, mesRef),
     painelMensal(corretora, mesRef, 12),
     painelClientesMensal(corretora, mesRef, 12, TOP_HEATMAP),
@@ -36,6 +36,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
     mixPlataforma(corretora, lim.inicio, lim.fim),
     funilMensal(mesRef, 12),
     parametrosDaCorretora(corretora),
+    comissaoMensal(mesRef, 12, null, corretora),
   ])
 
   // Economia da corretora: no BTG a receita não tem incentivo por pontos e passa pelo
@@ -71,6 +72,13 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const naoCadLotes = naoCad.reduce((s, l) => s + l.lotes, 0)
   const mixTotal = mix.reduce((s, m) => s + m.lotes, 0)
   const funilPorMes = new Map(funil.map(f => [f.mes_ref, f]))
+  // Comissão de parceiros (abertura e ativação de conta) nesta corretora, somando os parceiros
+  const comissaoPorMes = new Map<string, { valor: number; aberturas: number; ativacoes: number }>()
+  for (const c of comissoes) {
+    const x = comissaoPorMes.get(c.mes_ref) ?? { valor: 0, aberturas: 0, ativacoes: 0 }
+    x.valor += c.valor_abertura + c.valor_ativacao; x.aberturas += c.aberturas; x.ativacoes += c.ativacoes
+    comissaoPorMes.set(c.mes_ref, x)
+  }
   const mensalPorMes = new Map(mensal.map(m => [m.mes_ref, m]))
   // No celular só os 4 últimos meses ficam visíveis (os outros em telas ≥ 768 px)
   const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
@@ -116,6 +124,11 @@ export default async function PainelPage({ params, searchParams }: { params: Par
     ...(atp ? [] : [{ label: `Incentivo ${ctx.label}`, valores: col(m => m?.incentivo ?? null), fmt: rr, total: true } as Linha]),
     { label: 'Receita total', valores: col(m => (m ? receitaTotal(m) : null)), fmt: rr, destaque: 'total', total: true },
     ...linhasRepasse,
+    ...(comissoes.length ? [
+      { label: 'Comissão de parceiros (abertura e ativação de conta)', valores: meses.map(m => comissaoPorMes.get(m)?.valor ?? null), fmt: rr, total: true } as Linha,
+      { label: 'contas abertas por parceiros', valores: meses.map(m => comissaoPorMes.get(m)?.aberturas ?? null), fmt: nn, destaque: 'sub', total: true } as Linha,
+      { label: 'contas ativadas por parceiros', valores: meses.map(m => comissaoPorMes.get(m)?.ativacoes ?? null), fmt: nn, destaque: 'sub', total: true } as Linha,
+    ] : []),
     { label: 'Leads recebidos', valores: col((_, f) => f?.recebidos ?? null), fmt: nn, total: true },
     { label: 'dos quais já eram clientes', valores: col((_, f) => f?.ja_clientes ?? null), fmt: nn, destaque: 'sub', total: true },
     { label: 'Leads ganhos (data do fechamento)', valores: col((_, f) => f?.ganhos ?? null), fmt: nn, total: true },

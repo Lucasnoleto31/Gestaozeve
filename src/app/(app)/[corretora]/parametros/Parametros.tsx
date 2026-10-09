@@ -397,23 +397,24 @@ function SecaoResponsaveis({ itens }: { itens: Dados['responsaveis'] }) {
   const { erro, ocupado, rodar } = useAcao()
   const [nome, setNome] = useState('')
   return (
-    <Panel variant="card" title="Responsáveis" subtitle="Quem atende clientes (herdado via assessor) e quem trabalha leads. Vale para todas.">
+    <Panel variant="card" title="Responsáveis" subtitle="Quem atende clientes (herdado via assessor), quem trabalha leads e quem é comissionado por abertura e ativação de conta (tela Comissões). Vale para todas.">
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <table className="tbl tbl-dense w-full">
-        <thead><tr><th>Nome</th><th>Clientes</th><th>Leads</th><th>Ativo</th><th><span className="sr-only">Ações</span></th></tr></thead>
+        <thead><tr><th>Nome</th><th>Clientes</th><th>Leads</th><th>Comissão</th><th>Ativo</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
           {itens.map(r => (
             <tr key={r.nome} className={cn(!r.ativo && 'opacity-50')}>
               <td className="font-medium">{r.nome}</td>
               <td><input type="checkbox" checked={r.atende_clientes} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, atende_clientes: e.target.checked }))} aria-label={`${r.nome} atende clientes`} /></td>
               <td><input type="checkbox" checked={r.atende_leads} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, atende_leads: e.target.checked }))} aria-label={`${r.nome} atende leads`} /></td>
+              <td><input type="checkbox" checked={r.comissionado} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, comissionado: e.target.checked }))} aria-label={`${r.nome} comissionado por abertura e ativação`} /></td>
               <td><input type="checkbox" checked={r.ativo} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, ativo: e.target.checked }))} aria-label={`${r.nome} ativo`} /></td>
               <td className="text-right"><IconButton tone="danger" aria-label={`Excluir ${r.nome}`} onClick={() => confirm(`Excluir ${r.nome}?`) && rodar(() => excluirResponsavel(r.nome), undefined, 'Responsável removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
             </tr>
           ))}
           <tr>
-            <td colSpan={4}><input className="field-sm w-full" placeholder="Nome" value={nome} onChange={e => setNome(e.target.value)} aria-label="Nome do responsável" /></td>
-            <td className="text-right"><Button size="xs" disabled={!nome.trim() || ocupado} onClick={() => rodar(() => salvarResponsavel({ nome, atende_clientes: true, atende_leads: true, ativo: true }), () => setNome(''), 'Responsável salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
+            <td colSpan={5}><input className="field-sm w-full" placeholder="Nome" value={nome} onChange={e => setNome(e.target.value)} aria-label="Nome do responsável" /></td>
+            <td className="text-right"><Button size="xs" disabled={!nome.trim() || ocupado} onClick={() => rodar(() => salvarResponsavel({ nome, atende_clientes: true, atende_leads: true, ativo: true, comissionado: false }), () => setNome(''), 'Responsável salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
           </tr>
         </tbody>
       </table>

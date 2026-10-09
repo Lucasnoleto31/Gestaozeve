@@ -7,7 +7,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { Filter, Home, KeyRound, LineChart, Loader2, LogOut, MoreHorizontal, UserRound } from 'lucide-react'
+import { Coins, Filter, Home, KeyRound, LineChart, Loader2, LogOut, MoreHorizontal, UserRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Role } from '@/types'
 import { Marca } from '@/components/ui/Marca'
@@ -53,7 +53,7 @@ export function Header({ role, nome, corretoraPadrao, corretoras, dataHoje }: {
   ]
   const mais: Item[] = [
     ...paginas.filter(p => !NA_CAPSULA.includes(p.id)).map(p => ({ label: rotulo(p.id, p.label), href: `/${slug}/${p.id}`, icon: p.icon })),
-    ...(equipe ? [{ label: 'Funil', href: '/funil', icon: LineChart }] : []),
+    ...(equipe ? [{ label: 'Funil', href: '/funil', icon: LineChart }, { label: 'Comissões', href: '/comissoes', icon: Coins }] : []),
     ...(role === 'admin' ? [{ label: 'Usuários', href: '/admin/usuarios', icon: KeyRound }] : []),
     { label: 'Meu perfil', href: '/perfil', icon: UserRound },
   ]

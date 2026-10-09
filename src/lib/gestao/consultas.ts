@@ -8,6 +8,7 @@ import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from 
 import { grupoCorretagem } from './tipos'
 import type {
   OperacaoDia,
+  ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
   IncentivoRow, LeadAcao, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
@@ -388,7 +389,7 @@ export async function parametrosDaCorretora(corretora: Corretora) {
     faixas: ((f.data ?? []) as Row[]).map<Faixa>(r => ({ pontos_min: num(r.pontos_min), valor: num(r.valor) })),
     consolidados: ((c.data ?? []) as Row[]).map<Consolidado>(r => ({ nome: String(r.nome) })),
     statusLead: ((sl.data ?? []) as Row[]).map<StatusLead>(r => ({ status: String(r.status), tipo: String(r.tipo) as StatusLead['tipo'], ordem: num(r.ordem) })),
-    responsaveis: ((rs.data ?? []) as Row[]).map<Responsavel>(r => ({ nome: String(r.nome), atende_clientes: r.atende_clientes !== false, atende_leads: r.atende_leads !== false, ativo: r.ativo !== false })),
+    responsaveis: ((rs.data ?? []) as Row[]).map<Responsavel>(r => ({ nome: String(r.nome), atende_clientes: r.atende_clientes !== false, atende_leads: r.atende_leads !== false, ativo: r.ativo !== false, comissionado: r.comissionado === true })),
     situacoesNaoMapeadas: linhas<SituacaoNaoMapeada>(snm, r => ({ situacao: String(r.situacao), contas: num(r.contas) })),
     assessoresNaoCadastrados: linhas<AssessorNaoCadastrado>(anc, r => ({ assessor_nome: String(r.assessor_nome ?? ''), contas: num(r.contas), lotes: num(r.lotes) })),
   }
@@ -398,7 +399,7 @@ export async function responsaveisAtivos(): Promise<Responsavel[]> {
   const { db } = await equipe()
   const { data, error } = await db.from('responsaveis').select('*').eq('ativo', true).order('nome')
   if (error) falha(error, 'responsaveis')
-  return ((data ?? []) as Row[]).map(r => ({ nome: String(r.nome), atende_clientes: r.atende_clientes !== false, atende_leads: r.atende_leads !== false, ativo: true }))
+  return ((data ?? []) as Row[]).map(r => ({ nome: String(r.nome), atende_clientes: r.atende_clientes !== false, atende_leads: r.atende_leads !== false, ativo: true, comissionado: r.comissionado === true }))
 }
 
 export async function statusLeadLista(): Promise<StatusLead[]> {
@@ -555,5 +556,65 @@ export async function operacoesDoDia(corretora: Corretora, dia: string): Promise
     plataforma: str(r.plataforma), tipo: (str(r.tipo) ?? 'lote') as OperacaoDia['tipo'], qtd: num(r.qtd), tarifa: num(r.tarifa),
     tarifa_manual: r.tarifa_manual == null ? null : num(r.tarifa_manual), tarifa_padrao: num(r.tarifa_padrao), zeragem_rs: num(r.zeragem_rs),
     conta_para_receita: bool(r.conta_para_receita), receita: num(r.receita),
+  }))
+}
+
+// ── Comissão de parceiros (S39) ───────────────────────────────────────────────
+// Antes da S39 rodar, tudo aqui devolve vazio em vez de quebrar a tela.
+const semS39 = (e: { message: string } | null) => !!e && (funcaoAusente(e) || /comissionado|comissao_/i.test(e.message))
+
+export async function parceirosComissionados(): Promise<string[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('responsaveis').select('nome').eq('comissionado', true).eq('ativo', true).order('nome')
+  if (error) { if (semS39(error)) return []; falha(error, 'responsaveis') }
+  return ((data ?? []) as Row[]).map(r => String(r.nome))
+}
+
+export async function comissaoItens(parceiro: string, corretora: Corretora | null): Promise<ComissaoItem[]> {
+  const { db } = await equipe()
+  try {
+    return linhas(await rpc(db, 'comissao_itens', { p_parceiro: parceiro, p_corretora: corretora }), r => ({
+      cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), origem: (r.origem === 'parceiro' ? 'parceiro' : 'lead') as ComissaoItem['origem'],
+      data_lead: str(r.data_lead), status: String(r.status ?? ''), data_abertura: str(r.data_abertura), data_ativacao: str(r.data_ativacao),
+      prazo_dias: num(r.prazo_dias), limite_ativacao: str(r.limite_ativacao), ativou_no_prazo: bool(r.ativou_no_prazo),
+      mes_abertura: str(r.mes_abertura), mes_ativacao: str(r.mes_ativacao), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),
+      situacao: String(r.situacao ?? ''),
+    }))
+  } catch (e) {
+    if (e instanceof Error && semS39({ message: e.message })) return []
+    throw e
+  }
+}
+
+export async function comissaoMensal(mesRef: string, meses: number, parceiro: string | null, corretora: Corretora | null): Promise<ComissaoMensalRow[]> {
+  const { db } = await equipe()
+  try {
+    return linhas(await rpc(db, 'comissao_mensal', { p_mes_ref: mesRef, p_meses: meses, p_parceiro: parceiro, p_corretora: corretora }), r => ({
+      mes_ref: String(r.mes_ref), parceiro: String(r.parceiro ?? ''), corretora: String(r.corretora ?? ''),
+      aberturas: num(r.aberturas), ativacoes: num(r.ativacoes), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),
+    }))
+  } catch (e) {
+    if (e instanceof Error && semS39({ message: e.message })) return []
+    throw e
+  }
+}
+
+export async function comissaoPagamentos(parceiro: string): Promise<ComissaoPagamento[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('comissao_pagamentos').select('*').eq('parceiro', parceiro).order('mes_ref', { ascending: false }).order('data_pagamento', { ascending: false })
+  if (error) { if (semS39(error)) return []; falha(error, 'comissao_pagamentos') }
+  return ((data ?? []) as Row[]).map(r => ({
+    id: String(r.id), parceiro: String(r.parceiro), corretora: str(r.corretora), mes_ref: String(r.mes_ref), valor: num(r.valor),
+    data_pagamento: String(r.data_pagamento), observacao: str(r.observacao), criado_por_nome: str(r.criado_por_nome),
+  }))
+}
+
+export async function comissaoRegras(parceiro: string): Promise<ComissaoRegra[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('comissao_regras').select('*').eq('parceiro', parceiro).order('corretora').order('vigencia', { ascending: false })
+  if (error) { if (semS39(error)) return []; falha(error, 'comissao_regras') }
+  return ((data ?? []) as Row[]).map(r => ({
+    id: String(r.id), parceiro: String(r.parceiro), corretora: String(r.corretora), vigencia: String(r.vigencia), prazo_ativacao_dias: num(r.prazo_ativacao_dias),
+    metas_abertura: String(r.metas_abertura ?? ''), metas_ativacao: String(r.metas_ativacao ?? ''),
   }))
 }

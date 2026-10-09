@@ -419,7 +419,30 @@ export type Multiplicador = { produto: string; pontos: number }
 export type Faixa = { pontos_min: number; valor: number }
 export type Consolidado = { nome: string }
 export type StatusLead = { status: string; tipo: 'Aberto' | 'Fechado'; ordem: number }
-export type Responsavel = { nome: string; atende_clientes: boolean; atende_leads: boolean; ativo: boolean }
+export type Responsavel = { nome: string; atende_clientes: boolean; atende_leads: boolean; ativo: boolean; comissionado: boolean }
+
+// Comissão de parceiros por abertura e ativação de conta (S39)
+export type ComissaoItem = {
+  cliente_id: string
+  nome: string
+  corretora: string
+  origem: 'lead' | 'parceiro'
+  data_lead: string | null
+  status: string
+  data_abertura: string | null     // migração que conta como abertura
+  data_ativacao: string | null     // primeira operação depois da abertura
+  prazo_dias: number
+  limite_ativacao: string | null
+  ativou_no_prazo: boolean
+  mes_abertura: string | null
+  mes_ativacao: string | null
+  valor_abertura: number
+  valor_ativacao: number
+  situacao: string                 // Ativado · Aberto, no prazo · Prazo vencido · Operou fora do prazo · Conta anterior ao lead · Em processamento · Recusou
+}
+export type ComissaoMensalRow = { mes_ref: string; parceiro: string; corretora: string; aberturas: number; ativacoes: number; valor_abertura: number; valor_ativacao: number }
+export type ComissaoPagamento = { id: string; parceiro: string; corretora: string | null; mes_ref: string; valor: number; data_pagamento: string; observacao: string | null; criado_por_nome: string | null }
+export type ComissaoRegra = { id: string; parceiro: string; corretora: string; vigencia: string; prazo_ativacao_dias: number; metas_abertura: string; metas_ativacao: string }
 export type SituacaoNaoMapeada = { situacao: string; contas: number }
 export type AssessorNaoCadastrado = { assessor_nome: string; contas: number; lotes: number }
 

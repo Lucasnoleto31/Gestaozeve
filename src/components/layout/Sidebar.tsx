@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import {
-  BarChart3, ChevronRight, Filter, Gift, Home, KeyRound, LayoutDashboard, LineChart, SlidersHorizontal, Upload, Users, UserSearch, Wallet, X,
+  BarChart3, ChevronRight, Coins, Filter, Gift, Home, KeyRound, LayoutDashboard, LineChart, SlidersHorizontal, Upload, Users, UserSearch, Wallet, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Marca } from '@/components/ui/Marca'
@@ -65,7 +65,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
 
   const sections: NavSection[] = [
     { label: 'Visão geral', roles: TODOS, items: [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }] },
-    { label: 'Leads', roles: EQUIPE, items: [{ label: 'Leads', href: '/leads', icon: Filter }, { label: 'Funil', href: '/funil', icon: LineChart }] },
+    { label: 'Leads', roles: EQUIPE, items: [{ label: 'Leads', href: '/leads', icon: Filter }, { label: 'Funil', href: '/funil', icon: LineChart }, { label: 'Comissões', href: '/comissoes', icon: Coins }] },
     { label: 'Sistema', roles: ['admin'], items: [{ label: 'Usuários', href: '/admin/usuarios', icon: KeyRound }] },
   ].filter(s => s.roles.includes(role)) as NavSection[]
 

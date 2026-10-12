@@ -64,7 +64,6 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const proj = projetarMes(giro, mesRef, ultima, hoje, { maxMeses: MESES_PROJECAO })
   const mesAnt = mensal.find(m => m.mes_ref === proj.mesAnterior)
   const incentivoProj = !atp && proj.parcial ? projetarIncentivo(incentivo, proj.fator.lotes, par.faixas) : null
-  const repasseProj = comRepasse && proj.parcial ? calcularRepasse(proj.receita.projetado, cfg) : null
   const repasseAnt = mesAnt ? repasseDe(mesAnt) : null
   // Clientes em risco: contagem e os 12 maiores vêm do painel_resumo (uma só passagem pela lista)
   const risco = painel.em_risco
@@ -89,6 +88,12 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const totalClientesGiro = porCliente[0]?.total_clientes ?? 0
   const mesAtual = mensal.find(m => m.mes_ref === mesRef)
   const repasseMes = calcularRepasse(mesAtual?.receita ?? 0, cfg)
+  // A receita da tabela mensal (todos os lançamentos, inclusive contas ainda não vinculadas) é a base
+  // do card "Receita no mês" e da cadeia de repasse do BTG; a projeção dela escala pela mesma
+  // proporção prevista para o giro dos clientes cadastrados
+  const escalaR = (v: number) => (proj.receita.realizado > 0 ? ((mesAtual?.receita ?? 0) * v) / proj.receita.realizado : v)
+  const receitaMensalProj = { projetado: escalaR(proj.receita.projetado), baixo: escalaR(proj.receita.baixo), alto: escalaR(proj.receita.alto), linear: escalaR(proj.receita.linear) }
+  const repasseProj = comRepasse && proj.parcial ? calcularRepasse(receitaMensalProj.projetado, cfg) : null
   const naoCadLinhas = naoCad.reduce((s, l) => s + l.linhas, 0)
   const naoCadLotes = naoCad.reduce((s, l) => s + l.lotes, 0)
   const mixTotal = mix.reduce((s, m) => s + m.lotes, 0)
@@ -182,7 +187,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
               sub={repasseProj ? `fecha em ${rCurto(repasseProj.liquido)} · comissão ${ctx.label} ${rCurto(repasseMes.comissao)}` : `comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`}
               delta={variacaoMensal(repasseMes.liquido, repasseAnt?.liquido, proj.mesAnterior, proj.parcial, rCurto)} />
           ) : atp ? (
-            <KpiCard destaque label="Receita no mês" value={rCurto(mesAtual?.receita ?? 0)} sub={proj.parcial ? `fecha em ${rCurto(proj.receita.projetado)}` : 'corretagem + zeragem'}
+            <KpiCard destaque label="Receita no mês" value={rCurto(mesAtual?.receita ?? 0)} sub={proj.parcial ? `fecha em ${rCurto(receitaMensalProj.projetado)}` : 'corretagem + zeragem'}
               delta={variacaoDe(proj, proj.receita, rCurto)} />
           ) : (
             <KpiCard label="Incentivo no mês" value={rCurto(mesAtual?.incentivo ?? 0)} sub={incentivoProj ? `fecha em ${rCurto(incentivoProj.total)} · ${fmtNum(incentivoProj.comFaixa)} com faixa` : `${fmtNum(mesAtual?.clientes_com_faixa ?? 0)} clientes com faixa`}
@@ -236,8 +241,8 @@ export default async function PainelPage({ params, searchParams }: { params: Par
                       <td>Comissão líquida<span className="ml-1.5 text-micro font-normal text-fg-subtle">comissão {ctx.label} {fmtPct(repasseProj.pctEfetivo)} sobre a líquida prevista</span></td>
                       <td className="num col-p2">{rCurto(repasseMes.liquido)}</td>
                       <td className="num font-semibold">{rCurto(repasseProj.liquido)}</td>
-                      <td className="num col-p2 text-fg-muted">{proj.metodo === 'historico' ? `${rCurto(calcularRepasse(proj.receita.baixo, cfg).liquido)} – ${rCurto(calcularRepasse(proj.receita.alto, cfg).liquido)}` : TRACO}</td>
-                      <td className="num col-p3 text-fg-muted">{rCurto(calcularRepasse(proj.receita.linear, cfg).liquido)}</td>
+                      <td className="num col-p2 text-fg-muted">{proj.metodo === 'historico' ? `${rCurto(calcularRepasse(receitaMensalProj.baixo, cfg).liquido)} – ${rCurto(calcularRepasse(receitaMensalProj.alto, cfg).liquido)}` : TRACO}</td>
+                      <td className="num col-p3 text-fg-muted">{rCurto(calcularRepasse(receitaMensalProj.linear, cfg).liquido)}</td>
                       <td className="num">{rCurto(repasseAnt?.liquido)}</td>
                       <td className="num col-p2"><DeltaText pct={repasseAnt?.liquido ? ((repasseProj.liquido - repasseAnt.liquido) / repasseAnt.liquido) * 100 : null} /></td>
                     </tr>

@@ -6,7 +6,8 @@ import { AlertTriangle, ArrowLeft, Check, Info, MessageCircle } from 'lucide-rea
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { assessoresPorCorretora, clienteContexto, clienteFicha, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { getProfile } from '@/lib/auth/getProfile'
-import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
+import { janelaMeses, mesAtual, mesCurto, mesLongo, somarMeses } from '@/lib/gestao/meses'
+import { variacaoMensal } from '@/lib/gestao/projecao'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
@@ -15,7 +16,7 @@ import { Panel } from '@/components/ui/Panel'
 import { Badge } from '@/components/ui/Badge'
 import { buttonClasses } from '@/components/ui/buttonStyles'
 import { MesPicker } from '@/components/gestao/Filtros'
-import { CelulaCalor, LinhaVazia, SituacaoBadge, StatusBadge, TRACO, dataCurta, dataPt, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
+import { CelulaCalor, LinhaVazia, RiscoBadge, SituacaoBadge, StatusBadge, TRACO, dataCurta, dataPt, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { temListaPropria } from '@/lib/corretoras'
 import { BuscaCliente } from '../BuscaCliente'
@@ -43,6 +44,9 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   const meses = janelaMeses(mesRef, 12)
   const mensalPorMes = new Map(mensal.map(m => [m.mes_ref, m]))
   const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
+  // Variação do mês contra o anterior: sem cor enquanto o mês de referência é o corrente (parcial)
+  const mesAnt = somarMeses(mesRef, -1)
+  const parcial = mesRef === mesAtual()
 
   // Posição do cliente entre os demais (lotes 12m) e comparações do mês, calculadas no banco
   const posicao = contexto360.posicao
@@ -97,6 +101,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                   <h2 className="text-title font-semibold tracking-tight text-fg">{cadastro.nome}</h2>
                   {resumo && <StatusBadge status={resumo.status} />}
                   {resumo && <SituacaoBadge situacao={resumo.situacao} mesesSemGiro={resumo.meses_sem_giro} />}
+                  {resumo?.risco && <RiscoBadge risco={resumo.risco} diasSemGiro={resumo.dias_sem_giro} />}
                 </div>
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-dense sm:grid-cols-[auto_1fr_auto_1fr]">
                   <dt className="text-fg-subtle">CPF/CNPJ</dt><dd className="tabular-nums">{cadastro.documento ?? TRACO}</dd>
@@ -138,11 +143,18 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
         </section>
 
         <KpiRow cols={6}>
-          <KpiCard label={`Lotes em ${mesCurto(mesRef)}`} value={n0(resumo?.lotes_mes)} sub={`${n0(resumo?.zerados_mes)} zerados${mediaAtivos && resumo?.lotes_mes ? ` · ${(resumo.lotes_mes / mediaAtivos).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}× a média dos ativos` : ''}`} />
-          <KpiCard label={`Receita em ${mesCurto(mesRef)}`} value={rCurto(resumo?.receita_mes)} sub={receitaTotalMes && resumo?.receita_mes ? `${fmtPct((resumo.receita_mes / receitaTotalMes) * 100)} da receita do mês` : undefined} />
+          <KpiCard label={`Lotes em ${mesCurto(mesRef)}`} value={n0(resumo?.lotes_mes)} sub={`${n0(resumo?.zerados_mes)} zerados${mediaAtivos && resumo?.lotes_mes ? ` · ${(resumo.lotes_mes / mediaAtivos).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}× a média dos ativos` : ''}`}
+            delta={resumo ? variacaoMensal(resumo.lotes_mes, mensalPorMes.get(mesAnt)?.lotes ?? null, mesAnt, parcial, fmtNum) : null} />
+          <KpiCard label={`Receita em ${mesCurto(mesRef)}`} value={rCurto(resumo?.receita_mes)} sub={receitaTotalMes && resumo?.receita_mes ? `${fmtPct((resumo.receita_mes / receitaTotalMes) * 100)} da receita do mês` : undefined}
+            delta={resumo ? variacaoMensal(resumo.receita_mes, mensalPorMes.get(mesAnt)?.receita ?? null, mesAnt, parcial, rCurto) : null} />
           <KpiCard destaque label="Lotes 12 meses" value={n0(resumo?.lotes_12m)} sub={posicao != null ? `${posicao}º de ${fmtNum(contexto360.com_giro)} clientes` : 'sem giro na janela'} />
           <KpiCard label="Receita 12 meses" value={rCurto(resumo?.receita_12m)} sub={`${n0(total12.pontos)} pontos de incentivo`} />
-          <KpiCard label="Lotes no histórico" value={n0(resumo?.lotes_total)} sub={`${n0(total12.zerados)} zerados em 12 m`} />
+          {resumo && !resumo.receita_total && resumo.receita_12m > 0 ? (
+            // banco ainda sem a S44: a coluna chega vazia
+            <KpiCard label="Receita no histórico" value={TRACO} sub={`${n0(resumo.lotes_total)} lotes · rode o script S44 no banco`} />
+          ) : (
+            <KpiCard label="Receita no histórico" value={rCurto(resumo?.receita_total)} sub={`${n0(resumo?.lotes_total)} lotes · ${fmtNum(resumo?.meses_ativos ?? 0)} ${resumo?.meses_ativos === 1 ? 'mês' : 'meses'} com giro${resumo?.primeiro_mes_giro ? ` desde ${mesCurto(resumo.primeiro_mes_giro)}` : ''}`} />
+          )}
           <KpiCard label="Tarifa vigente" value={resumo ? `${n2(resumo.tarifa)} R$/lote` : TRACO} sub={tarifas.length ? 'tarifa própria do cliente' : 'tarifa do assessor'} />
         </KpiRow>
 

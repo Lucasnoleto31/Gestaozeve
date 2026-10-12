@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { fmtBRL2, fmtNum, fmtNum2, fmtPct } from '@/lib/format'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
-import type { Situacao, StatusConta } from '@/lib/gestao/tipos'
+import type { Risco, Situacao, StatusConta } from '@/lib/gestao/tipos'
 
 export const TRACO = '–'
 
@@ -75,6 +75,23 @@ export function SituacaoBadge({ situacao, mesesSemGiro }: { situacao: Situacao |
   const v = SITUACAO_VARIANT[situacao as Situacao] ?? 'neutral'
   const texto = situacao === 'Inativo' && mesesSemGiro ? `Inativo há ${mesesSemGiro} m` : situacao
   return <Badge variant={v}>{texto}</Badge>
+}
+
+// Risco de inativação (S44): parou = sem giro há N dias (contados até o último dia lançado);
+// em queda = ritmo bem abaixo dos 3 meses anteriores. Badge só na ficha; nas tabelas é texto curto
+// colorido (DESIGN.md: um badge por linha no máximo).
+const RISCO_TEXTO: Record<Risco, string> = { parou: 'Parou', 'em queda': 'Em queda' }
+const RISCO_TITULO: Record<Risco, string> = {
+  parou: 'Ativo no mês, mas sem giro há dias (contados até o último dia lançado)',
+  'em queda': 'No ritmo atual fecha o mês bem abaixo da média dos 3 meses anteriores',
+}
+const riscoTexto = (risco: Risco, diasSemGiro?: number | null) => (risco === 'parou' && diasSemGiro ? `Parou · ${diasSemGiro} d` : RISCO_TEXTO[risco])
+export function RiscoBadge({ risco, diasSemGiro }: { risco: Risco; diasSemGiro?: number | null }) {
+  return <span title={RISCO_TITULO[risco]}><Badge variant={risco === 'parou' ? 'loss' : 'warn'}>{riscoTexto(risco, diasSemGiro)}</Badge></span>
+}
+export function RiscoTexto({ risco, diasSemGiro }: { risco: Risco | null | undefined; diasSemGiro?: number | null }) {
+  if (!risco) return <span className="subtle">{TRACO}</span>
+  return <span className={cn('whitespace-nowrap font-medium tabular-nums', risco === 'parou' ? 'text-loss' : 'text-warn')} title={RISCO_TITULO[risco]}>{riscoTexto(risco, diasSemGiro)}</span>
 }
 
 const STATUS_VARIANT: Record<StatusConta, BadgeVariant> = { 'Migrado': 'gain', 'Em processamento': 'neutral', 'Recusou': 'loss' }

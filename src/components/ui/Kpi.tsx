@@ -29,6 +29,8 @@ export type KpiDelta = {
   rotulo?: string
   // formata o valor anterior no tooltip
   fmt?: (n: number) => string
+  // true quando a comparação não é justa (mês parcial contra mês inteiro): número sem cor
+  neutro?: boolean
 }
 
 function classifica(pct: number, menorMelhor?: boolean) {
@@ -40,19 +42,23 @@ function classifica(pct: number, menorMelhor?: boolean) {
 }
 
 // Variação: só o número com sinal, colorido (gain/loss). Sem seta: o sinal já diz.
-export function DeltaPill({ delta }: { delta: KpiDelta }) {
+// No card em destaque (fundo na tinta) verde/vermelho não passam o contraste: o número fica no claro
+// do fundo e o sinal diz a direção.
+export function DeltaPill({ delta, destaque }: { delta: KpiDelta; destaque?: boolean }) {
   const pct = deltaPct(delta.atual, delta.anterior)
   const rotulo = delta.rotulo ?? 'vs período anterior'
-  if (pct == null) return <span className="text-micro text-fg-subtle">sem base de comparação</span>
-  const { bom, ruim } = classifica(pct, delta.menorMelhor)
+  const subtleCls = destaque ? 'text-bg/60' : 'text-fg-subtle'
+  if (pct == null) return <span className={cn('text-micro', subtleCls)}>sem base de comparação</span>
+  const { bom, ruim } = delta.neutro ? { bom: false, ruim: false } : classifica(pct, delta.menorMelhor)
+  const cor = destaque ? (bom || ruim ? 'text-bg' : 'text-bg/80') : bom ? 'text-gain' : ruim ? 'text-loss' : 'text-fg-muted'
   const anteriorTxt = delta.anterior != null ? (delta.fmt ?? String)(delta.anterior) : '—'
   return (
     <span
-      className={cn('inline-flex items-baseline gap-1 text-micro font-semibold tabular-nums', bom ? 'text-gain' : ruim ? 'text-loss' : 'text-fg-muted')}
+      className={cn('inline-flex items-baseline gap-1 text-micro font-semibold tabular-nums', cor)}
       title={`Anterior: ${anteriorTxt} · ${rotulo}`}
     >
       {fmtDelta(pct)}
-      <span className="font-normal text-fg-subtle">{rotulo}</span>
+      <span className={cn('font-normal', subtleCls)}>{rotulo}</span>
     </span>
   )
 }
@@ -91,7 +97,7 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, d
         <>
           <p className={cn('mt-1.5 truncate text-kpi font-bold tracking-tight tabular-nums', destaque ? 'text-bg' : tom === 'gain' ? 'text-gain' : tom === 'loss' ? 'text-loss' : tom === 'warn' ? 'text-warn' : 'text-fg', valueClassName)}>{value}</p>
           <div className="mt-1.5 flex min-h-[16px] flex-wrap items-center gap-x-2 gap-y-0.5">
-            {delta && <DeltaPill delta={delta} />}
+            {delta && <DeltaPill delta={delta} destaque={destaque} />}
             {sub && <span className={cn('text-micro', destaque ? 'text-bg/70' : 'text-fg-muted')}>{sub}</span>}
           </div>
         </>

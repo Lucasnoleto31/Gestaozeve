@@ -30,6 +30,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   const d7 = somarDias(hoje, -7), d30 = somarDias(hoje, -30)
   const migrados7d = clientes.filter(c => c.status === 'Migrado' && c.data_migracao && c.data_migracao >= d7).length
   const entraram30d = clientes.filter(c => c.data_entrada && c.data_entrada >= d30).length
+  const emRisco = clientes.filter(c => c.risco).length
 
   return (
     <>
@@ -51,13 +52,13 @@ export default async function ClientesPage({ params, searchParams }: { params: P
           <KpiCard label="Migrados" value={fmtNum(r.migrados)} sub={`${fmtPct(r.taxaMigracao)} da base · ${fmtNum(migrados7d)} nos últimos 7 dias`} />
           <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)} sub={r.mediaDiasMigrar != null ? `média de ${Math.round(r.mediaDiasMigrar)} dias até migrar` : 'sem data de entrada para medir'} />
           <KpiCard label="Recusaram" value={fmtNum(r.recusaram)} sub={`${fmtPct(r.levados ? (r.recusaram / r.levados) * 100 : 0)} da base`} />
-          <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.ativosSit)} ativos · ${fmtNum(r.inativos)} inativos em ${mesCurto(mesRef)}`} />
+          <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.ativosSit)} ativos · ${fmtNum(r.inativos)} inativos em ${mesCurto(mesRef)}${emRisco ? ` · ${fmtNum(emRisco)} em risco` : ''}`} />
           <KpiCard label="Com alertas" value={fmtNum(r.comAlertas)} sub="algo a completar no cadastro" tone={r.comAlertas ? 'warn' : 'neutral'} />
         </KpiRow>
         <TabelaClientes
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
-          filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '', grupo: q.grupo ?? '' }}
+          filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '', grupo: q.grupo ?? '', risco: q.risco ?? '' }}
         />
       </PageBody>
     </>

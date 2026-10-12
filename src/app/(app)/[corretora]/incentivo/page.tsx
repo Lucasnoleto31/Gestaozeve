@@ -2,9 +2,10 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { incentivoHistorico, incentivoMes, parametrosDaCorretora, receitaMensal, ultimaData } from '@/lib/gestao/consultas'
+import { giroDiario, incentivoHistorico, incentivoMes, parametrosDaCorretora, receitaMensal, ultimaData } from '@/lib/gestao/consultas'
 import { configBtg } from '@/lib/gestao/btg'
-import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
+import { projetarIncentivo, projetarMes, variacaoMensal } from '@/lib/gestao/projecao'
+import { janelaMeses, limitesDoMes, mesCurto, mesLongo, somarMeses } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -21,10 +22,14 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base } = ctx
   // Tudo em paralelo; cada modelo usa a sua parte (antes eram três idas ao banco em sequência)
-  const [par, serie, linhas, hist, ultima] = await Promise.all([
+  const [par, serie, linhas, hist, ultima, giro] = await Promise.all([
     parametrosDaCorretora(corretora), receitaMensal(corretora, null), incentivoMes(corretora, mesRef), incentivoHistorico(corretora, mesRef, 12), ultimaData(corretora),
+    giroDiario(corretora, somarMeses(mesRef, -24), limitesDoMes(mesRef).fim),
   ])
   const cfg = configBtg(par.parametros)
+  const hoje = fmtDate(hojeBrasil())
+  // Fechamento previsto do mês corrente pelo perfil intra-mês do histórico (o mesmo do Painel)
+  const proj = projetarMes(giro, mesRef, ultima, hoje)
 
   // BTG: programa ATP Turbo Receita (metas de comissão acumulada), não pontos por lote
   if (cfg.modelo === 'ATP') {
@@ -36,7 +41,8 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
           description={`ATP Turbo Receita: prêmios pagos pelo ${ctx.label} quando a comissão acumulada bate cada meta dentro do prazo, contado da assinatura do termo.`}
         />
         <PageBody>
-          <IncentivoAtp cfg={cfg} serie={serie} hoje={fmtDate(hojeBrasil())} ultimaData={ultima} ritmoBase={ctx.q.ritmo} base={base} label={ctx.label} />
+          <IncentivoAtp cfg={cfg} serie={serie} hoje={hoje} ultimaData={ultima} ritmoBase={ctx.q.ritmo} base={base} label={ctx.label}
+            projecaoAtual={proj.parcial && proj.metodo === 'historico' ? proj.receita.projetado : null} />
         </PageBody>
       </>
     )
@@ -55,6 +61,11 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
   const histMap = new Map(hist.map(h => [h.mes_ref, h]))
   const mult = par.multiplicadores.map(m => `${m.produto} ×${m.pontos}`).join(' · ')
   const maxHist = Math.max(0, ...hist.map(x => x.incentivo))
+  // Fechamento previsto: os pontos de cada cliente crescem no fator do mês (perfil do histórico) e
+  // voltam às faixas; variação contra o mês anterior fica sem cor enquanto o mês está parcial
+  const incentivoProj = proj.parcial ? projetarIncentivo(linhas, proj.fator.lotes, par.faixas) : null
+  const anterior = histMap.get(proj.mesAnterior)
+  const variacao = (atual: number, ant: number | undefined, fmt: (n: number) => string) => variacaoMensal(atual, ant, proj.mesAnterior, proj.parcial, fmt)
 
   return (
     <>
@@ -66,10 +77,14 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
       />
       <PageBody>
         <KpiRow cols={6}>
-          <KpiCard label="Incentivo do mês" value={rCurto(total)} sub={`${fmtNum(linhas.length)} clientes pontuando`} />
-          <KpiCard label="Clientes com faixa" value={fmtNum(comFaixa.length)} sub={linhas.length ? `${fmtPct((comFaixa.length / linhas.length) * 100, 0)} dos que pontuam` : undefined} />
+          <KpiCard label="Incentivo do mês" value={rCurto(total)}
+            sub={incentivoProj ? `fecha em ${rCurto(incentivoProj.total)} · ${fmtNum(incentivoProj.comFaixa)} com faixa${incentivoProj.sobem ? ` · ${fmtNum(incentivoProj.sobem)} sobem` : ''}` : `${fmtNum(linhas.length)} clientes pontuando`}
+            delta={variacao(total, anterior?.incentivo, rCurto)} />
+          <KpiCard label="Clientes com faixa" value={fmtNum(comFaixa.length)} sub={linhas.length ? `${fmtPct((comFaixa.length / linhas.length) * 100, 0)} dos que pontuam` : undefined}
+            delta={variacao(comFaixa.length, anterior?.clientes_com_faixa, fmtNum)} />
           <KpiCard label={`Até ${fmtNum(primeiraFaixa)} pontos`} value={fmtNum(linhas.length - comFaixa.length)} sub="ativos no mês, sem incentivo" />
-          <KpiCard label="Pontos no mês" value={fmtNum(pontos)} sub={`${fmtNum(lotes)} lotes operados`} />
+          <KpiCard label="Pontos no mês" value={fmtNum(pontos)} sub={`${fmtNum(lotes)} lotes operados${incentivoProj ? ` · fecha em ${fmtNum(Math.round(incentivoProj.pontos))}` : ''}`}
+            delta={variacao(pontos, anterior?.pontos, fmtNum)} />
           <KpiCard label="Incentivo 12 meses" value={rCurto(total12)} sub={`${mesCurto(meses[0])} a ${mesCurto(mesRef)}`} />
           <KpiCard label="Maior incentivo" value={<span className="truncate text-section" title={maior?.nome}>{maior?.nome ?? TRACO}</span>} sub={maior ? `${rCurto(maior.valor_incentivo)} · mais de ${fmtNum(maior.faixa_min)}` : 'ninguém com faixa'} />
         </KpiRow>

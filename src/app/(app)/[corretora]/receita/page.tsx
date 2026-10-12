@@ -2,14 +2,17 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { clientesLista, painelMensal } from '@/lib/gestao/consultas'
-import { mediana, porResponsavel, porSituacao } from '@/lib/gestao/derivados'
-import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
+import { clientesLista, giroDiario, painelMensal, ultimaData } from '@/lib/gestao/consultas'
+import { SEM_RESP, mediana, porResponsavel, porSituacao, valorDoCliente, valorPorGrupo, valorPorSafra } from '@/lib/gestao/derivados'
+import { projetarMes, variacaoDe } from '@/lib/gestao/projecao'
+import { janelaMeses, limitesDoMes, mesCurto, mesLongo, somarMeses } from '@/lib/gestao/meses'
+import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
+import { Alert } from '@/components/ui/Alert'
 import { MesPicker } from '@/components/gestao/Filtros'
 import { BarraCelula, LinhaVazia, SituacaoBadge, TRACO, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { TabelaReceita } from './TabelaReceita'
@@ -20,9 +23,21 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base } = ctx
   const meses = janelaMeses(mesRef, 12)
-  const [todos, mensal] = await Promise.all([clientesLista(corretora, mesRef), painelMensal(corretora, mesRef, 12)])
+  const hoje = fmtDate(hojeBrasil())
+  const [todos, mensal, giro, ultima] = await Promise.all([
+    clientesLista(corretora, mesRef), painelMensal(corretora, mesRef, 12),
+    giroDiario(corretora, somarMeses(mesRef, -24), limitesDoMes(mesRef).fim), ultimaData(corretora),
+  ])
   const clientes = todos.filter(c => c.status !== 'Recusou')
   const migrados = clientes.filter(c => c.status === 'Migrado')
+  // Fechamento previsto (perfil intra-mês do histórico) e variação contra o mesmo ponto do mês anterior
+  const proj = projetarMes(giro, mesRef, ultima, hoje)
+  // Valor do cliente: o que cada migração rendeu em todo o histórico (sem a S44 no banco a coluna chega vazia)
+  const semS44 = migrados.some(c => c.receita_12m > 0) && migrados.every(c => c.receita_total === 0)
+  const ltv = valorDoCliente(migrados)
+  const ltvResp = valorPorGrupo(migrados, c => c.responsavel ?? SEM_RESP)
+  const ltvSafra = valorPorSafra(migrados, 6)
+  const n1 = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
 
   const receitaMes = clientes.reduce((s, c) => s + c.receita_mes, 0)
   const corretagemMes = clientes.reduce((s, c) => s + c.receita_corretagem_mes, 0)
@@ -52,9 +67,11 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
       />
       <PageBody>
         <KpiRow cols={6}>
-          <KpiCard label="Receita do mês" value={rCurto(receitaMes)} sub={`corretagem ${rCurto(corretagemMes)} · zeragem ${rCurto(zeragemMes)}${fixaMes > 0 ? ` · fixa ${rCurto(fixaMes)}` : ''}`} />
+          <KpiCard label="Receita do mês" value={rCurto(receitaMes)} sub={`${proj.parcial ? `fecha em ${rCurto(proj.receita.projetado)} · ` : ''}corretagem ${rCurto(corretagemMes)} · zeragem ${rCurto(zeragemMes)}${fixaMes > 0 ? ` · fixa ${rCurto(fixaMes)}` : ''}`}
+            delta={variacaoDe(proj, proj.receita, rCurto)} />
           <KpiCard label="Receita 12 meses" value={rCurto(receita12)} sub={`${fmtNum(lotes12)} lotes na janela`} />
-          <KpiCard label="Lotes no mês" value={fmtNum(lotesMes)} sub={`${fmtNum(zeradosMes)} contratos zerados`} />
+          <KpiCard label="Lotes no mês" value={fmtNum(lotesMes)} sub={`${fmtNum(zeradosMes)} contratos zerados${proj.parcial ? ` · fecha em ${fmtNum(Math.round(proj.lotes.projetado))}` : ''}`}
+            delta={variacaoDe(proj, proj.lotes, fmtNum)} />
           <KpiCard label="R$ por lote" value={lotesMes ? n2(Math.round((receitaMes / lotesMes) * 1000) / 1000) : TRACO} sub={`tarifa média cadastrada ${n2(Math.round(tarifaMedia * 100) / 100)}`} />
           <KpiCard label="Clientes com receita" value={fmtNum(comReceita.length)} sub={`de ${fmtNum(migrados.length)} migrados (${fmtPct(migrados.length ? (comReceita.length / migrados.length) * 100 : 0, 0)})`} />
           <KpiCard label="Receita por ativo" value={ativos.length ? rCurto(receitaMes / ativos.length) : TRACO} sub={`mediana ${rCurto(mediana(comReceita.map(c => c.receita_mes)))}${maior && lotes12 ? ` · maior: ${fmtPct((maior.lotes_12m / lotes12) * 100, 0)} dos lotes` : ''}`} />
@@ -97,6 +114,61 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
                   </tbody>
                 </table>
               </div>
+            </Panel>
+
+            <Panel title="Valor do cliente" subtitle="Receita bruta de todo o histórico por migração: o que vale levar um cliente.">
+              {semS44 ? <Alert tone="warn" className="mb-4">Receita no histórico ainda não disponível: rode o script S44 no banco.</Alert> : null}
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-dense">
+                <div>
+                  <dt className="label">Por migração</dt>
+                  <dd className="mt-0.5 text-section font-semibold tabular-nums">{rCurto(ltv.ltvPorMigracao)}</dd>
+                  <dd className="text-micro text-fg-muted">{fmtNum(ltv.migrados)} migrados, incluindo quem nunca girou</dd>
+                </div>
+                <div>
+                  <dt className="label">Por cliente com giro</dt>
+                  <dd className="mt-0.5 text-section font-semibold tabular-nums">{rCurto(ltv.receitaPorClienteComGiro)}</dd>
+                  <dd className="text-micro text-fg-muted">mediana {rCurto(ltv.medianaComGiro)} · {fmtNum(ltv.comGiro)} clientes</dd>
+                </div>
+                <div>
+                  <dt className="label">Por mês com giro</dt>
+                  <dd className="mt-0.5 text-section font-semibold tabular-nums">{rCurto(ltv.receitaPorMesAtivo)}</dd>
+                  <dd className="text-micro text-fg-muted">vida média de {n1(ltv.mesesAtivosMedio)} meses com giro</dd>
+                </div>
+                <div>
+                  <dt className="label">Receita no histórico</dt>
+                  <dd className="mt-0.5 text-section font-semibold tabular-nums">{rCurto(ltv.receitaTotal)}</dd>
+                  <dd className="text-micro text-fg-muted">corretagem + zeragem + avulsas, antes de repasse e impostos</dd>
+                </div>
+              </dl>
+              <div className="tbl-wrap mt-4">
+                <table className="tbl tbl-dense">
+                  <thead><tr><th>Responsável</th><th className="num">Migrados</th><th className="num col-p2">Com giro</th><th className="num">Por migração</th><th className="num col-p2">Por mês c/ giro</th></tr></thead>
+                  <tbody>
+                    {ltvResp.map(g => (
+                      <tr key={g.grupo}>
+                        <td className="font-medium">{g.grupo}</td><td className="num">{n0(g.migrados)}</td><td className="num col-p2">{n0(g.comGiro)}</td>
+                        <td className="num">{r0(g.ltvPorMigracao)}</td><td className="num col-p2">{r0(g.receitaPorMesAtivo)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {ltvSafra.length > 0 && (
+                <div className="tbl-wrap mt-4">
+                  <table className="tbl tbl-dense">
+                    <thead><tr><th>Safra de migração</th><th className="num">Migrados</th><th className="num col-p2">Com giro</th><th className="num">Receita</th><th className="num">Por migração</th></tr></thead>
+                    <tbody>
+                      {ltvSafra.map(s => (
+                        <tr key={s.safra}>
+                          <td className="font-medium">{mesCurto(s.safra)}</td><td className="num">{n0(s.migrados)}</td><td className="num col-p2">{n0(s.comGiro)}</td>
+                          <td className="num">{rCurto(s.receitaTotal)}</td><td className="num">{r0(s.ltvPorMigracao)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="mt-2 text-micro text-fg-subtle">Safras recentes ainda estão rendendo: comparar só safras com a mesma idade.</p>
+                </div>
+              )}
             </Panel>
 
             <Panel title="Por situação">

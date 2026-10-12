@@ -32,7 +32,7 @@ const folgaTxt = (folga: number | null) => {
   return f > 0 ? `${mesesTxt(Math.round(f))} antes do prazo` : `${mesesTxt(Math.round(-f))} depois do prazo`
 }
 
-export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, label }: {
+export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, label, projecaoAtual = null }: {
   cfg: ConfigBtg
   serie: ReceitaMensalRow[]
   hoje: string
@@ -40,6 +40,7 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
   ritmoBase?: string          // ?ritmo= da URL
   base: string
   label: string
+  projecaoAtual?: number | null   // receita do mês corrente prevista pelo perfil do histórico (Painel); null = ritmo linear
 }) {
   const primeiroMes = serie[0]?.mes_ref ?? null
   const assinatura = cfg.atpAssinatura ?? primeiroMes ?? `${hoje.slice(0, 7)}-01`
@@ -57,6 +58,10 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
 
   // Previsão: no ritmo escolhido (padrão: mês atual projetado; cai para o próximo disponível)
   const ritmos = ritmosReceita(desde, assinatura, ultimaData, hoje)
+  // Mês atual projetado: quando há histórico, vale o mesmo fechamento previsto do Painel (perfil
+  // intra-mês), convertido para a base das metas; sem histórico fica o ritmo linear dos dias úteis
+  const atualPeloHistorico = projecaoAtual != null && projecaoAtual > 0 && ritmos.atual.disponivel
+  if (atualPeloHistorico) ritmos.atual = { ...ritmos.atual, valor: baseAtp(projecaoAtual, cfg) }
   const ordem = RITMOS.map(r => r.base)
   const pedido: RitmoBase = (ordem as string[]).includes(ritmoBase ?? '') ? (ritmoBase as RitmoBase) : 'atual'
   const baseUsada = [pedido, ...ordem].find(b => ritmos[b].disponivel) ?? pedido
@@ -66,7 +71,7 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
   const rotuloRitmo = RITMOS.find(r => r.base === baseUsada)?.label ?? ''
   const mesHoje = `${hoje.slice(0, 7)}-01`
   const detalheRitmo = baseUsada === 'atual'
-    ? `${rCurto(ritmo.receitaParcial ?? 0)} em ${fmtNum(ritmo.diasDecorridos ?? 0)} de ${fmtNum(ritmo.diasTotal ?? 0)} dias úteis de ${mesCurto(mesHoje)}`
+    ? `${rCurto(ritmo.receitaParcial ?? 0)} em ${fmtNum(ritmo.diasDecorridos ?? 0)} de ${fmtNum(ritmo.diasTotal ?? 0)} dias úteis de ${mesCurto(mesHoje)}${atualPeloHistorico ? ', pelo perfil do histórico' : ''}`
     : `média de ${ritmo.meses === 1 ? '1 mês completo' : `${fmtNum(ritmo.meses)} meses completos`}`
   const alcancadas = metas.filter(m => m.status !== 'vencida' && previsoes.get(m.indice)?.alcanca).length
 

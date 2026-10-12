@@ -628,6 +628,7 @@ function validarParametro(chave: string, valor: string): string {
   switch (chave) {
     case 'zeragem_padrao': case 'meses_inativo': case 'dias_alerta_lead': case 'imposto_pct': case 'delta_pct':
     case 'impostos_embutidos_pct': case 'imposto_btg_pct': case 'tarifa_acoes_daytrade':
+    case 'risco_dias_parado': case 'risco_queda_pct': case 'risco_minimo_lotes':
       return numero()
     case 'receita_desde_migracao': case 'lotes_apenas_futuros': {
       const s = v.toUpperCase()
@@ -686,7 +687,8 @@ export async function salvarParametro(corretoraIn: string, chave: string, valor:
     const v = validarParametro(chave, valor)
     const { error } = await db.from('parametros').upsert({ corretora, chave, valor: v, updated_at: new Date().toISOString() }, { onConflict: 'corretora,chave' })
     if (error) falha(error, 'parametros')
-    if (corretora !== 'GERAL') { await recalcular(db, corretora); revalidarCorretora(corretora) }
+    // os parâmetros de risco só mudam a leitura (clientes_lista), não os lotes: sem recálculo
+    if (corretora !== 'GERAL') { if (!chave.startsWith('risco_')) await recalcular(db, corretora); revalidarCorretora(corretora) }
     else { revalidatePath('/leads', 'layout'); revalidatePath('/funil') }
     return { ok: true }
   })

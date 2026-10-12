@@ -10,10 +10,15 @@ import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
 import { Empty } from '@/components/ui/Skeleton'
 import { CORRETORA_SLUG, PAGINAS_CORRETORA, corretorasDoPerfil } from '@/lib/corretoras'
-import { leadsResumo, painelKpis } from '@/lib/gestao/consultas'
-import { mesCurto } from '@/lib/gestao/meses'
+import { giroDiario, leadsResumo, painelKpis, painelMensal } from '@/lib/gestao/consultas'
+import { projetarMes, variacaoDe, variacaoMensal } from '@/lib/gestao/projecao'
+import { mesAtual, mesCurto, somarMeses } from '@/lib/gestao/meses'
+import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { dataCurta, rCurto } from '@/components/gestao/Celulas'
+
+// Projeção: meses de histórico que entram no perfil intra-mês
+const MESES_PROJECAO = 24
 
 function getSaudacao() {
   const h = (new Date().getUTCHours() - 3 + 24) % 24
@@ -29,9 +34,17 @@ export default async function DashboardPage() {
   const firstName = profile.nome.split(' ')[0]
   const visiveis = corretorasDoPerfil(profile)
 
-  const [kpis, leads] = equipe
-    ? await Promise.all([Promise.all(visiveis.map(c => painelKpis(c, null))), leadsResumo(0)])
-    : [[], null]
+  const hoje = fmtDate(hojeBrasil())
+  // Giro por dia dos últimos 24 meses até hoje: projeção do mês corrente e comparação com o mesmo
+  // ponto do mês anterior, qualquer que seja o mês de referência de cada corretora
+  const [kpis, leads, giros, mensais] = equipe
+    ? await Promise.all([
+        Promise.all(visiveis.map(c => painelKpis(c, null))),
+        leadsResumo(0),
+        Promise.all(visiveis.map(c => giroDiario(c, somarMeses(mesAtual(), -MESES_PROJECAO), hoje))),
+        Promise.all(visiveis.map(c => painelMensal(c, null, 2))),
+      ])
+    : [[], null, [], []]
   const comAlerta = leads?.com_alerta ?? 0
 
   return (
@@ -50,6 +63,8 @@ export default async function DashboardPage() {
               const k = kpis[i]
               const slug = CORRETORA_SLUG[c]
               const vazio = !k || (k.clientes_levados === 0 && !k.ultima_data)
+              const proj = k ? projetarMes(giros[i] ?? [], k.mes_ref, k.ultima_data, hoje, { maxMeses: MESES_PROJECAO }) : null
+              const mesAnt = k ? (mensais[i] ?? []).find(m => m.mes_ref === proj!.mesAnterior) : undefined
               return (
                 <Panel
                   key={c}
@@ -65,10 +80,14 @@ export default async function DashboardPage() {
                     <>
                       <KpiRow cols={6}>
                         <KpiCard label="Clientes levados" value={fmtNum(k.clientes_levados)} sub={`${fmtNum(k.migrados)} migrados · ${k.clientes_levados ? fmtPct((k.migrados / k.clientes_levados) * 100, 0) : '0%'}`} />
-                        <KpiCard label="Ativos no mês" value={fmtNum(k.ativos_mes)} sub={`${k.migrados ? fmtPct((k.ativos_mes / k.migrados) * 100) : '0%'} da base migrada`} />
-                        <KpiCard label="Lotes no mês" value={fmtNum(k.lotes_mes)} sub={`${fmtNum(k.zerados_mes)} zerados${k.acoes_operacoes_mes ? ` · ${fmtNum(k.acoes_operacoes_mes)} op. de ações` : ''}${k.posicao_mes ? ` · ${fmtNum(k.posicao_mes)} em posição` : ''}`} />
-                        <KpiCard destaque={i === 0} label="Receita no mês" value={rCurto(k.receita_mes)} sub={`+ incentivo ${rCurto(k.incentivo_mes)}`} />
-                        <KpiCard label="Sem giro · inativos" value={`${fmtNum(k.migrados_sem_giro)} · ${fmtNum(k.inativos)}`} sub="migrados que nunca giraram · pararam" />
+                        <KpiCard label="Ativos no mês" value={fmtNum(k.ativos_mes)} sub={`${k.migrados ? fmtPct((k.ativos_mes / k.migrados) * 100) : '0%'} da base migrada`}
+                          delta={proj ? variacaoMensal(k.ativos_mes, mesAnt?.clientes_ativos, proj.mesAnterior, proj.parcial, fmtNum) : null} />
+                        <KpiCard label="Lotes no mês" value={fmtNum(k.lotes_mes)} sub={`${fmtNum(k.zerados_mes)} zerados${k.acoes_operacoes_mes ? ` · ${fmtNum(k.acoes_operacoes_mes)} op. de ações` : ''}${k.posicao_mes ? ` · ${fmtNum(k.posicao_mes)} em posição` : ''}${proj?.parcial ? ` · fecha em ${fmtNum(Math.round(proj.lotes.projetado))}` : ''}`}
+                          delta={proj ? variacaoDe(proj, proj.lotes, fmtNum) : null} />
+                        <KpiCard destaque={i === 0} label="Receita no mês" value={rCurto(k.receita_mes)} sub={proj?.parcial ? `fecha em ${rCurto(proj.receita.projetado)} · + incentivo ${rCurto(k.incentivo_mes)}` : `+ incentivo ${rCurto(k.incentivo_mes)}`}
+                          delta={proj ? variacaoDe(proj, proj.receita, rCurto) : null} />
+                        <KpiCard label="Sem giro · inativos" value={`${fmtNum(k.migrados_sem_giro)} · ${fmtNum(k.inativos)}`}
+                          sub={k.em_risco ? <>nunca giraram · pararam · <Link href={`/${slug}/clientes?risco=qualquer`} className="link text-warn">{fmtNum(k.em_risco)} em risco</Link></> : 'migrados que nunca giraram · pararam'} />
                         <KpiCard label="Pendências" value={fmtNum(k.linhas_nao_cadastradas)} sub={`linhas sem cliente · ${fmtNum(k.com_alertas)} com alertas`} tone={k.linhas_nao_cadastradas ? 'warn' : 'neutral'} />
                       </KpiRow>
                       <nav className="mt-3 flex flex-wrap gap-x-4 gap-y-1" aria-label={`Telas da ${c}`}>

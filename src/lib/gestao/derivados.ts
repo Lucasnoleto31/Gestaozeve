@@ -107,3 +107,55 @@ export function mediana(valores: number[]): number {
   const m = Math.floor(v.length / 2)
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2
 }
+
+// ── Valor do cliente (LTV, S44) ─────────────────────────────────────────────
+// O que cada migração rendeu em todo o histórico (receita bruta: corretagem + zeragem + avulsas).
+export type ValorCliente = {
+  migrados: number
+  comGiro: number                 // migrados que renderam alguma coisa (lote, zeragem ou avulsa)
+  receitaTotal: number
+  ltvPorMigracao: number          // receita total ÷ migrados (quem nunca girou puxa para baixo, de propósito)
+  receitaPorClienteComGiro: number // receita de quem rendeu ÷ quantos renderam
+  medianaComGiro: number          // mediana da receita total entre quem rendeu
+  mesesAtivosMedio: number        // meses com lote operado, média entre quem operou lote
+  receitaPorMesAtivo: number      // receita de quem operou lote ÷ soma dos meses com lote
+}
+
+export function valorDoCliente(rows: ClienteRow[]): ValorCliente {
+  const migrados = rows.filter(r => r.status === 'Migrado')
+  const comGiro = migrados.filter(r => r.receita_total > 0 || r.lotes_total > 0 || r.meses_ativos > 0)
+  const comMeses = comGiro.filter(r => r.meses_ativos > 0)
+  const receitaTotal = migrados.reduce((s, r) => s + r.receita_total, 0)
+  const receitaComGiro = comGiro.reduce((s, r) => s + r.receita_total, 0)
+  const receitaComMeses = comMeses.reduce((s, r) => s + r.receita_total, 0)
+  const mesesAtivos = comMeses.reduce((s, r) => s + r.meses_ativos, 0)
+  return {
+    migrados: migrados.length, comGiro: comGiro.length, receitaTotal,
+    ltvPorMigracao: migrados.length ? receitaTotal / migrados.length : 0,
+    receitaPorClienteComGiro: comGiro.length ? receitaComGiro / comGiro.length : 0,
+    medianaComGiro: mediana(comGiro.map(r => r.receita_total)),
+    mesesAtivosMedio: comMeses.length ? mesesAtivos / comMeses.length : 0,
+    receitaPorMesAtivo: mesesAtivos ? receitaComMeses / mesesAtivos : 0,
+  }
+}
+
+// Valor do cliente por grupo (responsável, parceiro…), do maior para o menor em receita total
+export function valorPorGrupo(rows: ClienteRow[], chave: (r: ClienteRow) => string): ({ grupo: string } & ValorCliente)[] {
+  const grupos = new Map<string, ClienteRow[]>()
+  for (const r of rows) {
+    if (r.status !== 'Migrado') continue
+    const k = chave(r)
+    const lista = grupos.get(k)
+    if (lista) lista.push(r); else grupos.set(k, [r])
+  }
+  return [...grupos].map(([grupo, lista]) => ({ grupo, ...valorDoCliente(lista) })).sort((a, b) => b.receitaTotal - a.receitaTotal || a.grupo.localeCompare(b.grupo, 'pt-BR'))
+}
+
+// Por safra de migração (mês de data_migracao), as `n` mais recentes; migrados sem data ficam de fora
+export function valorPorSafra(rows: ClienteRow[], n = 12): ({ safra: string } & ValorCliente)[] {
+  const comData = rows.filter(r => r.status === 'Migrado' && r.data_migracao)
+  return valorPorGrupo(comData, r => `${r.data_migracao!.slice(0, 7)}-01`)
+    .map(({ grupo, ...v }) => ({ safra: grupo, ...v }))
+    .sort((a, b) => b.safra.localeCompare(a.safra))
+    .slice(0, n)
+}

@@ -2,23 +2,27 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { comissaoMensal, funilMensal, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal, painelResumo, parametrosDaCorretora } from '@/lib/gestao/consultas'
+import { comissaoMensal, funilMensal, giroDiario, incentivoMes, lotesNaoCadastrados, mixPlataforma, painelClientesMensal, painelMensal, painelResumo, parametrosDaCorretora, ultimaData } from '@/lib/gestao/consultas'
 import { calcularRepasse, configBtg } from '@/lib/gestao/btg'
+import { projetarIncentivo, projetarMes, variacaoDe, variacaoMensal } from '@/lib/gestao/projecao'
 import { temListaPropria, termosDaCorretora } from '@/lib/corretoras'
-import { janelaMeses, limitesDoMes, mesCurto, mesLongo } from '@/lib/gestao/meses'
+import { janelaMeses, limitesDoMes, mesAtual as mesDeHoje, mesCurto, mesLongo, somarMeses } from '@/lib/gestao/meses'
+import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import type { Situacao } from '@/lib/gestao/tipos'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
-import { KpiCard, KpiRow } from '@/components/ui/Kpi'
+import { DeltaText, KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { MesPicker } from '@/components/gestao/Filtros'
-import { BarraCelula, LinhaVazia, SituacaoBadge, TRACO, dataCurta, n0, n2, p1, r0, rCurto } from '@/components/gestao/Celulas'
+import { BarraCelula, LinhaVazia, RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, n2, p1, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { HeatmapClientes } from './HeatmapClientes'
 
 // Mapa de calor: só os maiores clientes da janela (a lista completa fica na tela Clientes)
 const TOP_HEATMAP = 80
+// Projeção: meses de histórico que entram no perfil intra-mês
+const MESES_PROJECAO = 24
 
 export default async function PainelPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
@@ -26,9 +30,12 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const meses = janelaMeses(mesRef, 12)
   const lim = limitesDoMes(mesRef)
   const termos = termosDaCorretora(corretora)
+  const hoje = fmtDate(hojeBrasil())
+  const mesCorrente = mesRef === mesDeHoje()
 
-  // Tudo em paralelo; os agregados da base de clientes vêm prontos do banco (painel_resumo)
-  const [painel, mensal, porCliente, naoCad, mix, funil, par, comissoes] = await Promise.all([
+  // Tudo em paralelo; os agregados da base de clientes vêm prontos do banco (painel_resumo).
+  // O giro por dia (até 24 meses) alimenta a projeção e a comparação com o mesmo ponto do mês anterior.
+  const [painel, mensal, porCliente, naoCad, mix, funil, par, comissoes, giro, ultima, incentivo] = await Promise.all([
     painelResumo(corretora, mesRef),
     painelMensal(corretora, mesRef, 12),
     painelClientesMensal(corretora, mesRef, 12, TOP_HEATMAP),
@@ -37,6 +44,10 @@ export default async function PainelPage({ params, searchParams }: { params: Par
     funilMensal(mesRef, 12),
     parametrosDaCorretora(corretora),
     comissaoMensal(mesRef, 12, null, corretora),
+    giroDiario(corretora, somarMeses(mesRef, -MESES_PROJECAO), lim.fim),
+    ultimaData(corretora),
+    // pontos por cliente só servem à projeção do incentivo no mês corrente
+    mesCorrente ? incentivoMes(corretora, mesRef) : Promise.resolve([]),
   ])
 
   // Economia da corretora: no BTG a receita não tem incentivo por pontos e passa pelo
@@ -48,6 +59,16 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   type Mes = typeof mensal[number]
   const receitaTotal = (m: Mes) => m.receita + (atp ? 0 : m.incentivo)
   const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg)
+
+  // Fechamento previsto do mês corrente (perfil intra-mês de todo o histórico) e variações
+  const proj = projetarMes(giro, mesRef, ultima, hoje, { maxMeses: MESES_PROJECAO })
+  const mesAnt = mensal.find(m => m.mes_ref === proj.mesAnterior)
+  const incentivoProj = !atp && proj.parcial ? projetarIncentivo(incentivo, proj.fator.lotes, par.faixas) : null
+  const repasseProj = comRepasse && proj.parcial ? calcularRepasse(proj.receita.projetado, cfg) : null
+  const repasseAnt = mesAnt ? repasseDe(mesAnt) : null
+  // Clientes em risco: contagem e os 12 maiores vêm do painel_resumo (uma só passagem pela lista)
+  const risco = painel.em_risco
+  const totalRisco = painel.resumo.em_risco
 
   const r = painel.resumo
   const taxaMigracao = r.levados ? (r.migrados / r.levados) * 100 : 0
@@ -151,17 +172,86 @@ export default async function PainelPage({ params, searchParams }: { params: Par
         <KpiRow cols={6}>
           <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(r.em_processamento)} em processamento`} />
           <KpiCard label="Taxa de migração" value={fmtPct(taxaMigracao)} sub={`${fmtNum(r.migrados)} migrados · ${fmtNum(r.recusaram)} recusaram`} />
-          <KpiCard label="Ativos no mês" value={fmtNum(r.ativos)} sub={`giraram em ${mesCurto(mesRef)}`} />
+          <KpiCard label="Ativos no mês" value={fmtNum(r.ativos)} sub={totalRisco ? <Link href={`${base}/clientes?risco=qualquer`} className="link text-warn">{fmtNum(totalRisco)} em risco</Link> : `giraram em ${mesCurto(mesRef)}`}
+            delta={variacaoMensal(r.ativos, mesAnt?.clientes_ativos, proj.mesAnterior, proj.parcial, fmtNum)} />
           <KpiCard label="% ativos da base migrada" value={fmtPct(pctAtivosMigrados)} sub={`${fmtPct(pctAtivosLevados)} do total levado`} />
-          <KpiCard label="Lotes no mês" value={fmtNum(r.lotes_mes)} sub={`${fmtNum(r.zerados_mes)} zerados · ${rCurto(r.receita_mes)}${mesAtual?.acoes_operacoes ? ` · ${fmtNum(mesAtual.acoes_operacoes)} op. de ações` : ''}${mesAtual?.posicao ? ` · ${fmtNum(mesAtual.posicao)} em posição` : ''}`} />
+          <KpiCard label="Lotes no mês" value={fmtNum(r.lotes_mes)} sub={`${fmtNum(r.zerados_mes)} zerados · ${rCurto(r.receita_mes)}${mesAtual?.acoes_operacoes ? ` · ${fmtNum(mesAtual.acoes_operacoes)} op. de ações` : ''}${mesAtual?.posicao ? ` · ${fmtNum(mesAtual.posicao)} em posição` : ''}${proj.parcial ? ` · fecha em ${fmtNum(Math.round(proj.lotes.projetado))}` : ''}`}
+            delta={variacaoDe(proj, proj.lotes, fmtNum)} />
           {comRepasse ? (
-            <KpiCard destaque label="Comissão líquida no mês" value={rCurto(repasseMes.liquido)} sub={`comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`} />
+            <KpiCard destaque label="Comissão líquida no mês" value={rCurto(repasseMes.liquido)}
+              sub={repasseProj ? `fecha em ${rCurto(repasseProj.liquido)} · comissão ${ctx.label} ${rCurto(repasseMes.comissao)}` : `comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${repasseMes.partes.length ? ' · ' + repasseMes.partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`}
+              delta={variacaoMensal(repasseMes.liquido, repasseAnt?.liquido, proj.mesAnterior, proj.parcial, rCurto)} />
           ) : atp ? (
-            <KpiCard destaque label="Receita no mês" value={rCurto(mesAtual?.receita ?? 0)} sub="corretagem + zeragem" />
+            <KpiCard destaque label="Receita no mês" value={rCurto(mesAtual?.receita ?? 0)} sub={proj.parcial ? `fecha em ${rCurto(proj.receita.projetado)}` : 'corretagem + zeragem'}
+              delta={variacaoDe(proj, proj.receita, rCurto)} />
           ) : (
-            <KpiCard label="Incentivo no mês" value={rCurto(mesAtual?.incentivo ?? 0)} sub={`${fmtNum(mesAtual?.clientes_com_faixa ?? 0)} clientes com faixa`} />
+            <KpiCard label="Incentivo no mês" value={rCurto(mesAtual?.incentivo ?? 0)} sub={incentivoProj ? `fecha em ${rCurto(incentivoProj.total)} · ${fmtNum(incentivoProj.comFaixa)} com faixa` : `${fmtNum(mesAtual?.clientes_com_faixa ?? 0)} clientes com faixa`}
+              delta={variacaoMensal(mesAtual?.incentivo ?? 0, mesAnt?.incentivo, proj.mesAnterior, proj.parcial, rCurto)} />
           )}
         </KpiRow>
+
+        {proj.parcial && (
+          <Panel
+            title={`Fechamento previsto de ${mesLongo(mesRef)}`}
+            subtitle={`${fmtNum(proj.diasDecorridos)} de ${fmtNum(proj.diasTotal)} dias úteis lançados (até ${dataCurta(proj.ultimaData)}) · ${proj.metodo === 'historico'
+              ? `perfil de ${fmtNum(proj.mesesHistorico)} meses de histórico: neste ponto o mês costuma estar em ${fmtPct(proj.fracaoEsperada * 100, 0)} dos lotes`
+              : 'menos de 3 meses de histórico: projeção pelo ritmo linear dos dias úteis'}.`}
+          >
+            <div className="tbl-wrap">
+              <table className="tbl tbl-dense">
+                <thead>
+                  <tr>
+                    <th>Indicador</th><th className="num col-p2">Até {dataCurta(proj.ultimaData)}</th><th className="num">Fecha em</th>
+                    <th className="num col-p2">Faixa</th><th className="num col-p3">Ritmo linear</th><th className="num">{mesCurto(proj.mesAnterior)}</th><th className="num col-p2">Previsto vs {mesCurto(proj.mesAnterior)}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {([
+                    { label: 'Lotes girados', m: proj.lotes, fmt: (v: number) => n0(Math.round(v)) },
+                    { label: 'Receita (corretagem, zeragem e avulsas)', m: proj.receita, fmt: rCurto },
+                  ] as const).map(l => (
+                    <tr key={l.label}>
+                      <td className="font-medium">{l.label}</td>
+                      <td className="num col-p2">{l.fmt(l.m.realizado)}</td>
+                      <td className="num font-semibold">{l.fmt(l.m.projetado)}</td>
+                      <td className="num col-p2 text-fg-muted">{proj.metodo === 'historico' ? `${l.fmt(l.m.baixo)} – ${l.fmt(l.m.alto)}` : TRACO}</td>
+                      <td className="num col-p3 text-fg-muted">{l.fmt(l.m.linear)}</td>
+                      <td className="num">{l.fmt(l.m.anteriorTotal ?? 0)}</td>
+                      <td className="num col-p2"><DeltaText pct={l.m.anteriorTotal ? ((l.m.projetado - l.m.anteriorTotal) / l.m.anteriorTotal) * 100 : null} /></td>
+                    </tr>
+                  ))}
+                  {incentivoProj && (
+                    <tr>
+                      <td className="font-medium">Incentivo {ctx.label}<span className="ml-1.5 text-micro text-fg-subtle">{fmtNum(incentivoProj.comFaixa)} com faixa{incentivoProj.sobem ? ` · ${fmtNum(incentivoProj.sobem)} sobem de faixa` : ''}</span></td>
+                      <td className="num col-p2">{rCurto(mesAtual?.incentivo ?? 0)}</td>
+                      <td className="num font-semibold">{rCurto(incentivoProj.total)}</td>
+                      <td className="num col-p2 text-fg-muted">{TRACO}</td>
+                      <td className="num col-p3 text-fg-muted">{TRACO}</td>
+                      <td className="num">{rCurto(mesAnt?.incentivo)}</td>
+                      <td className="num col-p2"><DeltaText pct={mesAnt?.incentivo ? ((incentivoProj.total - mesAnt.incentivo) / mesAnt.incentivo) * 100 : null} /></td>
+                    </tr>
+                  )}
+                  {repasseProj && (
+                    <tr className="total">
+                      <td>Comissão líquida<span className="ml-1.5 text-micro font-normal text-fg-subtle">comissão {ctx.label} {fmtPct(repasseProj.pctEfetivo)} sobre a líquida prevista</span></td>
+                      <td className="num col-p2">{rCurto(repasseMes.liquido)}</td>
+                      <td className="num font-semibold">{rCurto(repasseProj.liquido)}</td>
+                      <td className="num col-p2 text-fg-muted">{proj.metodo === 'historico' ? `${rCurto(calcularRepasse(proj.receita.baixo, cfg).liquido)} – ${rCurto(calcularRepasse(proj.receita.alto, cfg).liquido)}` : TRACO}</td>
+                      <td className="num col-p3 text-fg-muted">{rCurto(calcularRepasse(proj.receita.linear, cfg).liquido)}</td>
+                      <td className="num">{rCurto(repasseAnt?.liquido)}</td>
+                      <td className="num col-p2"><DeltaText pct={repasseAnt?.liquido ? ((repasseProj.liquido - repasseAnt.liquido) / repasseAnt.liquido) * 100 : null} /></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-micro text-fg-subtle">
+              Previsto = realizado ÷ fração que o mês costuma ter atingido neste dia útil (mediana dos meses do histórico); a faixa usa os quartis.
+              Ritmo linear = realizado ÷ fração dos dias úteis. Dias úteis contam segunda a sexta, sem feriados.
+              {repasseProj ? ' A comissão líquida prevista passa pela cadeia de repasse do BTG (faixas, impostos e Delta) sobre a receita prevista.' : ''}
+            </p>
+          </Panel>
+        )}
 
         <Panel title="Lotes, receita e clientes ativos" subtitle={`12 meses até o mês de referência · receita = corretagem + zeragem${atp ? '' : ' + incentivo'}`}>
           <GraficoSeries
@@ -327,8 +417,30 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           </div>
         </Panel>
 
-        <div className="grid gap-8 xl:grid-cols-5">
-          <Panel className="xl:col-span-2" title="Migrados sem giro" subtitle="Priorizar contato · migrações mais recentes primeiro."
+        <div className="grid gap-8 xl:grid-cols-2">
+          <Panel title="Clientes em risco" subtitle={`Ativos em ${mesCurto(mesRef)} que pararam de girar (dias contados até o último lançamento) ou caíram contra os 3 meses anteriores · maiores primeiro.`}
+            action={<Link href={`${base}/clientes?risco=qualquer`} className="link text-label">ver todos ({fmtNum(totalRisco)})</Link>}>
+            <div className="tbl-wrap">
+              <table className="tbl tbl-dense">
+                <thead><tr><th>Cliente</th><th className="col-p2">Responsável</th><th>Risco</th><th className="num">Lotes mês</th><th className="num col-p2">Média 3 m</th><th className="num col-p3">Receita 12 m</th><th>Último giro</th></tr></thead>
+                <tbody>
+                  {risco.length === 0 && <LinhaVazia colunas={7}>Nenhum cliente em risco.</LinhaVazia>}
+                  {risco.map(c => (
+                    <tr key={c.cliente_id}>
+                      <td className="max-w-[200px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link></td>
+                      <td className="muted col-p2">{c.responsavel ?? TRACO}</td>
+                      <td><RiscoTexto risco={c.risco} diasSemGiro={c.dias_sem_giro} /></td>
+                      <td className={cn('num', !c.lotes_mes && 'subtle')}>{n0(c.lotes_mes)}</td>
+                      <td className="num col-p2">{n0(Math.round(c.lotes_media_3m))}</td>
+                      <td className="num col-p3">{r0(c.receita_12m)}</td>
+                      <td className="num">{dataCurta(c.ultimo_giro)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+          <Panel title="Migrados sem giro" subtitle="Priorizar contato · migrações mais recentes primeiro."
             action={<Link href={`${base}/clientes?situacao=Nunca%20girou`} className="link text-label">ver todos ({fmtNum(r.nunca_giraram)})</Link>}>
             <div className="tbl-wrap">
               <table className="tbl tbl-dense">
@@ -347,10 +459,9 @@ export default async function PainelPage({ params, searchParams }: { params: Par
               </table>
             </div>
           </Panel>
-          <div className="min-w-0 xl:col-span-3">
-            <HeatmapClientes meses={meses} dados={porCliente} base={base} totalClientes={totalClientesGiro} />
-          </div>
         </div>
+
+        <HeatmapClientes meses={meses} dados={porCliente} base={base} totalClientes={totalClientesGiro} />
       </PageBody>
     </>
   )

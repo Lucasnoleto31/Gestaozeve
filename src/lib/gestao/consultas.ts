@@ -5,9 +5,9 @@ import { mesBrasil } from '@/lib/periodo'
 import { mesAtual } from './meses'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
-import { grupoCorretagem } from './tipos'
+import { grupoCorretagem, risco as riscoDe } from './tipos'
 import type {
-  OperacaoDia,
+  OperacaoDia, ClienteRiscoRow, GiroDiaRow,
   ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
@@ -66,6 +66,9 @@ export const mapCliente = (r: Row): ClienteRow => ({
   situacao: (str(r.situacao) ?? 'Em processamento') as ClienteRow['situacao'], alertas: arr(r.alertas),
   parceiro: str(r.parceiro), observacoes: str(r.observacoes), motivo_recusa: str(r.motivo_recusa),
   grupo_corretagem: grupoCorretagem(r.grupo_corretagem),
+  receita_total: num(r.receita_total), primeiro_mes_giro: str(r.primeiro_mes_giro), meses_ativos: num(r.meses_ativos),
+  lotes_mes_anterior: num(r.lotes_mes_anterior), lotes_media_3m: num(r.lotes_media_3m),
+  dias_sem_giro: r.dias_sem_giro == null ? null : num(r.dias_sem_giro), risco: riscoDe(r.risco),
 })
 
 // ── Clientes ───────────────────────────────────────────────────────────────
@@ -171,8 +174,28 @@ export const mapKpis = (r: Row): PainelKpis => ({
   migrados_sem_giro: num(r.migrados_sem_giro), inativos: num(r.inativos), com_alertas: num(r.com_alertas), migrados_sem_data: num(r.migrados_sem_data),
   multi_conta: num(r.multi_conta), linhas_nao_cadastradas: num(r.linhas_nao_cadastradas), lotes_nao_cadastrados: num(r.lotes_nao_cadastrados),
   ultima_data: str(r.ultima_data), lotes_12m: num(r.lotes_12m), receita_12m: num(r.receita_12m), posicao_mes: num(r.posicao_mes),
-  acoes_operacoes_mes: num(r.acoes_operacoes_mes), receita_acoes_mes: num(r.receita_acoes_mes),
+  acoes_operacoes_mes: num(r.acoes_operacoes_mes), receita_acoes_mes: num(r.receita_acoes_mes), em_risco: num(r.em_risco),
 })
+
+// Cliente em risco (S44), como vem de painel_resumo.em_risco ou de clientes_risco
+const mapRisco = (r: Row): ClienteRiscoRow => ({
+  cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), responsavel: str(r.responsavel), telefone: str(r.telefone),
+  risco: riscoDe(r.risco) ?? 'parou', lotes_mes: num(r.lotes_mes), lotes_mes_anterior: num(r.lotes_mes_anterior), lotes_media_3m: num(r.lotes_media_3m),
+  receita_12m: num(r.receita_12m), ultimo_giro: str(r.ultimo_giro), dias_sem_giro: r.dias_sem_giro == null ? null : num(r.dias_sem_giro),
+})
+
+// Giro por dia para a projeção de fechamento (S44): só clientes cadastrados, como os KPIs. Antes da
+// S44 cai no `diario`, que traz o mesmo par lotes/receita (todos os lançamentos; só mais pesado).
+export async function giroDiario(corretora: Corretora, inicio: string, fim: string): Promise<GiroDiaRow[]> {
+  const { db } = await equipe()
+  const mapa = (r: Row): GiroDiaRow => ({ dia: String(r.dia), lotes: num(r.lotes), receita: num(r.receita) })
+  try {
+    return linhas(await rpc(db, 'giro_diario', { p_corretora: corretora, p_inicio: inicio, p_fim: fim }), mapa)
+  } catch (e) {
+    if (!(e instanceof Error && funcaoAusente({ message: e.message }))) throw e
+    return linhas(await rpc(db, 'diario', { p_corretora: corretora, p_inicio: inicio, p_fim: fim }), mapa)
+  }
+}
 
 export async function painelKpis(corretora: Corretora, mesRef: string | null): Promise<PainelKpis | null> {
   const { db } = await equipe()
@@ -462,9 +485,11 @@ export async function painelResumo(corretora: Corretora, mesRef: string | null):
       receita_12m: num(r.receita_12m), nunca_giraram: num(r.nunca_giraram), inativos: num(r.inativos), ativos_sit: num(r.ativos_sit), com_alertas: num(r.com_alertas),
       migrados_sem_data: num(r.migrados_sem_data), multi_conta: num(r.multi_conta), com_receita: num(r.com_receita),
       media_dias_migrar: r.media_dias_migrar == null ? null : num(r.media_dias_migrar),
+      em_risco: num(r.em_risco),
     },
     grupos: linhas<GrupoPainel>(j.grupos, grupo),
     sem_giro: linhas(j.sem_giro, s => ({ cliente_id: String(s.cliente_id), nome: String(s.nome ?? ''), responsavel: str(s.responsavel), data_migracao: str(s.data_migracao), telefone: str(s.telefone) })),
+    em_risco: linhas(j.em_risco, mapRisco),
   }
 }
 
@@ -479,11 +504,13 @@ function resumoPelaLista(rows: ClienteRow[]): PainelResumo {
       levados: r.levados, contas: r.contas, migrados: r.migrados, em_processamento: r.emProcessamento, recusaram: r.recusaram, ativos: r.ativos,
       lotes_mes: r.lotesMes, zerados_mes: r.zeradosMes, receita_mes: r.receitaMes, lotes_12m: r.lotes12m, receita_12m: r.receita12m,
       nunca_giraram: r.nuncaGiraram, inativos: r.inativos, ativos_sit: r.ativosSit, com_alertas: r.comAlertas, migrados_sem_data: r.migradosSemData,
-      multi_conta: r.multiConta, com_receita: r.comReceita, media_dias_migrar: r.mediaDiasMigrar,
+      multi_conta: r.multiConta, com_receita: r.comReceita, media_dias_migrar: r.mediaDiasMigrar, em_risco: rows.filter(c => c.risco).length,
     },
     grupos: [...porAssessor(rows).map(grupo('assessor')), ...porResponsavel(rows).map(grupo('responsavel'))],
     sem_giro: rows.filter(c => c.situacao === 'Nunca girou').sort((a, b) => (b.data_migracao ?? '').localeCompare(a.data_migracao ?? '')).slice(0, 15)
       .map(c => ({ cliente_id: c.cliente_id, nome: c.nome, responsavel: c.responsavel, data_migracao: c.data_migracao, telefone: c.telefone })),
+    em_risco: rows.filter(c => c.risco).sort((a, b) => b.receita_12m - a.receita_12m).slice(0, 12)
+      .map(c => ({ cliente_id: c.cliente_id, nome: c.nome, responsavel: c.responsavel, telefone: c.telefone, risco: c.risco!, lotes_mes: c.lotes_mes, lotes_mes_anterior: c.lotes_mes_anterior, lotes_media_3m: c.lotes_media_3m, receita_12m: c.receita_12m, ultimo_giro: c.ultimo_giro, dias_sem_giro: c.dias_sem_giro })),
   }
 }
 

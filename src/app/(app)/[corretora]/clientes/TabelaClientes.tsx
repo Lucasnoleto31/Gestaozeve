@@ -13,6 +13,7 @@ import { expandir, type Compacto } from '@/lib/compacto'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { casaBusca, indexarBusca, lerBusca } from '@/lib/busca'
 
 type Filtros = { busca: string; status: string; situacao: string; responsavel: string; assessor: string; alerta: string; grupo: string; risco: string }
 type Ordem = { col: keyof ClienteLinha; dir: 'asc' | 'desc' }
@@ -31,10 +32,12 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
   const assessores = useMemo(() => [...new Set(clientes.map(c => c.assessor_nome ?? ''))].filter(Boolean).sort(), [clientes])
   const alertas = useMemo(() => [...new Set(clientes.flatMap(c => c.alertas.map(a => (/^\d+ contas$/.test(a) ? 'contas' : a))))].sort(), [clientes])
 
+  // índice de busca de cada cliente (nome, assessor, parceiro, e-mail, telefone, CPF/CNPJ e conta), montado uma vez
+  const indice = useMemo(() => new Map(clientes.map(c => [c.cliente_id, indexarBusca({
+    textos: [c.nome, c.assessor_nome, c.parceiro], telefones: [c.telefone], documentos: [c.documento], contas: [c.conta_principal], emails: [c.email],
+  })])), [clientes])
   const filtrados = useMemo(() => {
-    const termo = f.busca.trim().toUpperCase()
-    const dig = termo.replace(/\D/g, '')
-    const soDig = dig.length >= 3 && dig.length === termo.replace(/[.\-\/\s]/g, '').length
+    const termo = lerBusca(f.busca)
     let out = clientes.filter(c => {
       if (f.status && c.status !== f.status) return false
       if (f.situacao && c.situacao !== f.situacao) return false
@@ -44,10 +47,8 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
       if (f.alerta && f.alerta !== 'qualquer' && !c.alertas.some(a => (f.alerta === 'contas' ? /^\d+ contas$/.test(a) : a === f.alerta))) return false
       if (f.grupo === 'vazio' ? c.grupo_corretagem != null : f.grupo && c.grupo_corretagem !== f.grupo) return false
       if (f.risco === 'qualquer' ? !c.risco : f.risco && c.risco !== f.risco) return false
-      if (termo) {
-        if (soDig) return (c.documento ?? '').startsWith(dig) || (c.conta_principal ?? '').startsWith(dig) || (c.telefone ?? '').replace(/\D/g, '').includes(dig)
-        return c.nome.toUpperCase().includes(termo) || (c.assessor_nome ?? '').toUpperCase().includes(termo) || (c.parceiro ?? '').toUpperCase().includes(termo)
-      }
+      const ix = indice.get(c.cliente_id)
+      if (termo && (!ix || !casaBusca(termo, ix))) return false
       return true
     })
     const { col, dir } = ordem
@@ -62,7 +63,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
       return dir === 'asc' ? cmp : -cmp
     })
     return out
-  }, [clientes, f, ordem])
+  }, [clientes, f, ordem, indice])
 
   const visiveis = filtrados.slice(0, limite)
 
@@ -98,7 +99,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
-          <input className="field-sm w-56 pl-8" placeholder="Nome, CPF, conta, telefone…" value={f.busca} onChange={e => sel('busca', e.target.value)} aria-label="Buscar" />
+          <input className="field-sm w-56 pl-8" placeholder="Nome, telefone, CPF, e-mail, conta…" value={f.busca} onChange={e => sel('busca', e.target.value)} aria-label="Buscar" />
         </label>
         <select className="field-sm" value={f.status} onChange={e => sel('status', e.target.value)} aria-label="Status">
           <option value="">Status: todos</option>{STATUS.map(s => <option key={s}>{s}</option>)}

@@ -19,6 +19,7 @@ import { expandir, type Compacto } from '@/lib/compacto'
 import { mesBrasil } from '@/lib/periodo'
 import { cn } from '@/lib/utils'
 import { mesmaPessoa } from '@/lib/texto'
+import { casaBusca, indexarBusca, lerBusca } from '@/lib/busca'
 import { LeadForm } from './LeadForm'
 import { GanhoWizard } from './GanhoWizard'
 
@@ -81,9 +82,12 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
     return [...contagem.entries()].sort((a, b) => b[0].localeCompare(a[0]))
   }, [mesPorLead, f.mes])
 
+  // índice de busca de cada lead (nome, e-mail, observações, nome do cliente ligado, telefone e CPF), montado uma vez
+  const indice = useMemo(() => new Map(leads.map(l => [l.id, indexarBusca({
+    textos: [l.nome, l.observacoes, l.cliente_nome], telefones: [l.whatsapp], documentos: [l.cpf], emails: [l.email],
+  })])), [leads])
   const filtrados = useMemo(() => {
-    const t = f.busca.trim().toUpperCase()
-    const dig = t.replace(/\D/g, '')
+    const termo = lerBusca(f.busca)
     return leads.filter(l => {
       if (f.mes && mesPorLead.get(l.id) !== f.mes) return false
       if (f.status && l.status !== f.status) return false
@@ -94,13 +98,11 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
       if (f.alerta && !l.alerta) return false
       if (f.clientes === 'sim' && !l.cliente_id) return false
       if (f.clientes === 'nao' && l.cliente_id) return false
-      if (t) {
-        if (dig.length >= 4 && dig.length === t.replace(/[.\-()\s+]/g, '').length) return (l.whatsapp ?? '').replace(/\D/g, '').includes(dig) || (l.cpf ?? '').replace(/\D/g, '').includes(dig)
-        return l.nome.toUpperCase().includes(t) || (l.email ?? '').toUpperCase().includes(t) || (l.observacoes ?? '').toUpperCase().includes(t)
-      }
+      const ix = indice.get(l.id)
+      if (termo && (!ix || !casaBusca(termo, ix))) return false
       return true
     })
-  }, [leads, f, mesPorLead])
+  }, [leads, f, mesPorLead, indice])
   const visiveis = filtrados.slice(0, limite)
   const sel = (k: keyof Filtros, v: string | boolean) => setF(x => ({ ...x, [k]: v }))
 

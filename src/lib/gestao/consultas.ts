@@ -6,6 +6,9 @@ import { mesAtual } from './meses'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import { grupoCorretagem, risco as riscoDe } from './tipos'
+import { casaBusca, contaCasa, digitosTelefone, indexarBusca, lerBusca, regexDoTexto } from '@/lib/busca'
+import { normTexto } from '@/lib/texto'
+import type { ClienteEncontrado } from './tipos'
 import type {
   OperacaoDia, ClienteRiscoRow, GiroDiaRow,
   ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra,
@@ -135,35 +138,100 @@ export async function clienteFicha(corretora: Corretora, clienteId: string, mesR
 }
 
 // Busca rápida de clientes (consulta): nome, CPF ou conta
-export async function buscarClientes(corretora: Corretora, termo: string, limite = 12): Promise<{ id: string; nome: string; documento: string | null; conta: string | null }[]> {
+// Busca rápida de cliente por nome, telefone, CPF/CNPJ, e-mail ou conta (mesmas regras de src/lib/busca.ts).
+// escopo 'corretora' (topo de Clientes): só quem é cliente na corretora, pelas duas portas da
+// v_cliente_corretora — conta na corretora, ou cadastro manual com status (cliente sem conta, como no BTG).
+// escopo 'cadastro' (Importar › Vincular conta, só admin): todo o cadastro, para ligar a conta nova a quem já existe.
+// Cada jeito de procurar vira uma consulta (em paralelo); depois todas as palavras do termo precisam
+// casar ("vitor 8596"), conferindo todas as contas do cliente na corretora (com e sem dígito).
+export async function buscarClientes(corretora: Corretora, termo: string, limite = 12, escopo: 'corretora' | 'cadastro' = 'corretora'): Promise<ClienteEncontrado[]> {
   const { db } = await equipe()
   const t = termo.trim()
-  if (t.length < 2) return []
-  const digitos = t.replace(/\D/g, '')
-  if (digitos.length >= 4 && digitos.length === t.replace(/[.\-\/\s]/g, '').length) {
-    const { data, error } = await db.from('contas').select('cliente_id, conta, clientes!inner(id, nome, documento)')
-      .eq('corretora', corretora).or(`conta.like.${digitos}%,conta_digito.like.${digitos}%`).limit(limite)
-    if (error) falha(error, 'contas')
-    const porDoc = await db.from('clientes').select('id, nome, documento').like('documento', `${digitos}%`).limit(limite)
-    const out = new Map<string, { id: string; nome: string; documento: string | null; conta: string | null }>()
-    for (const r of (data ?? []) as Row[]) {
-      const c = r.clientes as Row
-      if (c) out.set(String(c.id), { id: String(c.id), nome: String(c.nome), documento: str(c.documento), conta: str(r.conta) })
+  const busca = lerBusca(t)
+  if (t.length < 2 || !busca) return []
+  const textos = busca.tokens.filter(k => k.tipo === 'texto')
+  const padroesNome = textos.map(regexDoTexto).filter((x): x is string => !!x)
+  const tokensNumero = busca.tokens.filter(k => k.tipo === 'digitos' && !k.soTexto)
+  const numeros = tokensNumero.flatMap(k => [k.valor, ...(k.partes ?? [])]).filter((d, i, a) => d.length >= 3 && a.indexOf(d) === i).slice(0, 4)
+  const limpaLike = (v: string) => v.replace(/[%*,()"\\]/g, '')
+  const emails = busca.tokens.filter(k => k.tipo === 'email').map(k => limpaLike(k.valor)).filter(Boolean)
+  // cada palavra do termo também pode ser um pedaço do e-mail ("andre.silva", "joao_92")
+  const pedacosEmail = textos.map(k => limpaLike(k.valor.toLowerCase())).filter(v => v.length >= 3).slice(0, 2)
+  const CAMPOS = 'id, nome, documento, telefone, email'
+  type Consulta = PromiseLike<{ data: unknown; error: { message: string } | null }>
+  // o pedaço do construtor de consultas que os filtros usam (o tipo completo do supabase-js é profundo demais)
+  type Filtravel = { ilike(c: string, v: string): Filtravel; like(c: string, v: string): Filtravel; filter(c: string, op: string, v: string): Filtravel; limit(n: number): Consulta }
+  const filtravel = (q: unknown) => q as Filtravel
+
+  // onde procurar: as duas portas da corretora, ou o cadastro inteiro
+  const portas = (filtro: (q: Filtravel) => Filtravel, n: number): Consulta[] => escopo === 'cadastro'
+    ? [filtro(filtravel(db.from('clientes').select(CAMPOS))).limit(n)]
+    : [
+        filtro(filtravel(db.from('clientes').select(`${CAMPOS}, contas!inner(corretora)`).eq('contas.corretora', corretora))).limit(n),
+        filtro(filtravel(db.from('clientes').select(`${CAMPOS}, cliente_corretora!inner(corretora, status)`).eq('cliente_corretora.corretora', corretora).not('cliente_corretora.status', 'is', null))).limit(n),
+      ]
+  const consultas: Consulta[] = []
+  // nome: cada palavra do termo (apóstrofo opcional: DAVILA acha D'AVILA, o nome_norm do banco mantém o apóstrofo)
+  if (padroesNome.length) consultas.push(...portas(q => padroesNome.reduce((acc, re) => acc.filter('nome_norm', 'imatch', re), q), 60))
+  for (const p of [...emails, ...pedacosEmail]) consultas.push(...portas(q => q.ilike('email', `%${p}%`), 30))
+  for (const d of numeros) {
+    consultas.push(...portas(q => q.like('documento', `%${d}%`), 30))
+    const nacional = digitosTelefone(d)
+    if (nacional.length >= 4) consultas.push(...portas(q => q.like('telefone_digits', `%${nacional.slice(-8)}%`), 30))
+    // "+5511987" ainda incompleto: também sem o 55 (o 55 pode ser DDD, por isso a consulta acima continua)
+    if (d.startsWith('55') && d.length >= 6 && d.length < 12) consultas.push(...portas(q => q.like('telefone_digits', `%${d.slice(2)}%`), 30))
+    const semZeros = d.replace(/^0+(?=\d)/, '')
+    consultas.push(db.from('contas').select(`cliente_id, clientes!inner(${CAMPOS})`).eq('corretora', corretora)
+      .or(`conta.like.%${semZeros}%,conta_digito.like.%${semZeros}%`).limit(30))
+  }
+  if (!consultas.length) return []
+
+  const candidatos = new Map<string, Row>()
+  for (const r of await Promise.all(consultas)) {
+    if (r.error) falha(r.error, 'clientes')
+    for (const x of (r.data ?? []) as Row[]) {
+      const c = (x.clientes as Row | undefined) ?? x
+      if (c?.id) candidatos.set(String(c.id), c)
     }
-    for (const r of (porDoc.data ?? []) as Row[]) if (!out.has(String(r.id))) out.set(String(r.id), { id: String(r.id), nome: String(r.nome), documento: str(r.documento), conta: null })
-    return [...out.values()].slice(0, limite)
   }
-  const { data, error } = await db.from('contas').select('cliente_id, conta, principal, clientes!inner(id, nome, documento, nome_norm)')
-    .eq('corretora', corretora).ilike('clientes.nome_norm', `%${t.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')}%`).limit(limite * 3)
-  if (error) falha(error, 'contas')
-  const out = new Map<string, { id: string; nome: string; documento: string | null; conta: string | null }>()
-  for (const r of (data ?? []) as Row[]) {
-    const c = r.clientes as Row
-    if (!c) continue
-    const id = String(c.id)
-    if (!out.has(id) || r.principal === true) out.set(id, { id, nome: String(c.nome), documento: str(c.documento), conta: str(r.conta) })
+  if (!candidatos.size) return []
+
+  // quem é cliente na corretora (conta principal) e todas as contas dele lá, com e sem dígito
+  const ids = [...candidatos.keys()].slice(0, 300)
+  const principal = new Map<string, string | null>()
+  const contasDe = new Map<string, { conta: string; digito: string | null }[]>()
+  for (let i = 0; i < ids.length; i += 100) {
+    const lote = ids.slice(i, i + 100)
+    const [v, ct] = await Promise.all([
+      db.from('v_cliente_corretora').select('cliente_id, conta_principal').eq('corretora', corretora).in('cliente_id', lote),
+      db.from('contas').select('cliente_id, conta, conta_digito').eq('corretora', corretora).in('cliente_id', lote),
+    ])
+    if (v.error) falha(v.error, 'v_cliente_corretora')
+    if (ct.error) falha(ct.error, 'contas')
+    for (const r of (v.data ?? []) as Row[]) principal.set(String(r.cliente_id), str(r.conta_principal))
+    for (const r of (ct.data ?? []) as Row[]) {
+      if (!r.conta) continue
+      const lista = contasDe.get(String(r.cliente_id)) ?? []
+      lista.push({ conta: String(r.conta), digito: str(r.conta_digito) })
+      contasDe.set(String(r.cliente_id), lista)
+    }
   }
-  return [...out.values()].slice(0, limite)
+
+  const out: ClienteEncontrado[] = []
+  for (const id of ids) {
+    const r = candidatos.get(id) as Row
+    if (escopo === 'corretora' && !principal.has(id)) continue
+    const contas = contasDe.get(id) ?? []
+    const ix = indexarBusca({ textos: [str(r.nome)], telefones: [str(r.telefone)], documentos: [str(r.documento)], contas: [principal.get(id), ...contas.flatMap(c => [c.conta, c.digito])], emails: [str(r.email)] })
+    if (!casaBusca(busca, ix)) continue
+    // mostra a conta que casou com o número digitado; senão a principal
+    const casou = contas.find(c => tokensNumero.some(k => contaCasa(k, c.conta) || (!!c.digito && contaCasa(k, c.digito))))
+    const conta = casou?.conta ?? principal.get(id) ?? contas[0]?.conta ?? null
+    out.push({ id, nome: String(r.nome ?? ''), documento: str(r.documento), conta, telefone: str(r.telefone), email: str(r.email) })
+  }
+  // quem começa com o termo primeiro, depois em ordem alfabética
+  const tn = normTexto(t)
+  return out.sort((a, b) => Number(normTexto(b.nome).startsWith(tn)) - Number(normTexto(a.nome).startsWith(tn)) || a.nome.localeCompare(b.nome, 'pt-BR')).slice(0, limite)
 }
 
 // ── Painel ─────────────────────────────────────────────────────────────────

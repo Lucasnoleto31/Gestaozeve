@@ -957,10 +957,12 @@ export async function recalcularTudo(corretoraIn: string) {
 }
 
 // Busca de clientes pra vincular (usada em modais)
-export async function buscarClientesAction(corretoraIn: string, termo: string) {
+// escopo 'cadastro': todo o cadastro, só para admin (Importar › Vincular conta); padrão: só clientes da corretora
+export async function buscarClientesAction(corretoraIn: string, termo: string, escopo?: 'corretora' | 'cadastro') {
   return tentar(async () => {
+    if (escopo === 'cadastro') await somenteAdmin()   // vendedor só vê clientes das corretoras dele
     const corretora = await corretoraValida(corretoraIn)
-    return buscarClientes(corretora, termo)
+    return buscarClientes(corretora, termo, 12, escopo === 'cadastro' ? 'cadastro' : 'corretora')
   })
 }
 

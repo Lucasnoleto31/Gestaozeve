@@ -518,6 +518,9 @@ export type Importacao = {
 export type Resultado<T = undefined> = { ok: true; dados: T } | { ok: false; erro: string }
 
 // Campos editáveis de um lead (formulário)
+// Resultado da busca rápida de cliente (nome, telefone, CPF, e-mail ou conta)
+export type ClienteEncontrado = { id: string; nome: string; documento: string | null; conta: string | null; telefone: string | null; email: string | null }
+
 export type LeadCampos = {
   nome: string; whatsapp: string | null; cpf: string | null; email: string | null; ja_opera: string | null; corretora: string | null
   origem: string | null; responsavel: string | null; status: string; ultimo_contato: string | null; data_fechamento: string | null

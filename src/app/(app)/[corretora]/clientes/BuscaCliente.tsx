@@ -1,14 +1,19 @@
 'use client'
 
-// Busca rápida de cliente (nome, CPF ou conta) → abre a ficha
+// Busca rápida de cliente (nome, telefone, CPF, e-mail ou conta) → abre a ficha
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Search } from 'lucide-react'
 import { buscarClientesAction } from '@/lib/gestao/acoes'
 import type { Corretora } from '@/lib/corretoras'
 import { cn } from '@/lib/utils'
+import type { ClienteEncontrado } from '@/lib/gestao/tipos'
 
-type Item = { id: string; nome: string; documento: string | null; conta: string | null }
+type Item = ClienteEncontrado
+const fone = (t: string | null) => {
+  const d = (t ?? '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '')
+  return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : t
+}
 
 export function BuscaCliente({ corretora, base, autoFocus, className }: { corretora: Corretora; base: string; autoFocus?: boolean; className?: string }) {
   const router = useRouter()
@@ -46,7 +51,7 @@ export function BuscaCliente({ corretora, base, autoFocus, className }: { corret
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
       <input
         className="field-sm w-64 pl-8 pr-8"
-        placeholder="Buscar cliente, CPF ou conta…"
+        placeholder="Nome, telefone, CPF, e-mail ou conta…"
         value={termo}
         autoFocus={autoFocus}
         onChange={e => setTermo(e.target.value)}
@@ -73,7 +78,8 @@ export function BuscaCliente({ corretora, base, autoFocus, className }: { corret
                 onClick={() => abrir(it)}
               >
                 <span className="font-medium text-fg">{it.nome}</span>
-                <span className="text-micro text-fg-subtle">{it.documento ?? 'sem CPF'}{it.conta ? ` · conta ${it.conta}` : ''}</span>
+                <span className="text-micro text-fg-subtle">{it.documento ?? 'sem CPF'}{it.conta ? ` · conta ${it.conta}` : ''}{it.telefone ? ` · ${fone(it.telefone)}` : ''}</span>
+                {it.email && <span className="text-micro text-fg-subtle">{it.email}</span>}
               </button>
             </li>
           ))}

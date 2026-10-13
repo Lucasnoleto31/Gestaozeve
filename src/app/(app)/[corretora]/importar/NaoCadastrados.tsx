@@ -31,7 +31,7 @@ export function NaoCadastrados({ corretora, linhas, base }: { corretora: Correto
     if (timer.current) clearTimeout(timer.current)
     if (termo.trim().length < 2) return
     timer.current = setTimeout(async () => {
-      const r = await buscarClientesAction(corretora, termo)
+      const r = await buscarClientesAction(corretora, termo, 'cadastro')   // o cliente pode estar só em outra corretora
       if (r.ok) setItens(r.dados)
     }, 250)
   }, [termo, corretora])

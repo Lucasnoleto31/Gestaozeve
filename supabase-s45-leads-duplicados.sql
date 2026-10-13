@@ -1,5 +1,5 @@
 -- ============================================================================
--- S44 · Leads sem duplicados
+-- S45 · Leads sem duplicados (era S44; a S44 ficou com a projeção/risco/LTV de outra sessão)
 -- Re-runnável (a unificação só mexe no que ainda está duplicado).
 --
 -- Lucas, 13/10/2026: leads duplicados (a mesma pessoa preenche o formulário do site mais de uma vez

@@ -125,7 +125,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
   const fichaHref = (l: LeadRow) => (l.cliente_id && l.cliente_corretora && isCorretora(l.cliente_corretora) ? `/${CORRETORA_SLUG[l.cliente_corretora]}/clientes/${l.cliente_id}` : null)
 
   return (
-    <Panel title={`${fmtNum(filtrados.length)} de ${fmtNum(leads.length)} leads`} subtitle="Clique na linha para editar tudo. Ícones: telefone registra contato hoje (Novo vira Em contato), troféu marca Ganho e abre o cadastro do cliente, X marca Perdido.">
+    <Panel title={`${fmtNum(filtrados.length)} de ${fmtNum(leads.length)} leads`} subtitle="Clique na linha para editar tudo. Ícones: telefone registra contato hoje (Novo vira Em contato), troféu marca Ganho e abre o cadastro do cliente (é o único jeito de marcar Ganho), X marca Perdido.">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
@@ -183,8 +183,8 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
                       {l.tipo_status === 'Aberto' && (
                         <IconButton tone="success" aria-label={`Registrar contato hoje · ${l.nome}`} title="Registrar contato hoje" disabled={registrando === l.id} onClick={() => contato(l)}><PhoneCall className="h-4 w-4" aria-hidden /></IconButton>
                       )}
-                      {l.status !== 'Ganho' && (
-                        <IconButton tone="accent" aria-label={`Marcar ${l.nome} como ganho`} title="Ganho: cadastrar como cliente" onClick={() => setGanhando(l)}><Trophy className="h-4 w-4" aria-hidden /></IconButton>
+                      {(l.status !== 'Ganho' || !l.cliente_id) && (
+                        <IconButton tone="accent" aria-label={`Marcar ${l.nome} como ganho`} title={l.status === 'Ganho' ? 'Ganho sem cliente: cadastrar o cliente' : 'Ganho: cadastrar como cliente'} onClick={() => setGanhando(l)}><Trophy className="h-4 w-4" aria-hidden /></IconButton>
                       )}
                       {l.tipo_status === 'Aberto' && (
                         <IconButton tone="danger" aria-label={`Marcar ${l.nome} como perdido`} title="Perdido" onClick={() => { setPerdendo(l); setMotivo(l.motivo_perda ?? ''); setErroPerda(null) }}><XCircle className="h-4 w-4" aria-hidden /></IconButton>

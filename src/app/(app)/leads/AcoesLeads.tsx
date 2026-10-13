@@ -41,7 +41,7 @@ export function AcoesLeads({ responsaveis, status, admin }: { responsaveis: stri
     const r = await importarLeads(lido.nome, lido.linhas)
     setOcupado(false)
     if (!r.ok) { setErro(r.erro); return }
-    avisar({ titulo: `${fmtNum(r.dados.novos)} leads novos`, detalhe: `${fmtNum(r.dados.atualizados)} atualizados · ${fmtNum(r.dados.linhas - r.dados.novos - r.dados.atualizados)} já existiam`, tom: 'gain' })
+    avisar({ titulo: `${fmtNum(r.dados.novos)} leads novos`, detalhe: `${fmtNum(r.dados.atualizados)} atualizados · ${fmtNum(r.dados.reentradas)} preencheram de novo · ${fmtNum(r.dados.linhas - r.dados.novos - r.dados.atualizados - r.dados.reentradas)} já existiam`, tom: 'gain' })
     setLido(null)
     setImp(false)
     router.refresh()

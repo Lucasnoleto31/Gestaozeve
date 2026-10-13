@@ -100,6 +100,7 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin, u
               <select value={f.status} onChange={e => set('status', e.target.value)}>
                 {status.map(s => <option key={s.status}>{s.status}</option>)}{!status.some(s => s.status === f.status) && <option>{f.status}</option>}
               </select>
+              {f.status === 'Ganho' && !lead?.cliente_id && <p className="mt-1 text-micro text-warn">Ganho sem cliente: use o troféu na lista, ele cadastra o cliente e liga ao lead.</p>}
             </Field>
             <Input label="Último contato" type="date" value={f.ultimo_contato ?? ''} onChange={e => set('ultimo_contato', e.target.value)} />
             <Input label="Data do fechamento" type="date" value={f.data_fechamento ?? ''} onChange={e => set('data_fechamento', e.target.value)} hint={fechado && !f.data_fechamento ? 'Preencha para o funil contar o fechamento no mês certo' : undefined} />

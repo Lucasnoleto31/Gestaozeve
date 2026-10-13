@@ -7,7 +7,7 @@ import { corretoraValida, equipe, falha, num, somenteAdmin, type Admin } from '.
 import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './planilhas'
 import { lerFaixas, lerMetas, lerParticipacoes, numeroParam } from './btg'
 import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from '@/lib/corretoras'
-import { normTexto } from '@/lib/texto'
+import { mesmaPessoa, normTexto } from '@/lib/texto'
 import { buscarClientes, funcaoAusente, lotesNoPeriodo, todasAsLinhas } from './consultas'
 import { esquecerMesReferencia } from './pagina'
 import { ehIso, parseMes } from './meses'
@@ -16,6 +16,7 @@ import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { GRUPOS_CORRETAGEM, type ClienteDuplicado, type LeadCampos, type NovoClienteCampos, type Resultado } from './tipos'
 
 type Row = Record<string, unknown>
+type Db = Awaited<ReturnType<typeof equipe>>['db']
 
 async function tentar<T>(fn: () => Promise<T>): Promise<Resultado<T>> {
   try {
@@ -191,17 +192,17 @@ export async function importarLeads(nomeArquivo: string, linhas: LeadImport[]) {
     }).select('id').single()
     if (e0) falha(e0, 'importacoes')
     const id = String((imp as Row).id)
-    let novos = 0, atualizados = 0
+    let novos = 0, atualizados = 0, reentradas = 0
     for (let i = 0; i < linhas.length; i += 1000) {
       const { data, error } = await db.rpc('importar_leads', { p_importacao_id: id, p_linhas: linhas.slice(i, i + 1000) })
       if (error) falha(error, 'importar_leads')
       const r = ((data ?? []) as Row[])[0] ?? {}
-      novos += num(r.novos); atualizados += num(r.atualizados)
+      novos += num(r.novos); atualizados += num(r.atualizados); reentradas += num(r.reentradas)   // reentradas só depois da S44
     }
-    await db.from('importacoes').update({ linhas_novas: novos, linhas_ignoradas: linhas.length - novos, detalhes: { atualizados } }).eq('id', id)
+    await db.from('importacoes').update({ linhas_novas: novos, linhas_ignoradas: linhas.length - novos, detalhes: { atualizados, reentradas } }).eq('id', id)
     revalidatePath('/leads', 'layout')
     revalidatePath('/funil')
-    return { linhas: linhas.length, novos, atualizados }
+    return { linhas: linhas.length, novos, atualizados, reentradas }
   })
 }
 
@@ -571,17 +572,56 @@ function leadRegistro(c: LeadCampos) {
   }
 }
 
+// A mesma pessoa já cadastrada como lead? CPF igual, ou WhatsApp igual (8 últimos dígitos) com o mesmo nome
+// e CPF compatível. Mesma regra da S44 (importação e unificação).
+async function leadDaMesmaPessoa(db: Db, cpfDigits: string | null, whatsappDigits: string | null, nome: string, ignorarId: string | null) {
+  if (cpfDigits && cpfDigits.length >= 11) {
+    const { data } = await db.from('leads').select('id, nome, data_hora').eq('cpf_digits', cpfDigits).order('data_hora').limit(5)
+    const l = ((data ?? []) as Row[]).find(r => String(r.id) !== ignorarId)
+    if (l) return { nome: String(l.nome), data_hora: String(l.data_hora), por: 'CPF' }
+  }
+  if (whatsappDigits && whatsappDigits.length >= 10) {
+    const { data } = await db.from('leads').select('id, nome, data_hora, cpf_digits').like('whatsapp_digits', `%${whatsappDigits.slice(-8)}`).order('data_hora').limit(20)
+    const l = ((data ?? []) as Row[]).find(r => String(r.id) !== ignorarId && mesmaPessoa(nome, String(r.nome ?? ''))
+      && (!r.cpf_digits || !cpfDigits || String(r.cpf_digits) === cpfDigits))
+    if (l) return { nome: String(l.nome), data_hora: String(l.data_hora), por: 'WhatsApp' }
+  }
+  return null
+}
+
 export async function salvarLead(leadId: string | null, campos: LeadCampos) {
   return tentar(async () => {
     const { db, profile } = await equipe()
     if (!campos.nome.trim()) throw new Error('Informe o nome do lead')
     const registro = leadRegistro(campos)
+    // Ganho só pelo troféu da lista (cadastra o cliente e liga ao lead), a não ser que o cliente já exista
+    if (registro.status === 'Ganho') {
+      let ligado = false
+      if (leadId) {
+        const { data } = await db.from('leads').select('cliente_id').eq('id', leadId).maybeSingle()
+        ligado = !!(data as Row | null)?.cliente_id
+      }
+      if (!ligado && registro.cpf_digits) {
+        const { data } = await db.from('clientes').select('id').eq('documento', registro.cpf_digits).limit(1)
+        ligado = ((data ?? []) as Row[]).length > 0
+      }
+      if (!ligado) throw new Error('Para marcar Ganho use o troféu na lista: ele cadastra o cliente e liga ao lead. Salve com outro status.')
+    }
     if (leadId) {
       const { error } = await db.from('leads').update(registro).eq('id', leadId)
       if (error) falha(error, 'leads')
     } else {
-      const { error } = await db.from('leads').insert({ ...registro, criado_por: profile.user_id })
-      if (error) falha(error, 'leads')
+      const igual = await leadDaMesmaPessoa(db, registro.cpf_digits, registro.whatsapp_digits, registro.nome, null)
+      if (igual) {
+        const quando = new Date(igual.data_hora).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+        throw new Error(`Já existe o lead "${igual.nome}" (recebido em ${quando}) com esse ${igual.por}. Edite o existente em vez de criar outro.`)
+      }
+      const { error } = await db.from('leads').insert({ ...registro, criado_por: profile.user_id, ultima_entrada: new Date().toISOString() })
+      if (error && /ultima_entrada/i.test(error.message)) {
+        // antes da S44 a coluna não existe
+        const { error: e2 } = await db.from('leads').insert({ ...registro, criado_por: profile.user_id })
+        if (e2) falha(e2, 'leads')
+      } else if (error) falha(error, 'leads')
     }
     const { error: e2 } = await db.rpc('vincular_leads')
     if (e2) falha(e2, 'vincular_leads')

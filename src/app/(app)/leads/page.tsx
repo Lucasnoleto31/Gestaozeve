@@ -10,6 +10,7 @@ import { corretorasDoPerfil } from '@/lib/corretoras'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
+import { Alert } from '@/components/ui/Alert'
 import { TRACO } from '@/components/gestao/Celulas'
 import { TabelaLeads } from './TabelaLeads'
 import { compactar } from '@/lib/compacto'
@@ -32,6 +33,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const perdidos = leads.filter(l => l.status === 'Perdido')
   const fechados = ganhos.length + perdidos.length
   const jaClientes = leads.filter(l => l.cliente_id).length
+  const ganhosSemCliente = ganhos.filter(l => !l.cliente_id)
   const jaGiraram = leads.filter(l => l.cliente_id && l.girou).length
   const diasFechar = [...ganhos, ...perdidos].filter(l => l.data_fechamento && l.dias != null).map(l => l.dias as number)
   const mediaFechar = diasFechar.length ? diasFechar.reduce((s, d) => s + d, 0) / diasFechar.length : null
@@ -59,6 +61,12 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           <KpiCard label="Já eram clientes" value={fmtNum(jaClientes)} sub={`${fmtNum(jaGiraram)} já giraram lotes`} />
           <KpiCard label="Tempo até fechar" value={mediaFechar != null ? `${Math.round(mediaFechar)} dias` : TRACO} sub={mediaAberto != null ? `${Math.round(mediaAberto)} dias em aberto (média)` : undefined} />
         </KpiRow>
+        {ganhosSemCliente.length > 0 && (
+          <Alert tone="warn" title={`${fmtNum(ganhosSemCliente.length)} ${ganhosSemCliente.length === 1 ? 'lead marcado como Ganho sem cliente cadastrado' : 'leads marcados como Ganho sem cliente cadastrado'}`}>
+            Use o troféu na linha para cadastrar o cliente e ligar ao lead; sem isso a conta não aparece em Clientes nem na comissão.
+            {' '}{ganhosSemCliente.slice(0, 8).map(l => l.nome).join(', ')}{ganhosSemCliente.length > 8 ? '…' : ''}.
+          </Alert>
+        )}
         <TabelaLeads
           leads={compactar(leads, CAMPOS_LEAD)}
           responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)}

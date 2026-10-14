@@ -7,15 +7,15 @@ import { Panel } from '@/components/ui/Panel'
 import { Button } from '@/components/ui/Button'
 import { ExcluirClienteButton } from './ExcluirClienteButton'
 import type { Corretora } from '@/lib/corretoras'
-import { RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, n2, r0 } from '@/components/gestao/Celulas'
-import { GRUPOS_CORRETAGEM, RISCOS, type ClienteLinha } from '@/lib/gestao/tipos'
+import { NivelMarca, RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, n2, r0 } from '@/components/gestao/Celulas'
+import { GRUPOS_CORRETAGEM, NIVEIS, RISCOS, type ClienteLinha } from '@/lib/gestao/tipos'
 import { expandir, type Compacto } from '@/lib/compacto'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { casaBusca, indexarBusca, lerBusca } from '@/lib/busca'
 
-type Filtros = { busca: string; status: string; situacao: string; responsavel: string; assessor: string; alerta: string; grupo: string; risco: string }
+type Filtros = { busca: string; status: string; situacao: string; responsavel: string; assessor: string; alerta: string; grupo: string; risco: string; nivel: string }
 type Ordem = { col: keyof ClienteLinha; dir: 'asc' | 'desc' }
 
 const SITUACOES = ['Ativo', 'Inativo', 'Nunca girou', 'Em processamento', 'Recusou']
@@ -47,6 +47,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
       if (f.alerta && f.alerta !== 'qualquer' && !c.alertas.some(a => (f.alerta === 'contas' ? /^\d+ contas$/.test(a) : a === f.alerta))) return false
       if (f.grupo === 'vazio' ? c.grupo_corretagem != null : f.grupo && c.grupo_corretagem !== f.grupo) return false
       if (f.risco === 'qualquer' ? !c.risco : f.risco && c.risco !== f.risco) return false
+      if (f.nivel === 'vazio' ? c.nivel != null : f.nivel && c.nivel !== f.nivel) return false
       const ix = indice.get(c.cliente_id)
       if (termo && (!ix || !casaBusca(termo, ix))) return false
       return true
@@ -76,8 +77,8 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
   )
 
   const exportar = () => {
-    const cab = ['Cliente', 'CPF/CNPJ', 'Conta principal', 'Contas', 'Status', 'Situação', 'Risco', 'Assessor', 'Responsável', 'Tarifa', 'Grupo de corretagem', 'Migração', 'Entrada', 'Parceiro', `Lotes ${mesCurto(mesRef)}`, `Receita ${mesCurto(mesRef)}`, 'Lotes 12m', 'Receita 12m', 'Receita total', 'Último giro', 'Dias sem giro', 'Telefone', 'E-mail', 'Alertas']
-    const linhas = filtrados.map(c => [c.nome, c.documento ?? '', c.conta_principal ?? '', c.n_contas, c.status, c.situacao, c.risco ?? '', c.assessor_nome ?? '', c.responsavel ?? '', c.tarifa, c.grupo_corretagem ?? '', c.data_migracao ?? '', c.data_entrada ?? '', c.parceiro ?? '', c.lotes_mes, c.receita_mes, c.lotes_12m, c.receita_12m, c.receita_total, c.ultimo_giro ?? '', c.dias_sem_giro ?? '', c.telefone ?? '', c.email ?? '', c.alertas.join('; ')])
+    const cab = ['Cliente', 'Nível', 'Média de lotes 3 m', 'CPF/CNPJ', 'Conta principal', 'Contas', 'Status', 'Situação', 'Risco', 'Assessor', 'Responsável', 'Tarifa', 'Grupo de corretagem', 'Migração', 'Entrada', 'Parceiro', `Lotes ${mesCurto(mesRef)}`, `Receita ${mesCurto(mesRef)}`, 'Lotes 12m', 'Receita 12m', 'Receita total', 'Último giro', 'Dias sem giro', 'Telefone', 'E-mail', 'Alertas']
+    const linhas = filtrados.map(c => [c.nome, c.nivel ?? '', Math.round(c.lotes_media_3m), c.documento ?? '', c.conta_principal ?? '', c.n_contas, c.status, c.situacao, c.risco ?? '', c.assessor_nome ?? '', c.responsavel ?? '', c.tarifa, c.grupo_corretagem ?? '', c.data_migracao ?? '', c.data_entrada ?? '', c.parceiro ?? '', c.lotes_mes, c.receita_mes, c.lotes_12m, c.receita_12m, c.receita_total, c.ultimo_giro ?? '', c.dias_sem_giro ?? '', c.telefone ?? '', c.email ?? '', c.alertas.join('; ')])
     const csv = [cab, ...linhas].map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
@@ -88,7 +89,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
   }
 
   const sel = (k: keyof Filtros, v: string) => setF(x => ({ ...x, [k]: v }))
-  const temFiltro = !!(f.busca || f.status || f.situacao || f.responsavel || f.assessor || f.alerta || f.grupo || f.risco)
+  const temFiltro = !!(f.busca || f.status || f.situacao || f.responsavel || f.assessor || f.alerta || f.grupo || f.risco || f.nivel)
 
   return (
     <Panel
@@ -128,13 +129,19 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
           <option value="qualquer">em risco</option>
           {RISCOS.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
-        {temFiltro && <button type="button" className="link text-label" onClick={() => setF({ busca: '', status: '', situacao: '', responsavel: '', assessor: '', alerta: '', grupo: '', risco: '' })}>limpar</button>}
+        <select className="field-sm" value={f.nivel} onChange={e => sel('nivel', e.target.value)} aria-label="Nível" title="Nível pela média de lotes/mês dos 3 meses anteriores">
+          <option value="">Nível: todos</option>
+          {NIVEIS.map(n => <option key={n} value={n}>{n}</option>)}
+          <option value="vazio">sem giro nos 3 meses</option>
+        </select>
+        {temFiltro && <button type="button" className="link text-label" onClick={() => setF({ busca: '', status: '', situacao: '', responsavel: '', assessor: '', alerta: '', grupo: '', risco: '', nivel: '' })}>limpar</button>}
       </div>
       <div className="tbl-wrap max-h-[70vh]">
         <table className="tbl tbl-dense">
           <thead>
             <tr>
               {th('nome', 'Cliente')}
+              {th('lotes_media_3m', 'Nível', { prio: 'p2' })}
               {th('documento', 'CPF/CNPJ', { prio: 'p2' })}
               {th('conta_principal', 'Conta', { prio: 'p2' })}
               {th('n_contas', 'Contas', { num: true, prio: 'p3' })}
@@ -158,10 +165,11 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
             </tr>
           </thead>
           <tbody>
-            {visiveis.length === 0 && <tr><td colSpan={comAcoes ? 21 : 20} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente com esses filtros.</td></tr>}
+            {visiveis.length === 0 && <tr><td colSpan={comAcoes ? 22 : 21} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente com esses filtros.</td></tr>}
             {visiveis.map(c => (
               <tr key={c.cliente_id}>
-                <td className="max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link></td>
+                <td className="max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link></td>
+                <td className="col-p2"><NivelMarca nivel={c.nivel} media={c.lotes_media_3m} mostrarMedia /></td>
                 <td className="num muted col-p2">{c.documento ?? TRACO}</td>
                 <td className="num col-p2">{c.conta_principal ?? TRACO}</td>
                 <td className={cn('num col-p3', c.n_contas <= 1 && 'subtle')}>{c.n_contas}</td>

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
-import { RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, n2, r0 } from '@/components/gestao/Celulas'
+import { NivelMarca, RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, n2, r0 } from '@/components/gestao/Celulas'
 import type { ReceitaLinha } from '@/lib/gestao/tipos'
 import { expandir, type Compacto } from '@/lib/compacto'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
@@ -43,11 +43,11 @@ export function TabelaReceita({ clientes: compacto, base, mesRef }: { clientes: 
             <tr>
               <th>Cliente</th><th className="col-p3">Resp.</th><th className="col-p3">Status</th><th className="col-p3">Migração</th><th className="num col-p3">Tarifa</th>
               <th className="num">Lotes {mesCurto(mesRef)}</th><th className="num col-p3">Zerados</th><th className="num col-p2">Corretagem</th><th className="num col-p2">Zeragem</th><th className="num">Receita mês</th>
-              <th className="num">Lotes 12 m</th><th className="num col-p2">Receita 12 m</th><th className="num col-p2">Receita total</th><th className="num col-p3">Meses c/ giro</th><th className="col-p2">Último giro</th><th className="num col-p3">Meses s/ giro</th><th className="col-p2">Situação</th><th className="col-p2">Risco</th>
+              <th className="num">Lotes 12 m</th><th className="num col-p2">Receita 12 m</th><th className="num col-p2">Receita total</th><th className="num col-p3">Meses c/ giro</th><th className="col-p2">Último giro</th><th className="num col-p3">Meses s/ giro</th><th className="col-p2">Situação</th><th className="col-p2">Nível</th><th className="col-p2">Risco</th>
             </tr>
           </thead>
           <tbody>
-            {visiveis.length === 0 && <tr><td colSpan={18} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente.</td></tr>}
+            {visiveis.length === 0 && <tr><td colSpan={19} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente.</td></tr>}
             {visiveis.map(c => (
               <tr key={c.cliente_id}>
                 <td className="max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link></td>
@@ -67,6 +67,7 @@ export function TabelaReceita({ clientes: compacto, base, mesRef }: { clientes: 
                 <td className="num col-p2">{c.ultimo_mes_giro ? mesCurto(c.ultimo_mes_giro) : TRACO}</td>
                 <td className={cn('num col-p3', !c.meses_sem_giro && 'subtle')}>{c.meses_sem_giro ?? TRACO}</td>
                 <td className="col-p2"><SituacaoBadge situacao={c.situacao} mesesSemGiro={c.meses_sem_giro} /></td>
+                <td className="col-p2"><NivelMarca nivel={c.nivel} media={c.lotes_media_3m} /></td>
                 <td className="col-p2"><RiscoTexto risco={c.risco} /></td>
               </tr>
             ))}

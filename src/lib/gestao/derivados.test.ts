@@ -8,7 +8,7 @@ const base: ClienteRow = {
   data_migracao: null, data_entrada: null, dias_ate_migrar: null, lotes_total: 0, lotes_mes: 0, zerados_mes: 0, receita_mes: 0,
   receita_corretagem_mes: 0, receita_zeragem_mes: 0, lotes_12m: 0, receita_12m: 0, ultimo_giro: null, ultimo_mes_giro: null, meses_sem_giro: null,
   situacao: 'Nunca girou', alertas: [], parceiro: null, observacoes: null, motivo_recusa: null, grupo_corretagem: null,
-  receita_total: 0, primeiro_mes_giro: null, meses_ativos: 0, lotes_mes_anterior: 0, lotes_media_3m: 0, dias_sem_giro: null, risco: null,
+  receita_total: 0, primeiro_mes_giro: null, meses_ativos: 0, lotes_mes_anterior: 0, lotes_media_3m: 0, dias_sem_giro: null, risco: null, nivel: null,
 }
 const c = (p: Partial<ClienteRow>): ClienteRow => ({ ...base, ...p })
 
@@ -48,5 +48,17 @@ describe('valor do cliente', () => {
     expect(s.map(x => x.safra)).toEqual(['2026-09-01', '2026-08-01'])
     expect(s[1]).toMatchObject({ migrados: 2, receitaTotal: 1300 })
     expect(valorPorSafra(rows, 1)).toHaveLength(1)
+  })
+})
+
+describe('nível do cliente pela média de lotes dos 3 meses', async () => {
+  const { nivelPelaMedia } = await import('./tipos')
+  it('limites padrão: 1.000 alto, 100 médio, sem giro sem nível', () => {
+    expect(nivelPelaMedia(0)).toBeNull()
+    expect(nivelPelaMedia(0.4)).toBe('Baixo')
+    expect(nivelPelaMedia(99.9)).toBe('Baixo')
+    expect(nivelPelaMedia(100)).toBe('Médio')
+    expect(nivelPelaMedia(999)).toBe('Médio')
+    expect(nivelPelaMedia(1000)).toBe('Alto')
   })
 })

@@ -49,12 +49,24 @@ export type ClienteRow = {
   lotes_media_3m: number                     // média dos 3 meses anteriores ao de referência
   dias_sem_giro: number | null               // contados até o último dia lançado na corretora
   risco: Risco | null
+  nivel: Nivel | null                        // pela média de lotes dos 3 meses anteriores (S46)
 }
-// Risco de inativação: parou = ativo no mês mas sem giro há N dias; em queda = no ritmo atual fecha
-// o mês bem abaixo da média dos 3 meses anteriores (parâmetros risco_* da corretora)
+// Risco de inativação (S44, corrigido na S46): vale para quem girou nos 3 meses anteriores ou no mês.
+// parou = sem giro há N dias; em queda = no ritmo atual fecha o mês bem abaixo da média dos 3 meses
+// anteriores (parâmetros risco_* da corretora)
 export const RISCOS = ['parou', 'em queda'] as const
 export type Risco = (typeof RISCOS)[number]
 export const risco = (v: unknown): Risco | null => ((RISCOS as readonly string[]).includes(String(v)) ? (v as Risco) : null)
+// Nível do cliente (S46) pela média de lotes/mês dos 3 meses anteriores ao de referência:
+// Alto ≥ nivel_alto_lotes (1.000), Médio ≥ nivel_medio_lotes (100), Baixo abaixo disso; sem giro = null
+export const NIVEIS = ['Alto', 'Médio', 'Baixo'] as const
+export type Nivel = (typeof NIVEIS)[number]
+export const nivel = (v: unknown): Nivel | null => ((NIVEIS as readonly string[]).includes(String(v)) ? (v as Nivel) : null)
+export const NIVEL_ALTO_PADRAO = 1000
+export const NIVEL_MEDIO_PADRAO = 100
+// Nível pela média com os limites padrão: só para quando o banco ainda não devolve o nível (antes da S46)
+export const nivelPelaMedia = (media: number): Nivel | null =>
+  media <= 0 ? null : media >= NIVEL_ALTO_PADRAO ? 'Alto' : media >= NIVEL_MEDIO_PADRAO ? 'Médio' : 'Baixo'
 // Grupo de corretagem: Bloqueado = o banco travou a alteração por um período; pede-se o desbloqueio
 export const GRUPOS_CORRETAGEM = ['Vinculado', 'Não vinculado', 'Bloqueado'] as const
 export type GrupoCorretagem = (typeof GRUPOS_CORRETAGEM)[number]
@@ -64,14 +76,14 @@ export const grupoCorretagem = (v: unknown): GrupoCorretagem | null =>
 export const CAMPOS_CLIENTE_LINHA = [
   'cliente_id', 'nome', 'documento', 'telefone', 'email', 'n_contas', 'conta_principal', 'status', 'assessor_nome', 'responsavel', 'tarifa',
   'data_migracao', 'data_entrada', 'lotes_mes', 'receita_mes', 'lotes_12m', 'receita_12m', 'ultimo_giro', 'meses_sem_giro', 'situacao', 'alertas', 'parceiro', 'grupo_corretagem',
-  'receita_total', 'lotes_mes_anterior', 'lotes_media_3m', 'dias_sem_giro', 'risco',
+  'receita_total', 'lotes_mes_anterior', 'lotes_media_3m', 'dias_sem_giro', 'risco', 'nivel',
 ] as const satisfies readonly (keyof ClienteRow)[]
 export type ClienteLinha = Pick<ClienteRow, (typeof CAMPOS_CLIENTE_LINHA)[number]>
 // Idem para a tabela da tela Receita
 export const CAMPOS_RECEITA_LINHA = [
   'cliente_id', 'nome', 'status', 'situacao', 'responsavel', 'tarifa', 'data_migracao', 'lotes_mes', 'zerados_mes', 'receita_mes',
   'receita_corretagem_mes', 'receita_zeragem_mes', 'lotes_12m', 'receita_12m', 'ultimo_mes_giro', 'meses_sem_giro',
-  'receita_total', 'meses_ativos', 'risco',
+  'receita_total', 'meses_ativos', 'risco', 'nivel', 'lotes_media_3m',
 ] as const satisfies readonly (keyof ClienteRow)[]
 export type ReceitaLinha = Pick<ClienteRow, (typeof CAMPOS_RECEITA_LINHA)[number]>
 
@@ -163,7 +175,7 @@ export type PainelKpis = {
   posicao_mes: number        // contratos/ações carregados (não day trade), fora dos lotes e da receita
   acoes_operacoes_mes: number // operações de day trade em ações/cripto (corretagem fixa, fora dos lotes)
   receita_acoes_mes: number   // corretagem fixa (ações + posições com corretagem informada), já dentro de receita_mes
-  em_risco: number            // clientes ativos em risco de inativação (S44)
+  em_risco: number            // clientes em risco de inativação: giraram nos 3 meses anteriores ou no mês (S44/S46)
 }
 
 // Cliente em risco (painel_resumo.em_risco, S44): os maiores primeiro
@@ -179,6 +191,7 @@ export type ClienteRiscoRow = {
   receita_12m: number
   ultimo_giro: string | null
   dias_sem_giro: number | null
+  nivel: Nivel | null
 }
 
 // Giro de um dia (giro_diario, S44): base da projeção de fechamento do mês
@@ -206,7 +219,8 @@ export type PainelResumo = {
     lotes_mes: number; zerados_mes: number; receita_mes: number; lotes_12m: number; receita_12m: number
     nunca_giraram: number; inativos: number; ativos_sit: number; com_alertas: number; migrados_sem_data: number; multi_conta: number
     com_receita: number; media_dias_migrar: number | null
-    em_risco: number                                   // clientes ativos em risco de inativação (S44)
+    nivel_alto: number; nivel_medio: number; nivel_baixo: number; em_risco_alto: number   // clientes por nível (S46)
+    em_risco: number                                   // clientes em risco de inativação: giraram nos 3 meses anteriores ou no mês (S44/S46)
   }
   grupos: GrupoPainel[]
   sem_giro: { cliente_id: string; nome: string; responsavel: string | null; data_migracao: string | null; telefone: string | null }[]

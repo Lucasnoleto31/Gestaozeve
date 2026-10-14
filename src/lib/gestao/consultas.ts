@@ -5,7 +5,7 @@ import { mesBrasil } from '@/lib/periodo'
 import { mesAtual } from './meses'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
-import { grupoCorretagem, risco as riscoDe } from './tipos'
+import { grupoCorretagem, nivel as nivelDe, nivelPelaMedia, risco as riscoDe } from './tipos'
 import { casaBusca, contaCasa, digitosTelefone, indexarBusca, lerBusca, regexDoTexto } from '@/lib/busca'
 import { normTexto } from '@/lib/texto'
 import type { ClienteEncontrado } from './tipos'
@@ -71,7 +71,7 @@ export const mapCliente = (r: Row): ClienteRow => ({
   grupo_corretagem: grupoCorretagem(r.grupo_corretagem),
   receita_total: num(r.receita_total), primeiro_mes_giro: str(r.primeiro_mes_giro), meses_ativos: num(r.meses_ativos),
   lotes_mes_anterior: num(r.lotes_mes_anterior), lotes_media_3m: num(r.lotes_media_3m),
-  dias_sem_giro: r.dias_sem_giro == null ? null : num(r.dias_sem_giro), risco: riscoDe(r.risco),
+  dias_sem_giro: r.dias_sem_giro == null ? null : num(r.dias_sem_giro), risco: riscoDe(r.risco), nivel: nivelDoBanco(r),
 })
 
 // ── Clientes ───────────────────────────────────────────────────────────────
@@ -245,11 +245,18 @@ export const mapKpis = (r: Row): PainelKpis => ({
   acoes_operacoes_mes: num(r.acoes_operacoes_mes), receita_acoes_mes: num(r.receita_acoes_mes), em_risco: num(r.em_risco),
 })
 
+// Nível como o banco devolve (S46); antes da S46 a coluna não existe e o nível sai da média com os limites padrão
+const nivelDoBanco = (r: Row) => ('nivel' in r ? nivelDe(r.nivel) : nivelPelaMedia(num(r.lotes_media_3m)))
+
+// Ordem dos níveis: Alto primeiro, sem nível por último
+const ordemNivel = (n: string | null) => (n === 'Alto' ? 1 : n === 'Médio' ? 2 : n === 'Baixo' ? 3 : 4)
+
 // Cliente em risco (S44), como vem de painel_resumo.em_risco ou de clientes_risco
 const mapRisco = (r: Row): ClienteRiscoRow => ({
   cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), responsavel: str(r.responsavel), telefone: str(r.telefone),
   risco: riscoDe(r.risco) ?? 'parou', lotes_mes: num(r.lotes_mes), lotes_mes_anterior: num(r.lotes_mes_anterior), lotes_media_3m: num(r.lotes_media_3m),
   receita_12m: num(r.receita_12m), ultimo_giro: str(r.ultimo_giro), dias_sem_giro: r.dias_sem_giro == null ? null : num(r.dias_sem_giro),
+  nivel: nivelDoBanco(r),
 })
 
 // Giro por dia para a projeção de fechamento (S44): só clientes cadastrados, como os KPIs. Antes da
@@ -554,6 +561,7 @@ export async function painelResumo(corretora: Corretora, mesRef: string | null):
       migrados_sem_data: num(r.migrados_sem_data), multi_conta: num(r.multi_conta), com_receita: num(r.com_receita),
       media_dias_migrar: r.media_dias_migrar == null ? null : num(r.media_dias_migrar),
       em_risco: num(r.em_risco),
+      nivel_alto: num(r.nivel_alto), nivel_medio: num(r.nivel_medio), nivel_baixo: num(r.nivel_baixo), em_risco_alto: num(r.em_risco_alto),
     },
     grupos: linhas<GrupoPainel>(j.grupos, grupo),
     sem_giro: linhas(j.sem_giro, s => ({ cliente_id: String(s.cliente_id), nome: String(s.nome ?? ''), responsavel: str(s.responsavel), data_migracao: str(s.data_migracao), telefone: str(s.telefone) })),
@@ -573,12 +581,14 @@ function resumoPelaLista(rows: ClienteRow[]): PainelResumo {
       lotes_mes: r.lotesMes, zerados_mes: r.zeradosMes, receita_mes: r.receitaMes, lotes_12m: r.lotes12m, receita_12m: r.receita12m,
       nunca_giraram: r.nuncaGiraram, inativos: r.inativos, ativos_sit: r.ativosSit, com_alertas: r.comAlertas, migrados_sem_data: r.migradosSemData,
       multi_conta: r.multiConta, com_receita: r.comReceita, media_dias_migrar: r.mediaDiasMigrar, em_risco: rows.filter(c => c.risco).length,
+      nivel_alto: rows.filter(c => c.nivel === 'Alto').length, nivel_medio: rows.filter(c => c.nivel === 'Médio').length,
+      nivel_baixo: rows.filter(c => c.nivel === 'Baixo').length, em_risco_alto: rows.filter(c => c.risco && c.nivel === 'Alto').length,
     },
     grupos: [...porAssessor(rows).map(grupo('assessor')), ...porResponsavel(rows).map(grupo('responsavel'))],
     sem_giro: rows.filter(c => c.situacao === 'Nunca girou').sort((a, b) => (b.data_migracao ?? '').localeCompare(a.data_migracao ?? '')).slice(0, 15)
       .map(c => ({ cliente_id: c.cliente_id, nome: c.nome, responsavel: c.responsavel, data_migracao: c.data_migracao, telefone: c.telefone })),
-    em_risco: rows.filter(c => c.risco).sort((a, b) => b.receita_12m - a.receita_12m).slice(0, 12)
-      .map(c => ({ cliente_id: c.cliente_id, nome: c.nome, responsavel: c.responsavel, telefone: c.telefone, risco: c.risco!, lotes_mes: c.lotes_mes, lotes_mes_anterior: c.lotes_mes_anterior, lotes_media_3m: c.lotes_media_3m, receita_12m: c.receita_12m, ultimo_giro: c.ultimo_giro, dias_sem_giro: c.dias_sem_giro })),
+    em_risco: rows.filter(c => c.risco).sort((a, b) => ordemNivel(a.nivel) - ordemNivel(b.nivel) || b.lotes_media_3m - a.lotes_media_3m || b.receita_12m - a.receita_12m).slice(0, 12)
+      .map(c => ({ cliente_id: c.cliente_id, nome: c.nome, responsavel: c.responsavel, telefone: c.telefone, risco: c.risco!, lotes_mes: c.lotes_mes, lotes_mes_anterior: c.lotes_mes_anterior, lotes_media_3m: c.lotes_media_3m, receita_12m: c.receita_12m, ultimo_giro: c.ultimo_giro, dias_sem_giro: c.dias_sem_giro, nivel: c.nivel })),
   }
 }
 

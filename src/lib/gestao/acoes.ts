@@ -13,7 +13,7 @@ import { esquecerMesReferencia } from './pagina'
 import { ehIso, parseMes } from './meses'
 import { faixasValidas } from './comissao'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
-import { GRUPOS_CORRETAGEM, type ClienteDuplicado, type LeadCampos, type NovoClienteCampos, type Resultado } from './tipos'
+import { GRUPOS_CORRETAGEM, NIVEL_ALTO_PADRAO, NIVEL_MEDIO_PADRAO, type ClienteDuplicado, type LeadCampos, type NovoClienteCampos, type Resultado } from './tipos'
 
 type Row = Record<string, unknown>
 type Db = Awaited<ReturnType<typeof equipe>>['db']
@@ -668,7 +668,7 @@ function validarParametro(chave: string, valor: string): string {
   switch (chave) {
     case 'zeragem_padrao': case 'meses_inativo': case 'dias_alerta_lead': case 'imposto_pct': case 'delta_pct':
     case 'impostos_embutidos_pct': case 'imposto_btg_pct': case 'tarifa_acoes_daytrade':
-    case 'risco_dias_parado': case 'risco_queda_pct': case 'risco_minimo_lotes':
+    case 'risco_dias_parado': case 'risco_queda_pct': case 'risco_minimo_lotes': case 'nivel_alto_lotes': case 'nivel_medio_lotes':
       return numero()
     case 'receita_desde_migracao': case 'lotes_apenas_futuros': {
       const s = v.toUpperCase()
@@ -725,10 +725,20 @@ export async function salvarParametro(corretoraIn: string, chave: string, valor:
     const corretora = corretoraIn === 'GERAL' ? 'GERAL' : await corretoraValida(corretoraIn)
     const { db } = await somenteAdmin()
     const v = validarParametro(chave, valor)
+    // níveis: os dois limites maiores que zero e o médio abaixo do alto
+    if (chave === 'nivel_alto_lotes' || chave === 'nivel_medio_lotes') {
+      const n = Number(v)
+      if (!(n > 0)) throw new Error('Informe uma média de lotes maior que zero')
+      const outra = chave === 'nivel_alto_lotes' ? 'nivel_medio_lotes' : 'nivel_alto_lotes'
+      const { data } = await db.from('parametros').select('valor').eq('corretora', corretora).eq('chave', outra).maybeSingle()
+      const valorOutra = Number((data as Row | null)?.valor ?? (outra === 'nivel_alto_lotes' ? NIVEL_ALTO_PADRAO : NIVEL_MEDIO_PADRAO))
+      const [alto, medio] = chave === 'nivel_alto_lotes' ? [n, valorOutra] : [valorOutra, n]
+      if (Number.isFinite(alto) && Number.isFinite(medio) && medio >= alto) throw new Error(`O nível médio (${medio}) precisa ficar abaixo do nível alto (${alto})`)
+    }
     const { error } = await db.from('parametros').upsert({ corretora, chave, valor: v, updated_at: new Date().toISOString() }, { onConflict: 'corretora,chave' })
     if (error) falha(error, 'parametros')
-    // os parâmetros de risco só mudam a leitura (clientes_lista), não os lotes: sem recálculo
-    if (corretora !== 'GERAL') { if (!chave.startsWith('risco_')) await recalcular(db, corretora); revalidarCorretora(corretora) }
+    // os parâmetros de risco e de nível só mudam a leitura (clientes_lista), não os lotes: sem recálculo
+    if (corretora !== 'GERAL') { if (!chave.startsWith('risco_') && !chave.startsWith('nivel_')) await recalcular(db, corretora); revalidarCorretora(corretora) }
     else { revalidatePath('/leads', 'layout'); revalidatePath('/funil') }
     return { ok: true }
   })

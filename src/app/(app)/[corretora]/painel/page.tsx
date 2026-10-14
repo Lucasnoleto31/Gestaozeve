@@ -15,7 +15,7 @@ import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { DeltaText, KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { MesPicker } from '@/components/gestao/Filtros'
-import { BarraCelula, LinhaVazia, RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, n2, p1, r0, rCurto } from '@/components/gestao/Celulas'
+import { BarraCelula, LinhaVazia, NivelMarca, RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, n2, p1, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { HeatmapClientes } from './HeatmapClientes'
 
@@ -174,12 +174,15 @@ export default async function PainelPage({ params, searchParams }: { params: Par
         actions={<MesPicker valor={mesRef} />}
       />
       <PageBody>
-        <KpiRow cols={6}>
+        <KpiRow cols={7}>
           <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(r.em_processamento)} em processamento`} />
           <KpiCard label="Taxa de migração" value={fmtPct(taxaMigracao)} sub={`${fmtNum(r.migrados)} migrados · ${fmtNum(r.recusaram)} recusaram`} />
-          <KpiCard label="Ativos no mês" value={fmtNum(r.ativos)} sub={totalRisco ? <Link href={`${base}/clientes?risco=qualquer`} className="link text-warn">{fmtNum(totalRisco)} em risco</Link> : `giraram em ${mesCurto(mesRef)}`}
+          <KpiCard label="Ativos no mês" value={fmtNum(r.ativos)} sub={`giraram em ${mesCurto(mesRef)}`}
             delta={variacaoMensal(r.ativos, mesAnt?.clientes_ativos, proj.mesAnterior, proj.parcial, fmtNum)} />
           <KpiCard label="% ativos da base migrada" value={fmtPct(pctAtivosMigrados)} sub={`${fmtPct(pctAtivosLevados)} do total levado`} />
+          <KpiCard label="Em risco" tone={r.em_risco_alto ? 'warn' : 'neutral'}
+            value={totalRisco ? <Link href={`${base}/clientes?risco=qualquer`} className="link">{fmtNum(totalRisco)}</Link> : fmtNum(0)}
+            sub={`${r.em_risco_alto ? `${fmtNum(r.em_risco_alto)} de nível alto · ` : ''}giraram nos últimos 3 meses e pararam ou caíram`} />
           <KpiCard label="Lotes no mês" value={fmtNum(r.lotes_mes)} sub={`${fmtNum(r.zerados_mes)} zerados · ${rCurto(r.receita_mes)}${mesAtual?.acoes_operacoes ? ` · ${fmtNum(mesAtual.acoes_operacoes)} op. de ações` : ''}${mesAtual?.posicao ? ` · ${fmtNum(mesAtual.posicao)} em posição` : ''}${proj.parcial ? ` · fecha em ${fmtNum(Math.round(proj.lotes.projetado))}` : ''}`}
             delta={variacaoDe(proj, proj.lotes, fmtNum)} />
           {comRepasse ? (
@@ -423,16 +426,17 @@ export default async function PainelPage({ params, searchParams }: { params: Par
         </Panel>
 
         <div className="grid gap-8 xl:grid-cols-2">
-          <Panel title="Clientes em risco" subtitle={`Ativos em ${mesCurto(mesRef)} que pararam de girar (dias contados até o último lançamento) ou caíram contra os 3 meses anteriores · maiores primeiro.`}
+          <Panel title="Clientes em risco" subtitle={`Giraram nos últimos 3 meses e pararam (dias contados até o último lançamento) ou caíram contra os 3 meses anteriores · nível mais alto primeiro${r.em_risco_alto ? ` · ${fmtNum(r.em_risco_alto)} de nível alto` : ''}.`}
             action={<Link href={`${base}/clientes?risco=qualquer`} className="link text-label">ver todos ({fmtNum(totalRisco)})</Link>}>
             <div className="tbl-wrap">
               <table className="tbl tbl-dense">
-                <thead><tr><th>Cliente</th><th className="col-p2">Responsável</th><th>Risco</th><th className="num">Lotes mês</th><th className="num col-p2">Média 3 m</th><th className="num col-p3">Receita 12 m</th><th>Último giro</th></tr></thead>
+                <thead><tr><th>Cliente</th><th>Nível</th><th className="col-p2">Responsável</th><th>Risco</th><th className="num">Lotes mês</th><th className="num col-p2">Média 3 m</th><th className="num col-p3">Receita 12 m</th><th>Último giro</th></tr></thead>
                 <tbody>
-                  {risco.length === 0 && <LinhaVazia colunas={7}>Nenhum cliente em risco.</LinhaVazia>}
+                  {risco.length === 0 && <LinhaVazia colunas={8}>Nenhum cliente em risco.</LinhaVazia>}
                   {risco.map(c => (
                     <tr key={c.cliente_id}>
-                      <td className="max-w-[200px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link></td>
+                      <td className="max-w-[200px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link></td>
+                      <td><NivelMarca nivel={c.nivel} media={c.lotes_media_3m} /></td>
                       <td className="muted col-p2">{c.responsavel ?? TRACO}</td>
                       <td><RiscoTexto risco={c.risco} diasSemGiro={c.dias_sem_giro} /></td>
                       <td className={cn('num', !c.lotes_mes && 'subtle')}>{n0(c.lotes_mes)}</td>

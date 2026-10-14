@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { fmtBRL2, fmtNum, fmtNum2, fmtPct } from '@/lib/format'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
-import type { Risco, Situacao, StatusConta } from '@/lib/gestao/tipos'
+import type { Nivel, Risco, Situacao, StatusConta } from '@/lib/gestao/tipos'
 
 export const TRACO = '–'
 
@@ -82,7 +82,7 @@ export function SituacaoBadge({ situacao, mesesSemGiro }: { situacao: Situacao |
 // colorido (DESIGN.md: um badge por linha no máximo).
 const RISCO_TEXTO: Record<Risco, string> = { parou: 'Parou', 'em queda': 'Em queda' }
 const RISCO_TITULO: Record<Risco, string> = {
-  parou: 'Ativo no mês, mas sem giro há dias (contados até o último dia lançado)',
+  parou: 'Girou nos últimos 3 meses, mas está sem giro há dias (contados até o último dia lançado)',
   'em queda': 'No ritmo atual fecha o mês bem abaixo da média dos 3 meses anteriores',
 }
 const riscoTexto = (risco: Risco, diasSemGiro?: number | null) => (risco === 'parou' && diasSemGiro ? `Parou · ${diasSemGiro} d` : RISCO_TEXTO[risco])
@@ -92,6 +92,39 @@ export function RiscoBadge({ risco, diasSemGiro }: { risco: Risco; diasSemGiro?:
 export function RiscoTexto({ risco, diasSemGiro }: { risco: Risco | null | undefined; diasSemGiro?: number | null }) {
   if (!risco) return <span className="subtle">{TRACO}</span>
   return <span className={cn('whitespace-nowrap font-medium tabular-nums', risco === 'parou' ? 'text-loss' : 'text-warn')} title={RISCO_TITULO[risco]}>{riscoTexto(risco, diasSemGiro)}</span>
+}
+
+// Nível do cliente (S46) pela média de lotes/mês dos 3 meses anteriores: barrinhas de sinal (3 = Alto,
+// 2 = Médio, 1 = Baixo) na tinta, com o texto mais forte quanto maior o nível. Na ficha vira badge
+// (Alto na tinta, que salta; Médio com fio forte; Baixo apagado).
+const NIVEL_BARRAS: Record<Nivel, number> = { Alto: 3, 'Médio': 2, Baixo: 1 }
+const nivelTitulo = (nivel: Nivel, media?: number | null) =>
+  `Nível ${nivel.toLowerCase()}${media != null ? ` · média de ${fmtNum(Math.round(media))} lotes/mês nos 3 meses anteriores` : ''}`
+function NivelBarras({ nivel }: { nivel: Nivel }) {
+  const n = NIVEL_BARRAS[nivel]
+  return (
+    <span className="inline-flex items-end gap-[2px]" aria-hidden>
+      {[1, 2, 3].map(i => <span key={i} className={cn('w-[3px] rounded-[1px] bg-current', i === 1 ? 'h-[5px]' : i === 2 ? 'h-[8px]' : 'h-[11px]', i > n && 'opacity-25')} />)}
+    </span>
+  )
+}
+export function NivelMarca({ nivel, media, mostrarMedia = false }: { nivel: Nivel | null | undefined; media?: number | null; mostrarMedia?: boolean }) {
+  if (!nivel) return <span className="subtle">{TRACO}</span>
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap text-label', nivel === 'Alto' ? 'font-semibold text-fg' : nivel === 'Médio' ? 'font-medium text-fg' : 'text-fg-muted')} title={nivelTitulo(nivel, media)}>
+      <NivelBarras nivel={nivel} />{nivel}
+      {mostrarMedia && media != null && <span className="font-normal tabular-nums text-fg-subtle">{fmtNum(Math.round(media))}</span>}
+    </span>
+  )
+}
+export function NivelBadge({ nivel, media }: { nivel: Nivel; media?: number | null }) {
+  return (
+    <span title={nivelTitulo(nivel, media)}>
+      <Badge variant={nivel === 'Alto' ? 'accent' : 'neutral'} className={cn(nivel === 'Médio' && 'border-line-strong text-fg', nivel === 'Baixo' && 'border-dashed')}>
+        <NivelBarras nivel={nivel} />Nível {nivel.toLowerCase()}
+      </Badge>
+    </span>
+  )
 }
 
 const STATUS_VARIANT: Record<StatusConta, BadgeVariant> = { 'Migrado': 'gain', 'Em processamento': 'neutral', 'Recusou': 'loss' }

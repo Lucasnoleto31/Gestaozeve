@@ -16,7 +16,7 @@ import { Panel } from '@/components/ui/Panel'
 import { Badge } from '@/components/ui/Badge'
 import { buttonClasses } from '@/components/ui/buttonStyles'
 import { MesPicker } from '@/components/gestao/Filtros'
-import { CelulaCalor, LinhaVazia, RiscoBadge, SituacaoBadge, StatusBadge, TRACO, dataCurta, dataPt, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
+import { CelulaCalor, LinhaVazia, NivelBadge, RiscoBadge, SituacaoBadge, StatusBadge, TRACO, dataCurta, dataPt, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { temListaPropria } from '@/lib/corretoras'
 import { BuscaCliente } from '../BuscaCliente'
@@ -101,6 +101,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                   <h2 className="text-title font-semibold tracking-tight text-fg">{cadastro.nome}</h2>
                   {resumo && <StatusBadge status={resumo.status} />}
                   {resumo && <SituacaoBadge situacao={resumo.situacao} mesesSemGiro={resumo.meses_sem_giro} />}
+                  {resumo?.nivel && <NivelBadge nivel={resumo.nivel} media={resumo.lotes_media_3m} />}
                   {resumo?.risco && <RiscoBadge risco={resumo.risco} diasSemGiro={resumo.dias_sem_giro} />}
                 </div>
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-dense sm:grid-cols-[auto_1fr_auto_1fr]">

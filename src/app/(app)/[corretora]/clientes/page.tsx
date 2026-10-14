@@ -31,6 +31,8 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   const migrados7d = clientes.filter(c => c.status === 'Migrado' && c.data_migracao && c.data_migracao >= d7).length
   const entraram30d = clientes.filter(c => c.data_entrada && c.data_entrada >= d30).length
   const emRisco = clientes.filter(c => c.risco).length
+  const porNivel = { alto: clientes.filter(c => c.nivel === 'Alto').length, medio: clientes.filter(c => c.nivel === 'Médio').length, baixo: clientes.filter(c => c.nivel === 'Baixo').length }
+  const altoEmRisco = clientes.filter(c => c.nivel === 'Alto' && c.risco).length
 
   return (
     <>
@@ -47,18 +49,19 @@ export default async function ClientesPage({ params, searchParams }: { params: P
         </>}
       />
       <PageBody>
-        <KpiRow cols={6}>
+        <KpiRow cols={7}>
           <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(entraram30d)} entraram em 30 dias`} />
           <KpiCard label="Migrados" value={fmtNum(r.migrados)} sub={`${fmtPct(r.taxaMigracao)} da base · ${fmtNum(migrados7d)} nos últimos 7 dias`} />
           <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)} sub={r.mediaDiasMigrar != null ? `média de ${Math.round(r.mediaDiasMigrar)} dias até migrar` : 'sem data de entrada para medir'} />
           <KpiCard label="Recusaram" value={fmtNum(r.recusaram)} sub={`${fmtPct(r.levados ? (r.recusaram / r.levados) * 100 : 0)} da base`} />
           <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.ativosSit)} ativos · ${fmtNum(r.inativos)} inativos em ${mesCurto(mesRef)}${emRisco ? ` · ${fmtNum(emRisco)} em risco` : ''}`} />
+          <KpiCard label="Nível alto" value={fmtNum(porNivel.alto)} sub={`${fmtNum(porNivel.medio)} médio · ${fmtNum(porNivel.baixo)} baixo · média de lotes 3 m${altoEmRisco ? ` · ${fmtNum(altoEmRisco)} alto em risco` : ''}`} tone={altoEmRisco ? 'warn' : 'neutral'} />
           <KpiCard label="Com alertas" value={fmtNum(r.comAlertas)} sub="algo a completar no cadastro" tone={r.comAlertas ? 'warn' : 'neutral'} />
         </KpiRow>
         <TabelaClientes
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
-          filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '', grupo: q.grupo ?? '', risco: q.risco ?? '' }}
+          filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '', grupo: q.grupo ?? '', risco: q.risco ?? '', nivel: q.nivel ?? '' }}
         />
       </PageBody>
     </>

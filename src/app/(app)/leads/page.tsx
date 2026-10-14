@@ -1,10 +1,12 @@
 export const dynamic = 'force-dynamic'
 
+import { cookies } from 'next/headers'
+import { CHAVES_FILTRO_LEADS, COOKIE_FILTROS_LEADS, filtrosIniciais } from '@/lib/filtrosLista'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { assessoresPorCorretora, leadsLista, parametroGeral, responsaveisAtivos, statusLeadLista } from '@/lib/gestao/consultas'
-import { mesAtual, parseMes } from '@/lib/gestao/meses'
+import { mesAtual } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { corretorasDoPerfil } from '@/lib/corretoras'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -42,7 +44,10 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const motivos = new Map<string, number>()
   for (const p of perdidos) if (p.motivo_perda) motivos.set(p.motivo_perda, (motivos.get(p.motivo_perda) ?? 0) + 1)
   const motivoComum = [...motivos.entries()].sort((a, b) => b[1] - a[1])[0]
-  const f = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '')
+  // filtros da tabela: os do endereço; sem nenhum no endereço (menu, volta da ficha), os últimos usados
+  const daUrl: Record<string, string> = {}
+  for (const [k, v] of Object.entries(sp)) if (typeof v === 'string') daUrl[k] = v
+  const fi = filtrosIniciais(daUrl, (await cookies()).get(COOKIE_FILTROS_LEADS)?.value, CHAVES_FILTRO_LEADS)
 
   return (
     <>
@@ -77,7 +82,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           assessores={assessores}
           hoje={fmtDate(hojeBrasil())}
           usuario={profile.nome}
-          filtrosIniciais={{ busca: f('busca'), mes: parseMes(f('mes'))?.slice(0, 7) ?? '', status: f('status'), responsavel: f('responsavel'), origem: f('origem'), corretora: f('corretora'), alerta: f('alerta') === '1', clientes: f('clientes') }}
+          filtrosSalvos={fi}
         />
       </PageBody>
     </>

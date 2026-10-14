@@ -20,10 +20,20 @@ import { mesBrasil } from '@/lib/periodo'
 import { cn } from '@/lib/utils'
 import { mesmaPessoa } from '@/lib/texto'
 import { casaBusca, indexarBusca, lerBusca } from '@/lib/busca'
+import { CHAVES_FILTRO_LEADS, COOKIE_FILTROS_LEADS, comEscolhido, limiteDe, opcaoValida, type ValoresFiltro } from '@/lib/filtrosLista'
+import { filtrosNoNavegador, lembrarAberto, useFiltrosNaUrl, useRolarAteAberto } from '@/lib/useFiltrosNaUrl'
 import { LeadForm } from './LeadForm'
 import { GanhoWizard } from './GanhoWizard'
 
 type Filtros = { busca: string; mes: string; status: string; responsavel: string; origem: string; corretora: string; alerta: boolean; clientes: string }
+// Padrões dos filtros (o que não vai para o endereço nem para o cookie da lista)
+const PADROES_FILTRO = { busca: '', mes: '', status: '', responsavel: '', origem: '', corretora: '', alerta: '', clientes: '', n: '100' }
+const FILTROS_VAZIOS: Filtros = { busca: '', mes: '', status: '', responsavel: '', origem: '', corretora: '', alerta: false, clientes: '' }
+// Filtros a partir dos valores guardados (mês como AAAA-MM; 'Base' só sim/não)
+function filtrosDe(v: ValoresFiltro): Filtros {
+  const mes = /^\d{4}-\d{2}/.test(v.mes ?? '') ? (v.mes as string).slice(0, 7) : ''
+  return { busca: v.busca ?? '', mes, status: v.status ?? '', responsavel: v.responsavel ?? '', origem: v.origem ?? '', corretora: v.corretora ?? '', alerta: v.alerta === '1', clientes: opcaoValida(v.clientes, ['sim', 'nao']) }
+}
 
 // Quem está atendendo o lead: chip leve com a inicial na tinta quando é outra pessoa (não
 // chamar), inicial só no contorno quando é você, "livre" tracejado quando ninguém assumiu.
@@ -43,13 +53,13 @@ function Atendimento({ responsavel, aberto, meu }: { responsavel: string | null;
   )
 }
 
-export function TabelaLeads({ leads: compacto, responsaveis, responsaveisClientes, status, admin, filtrosIniciais, corretoras, assessores, hoje, usuario }: {
+export function TabelaLeads({ leads: compacto, responsaveis, responsaveisClientes, status, admin, filtrosSalvos, corretoras, assessores, hoje, usuario }: {
   leads: Compacto<LeadRow>
   responsaveis: string[]           // quem trabalha leads
   responsaveisClientes: string[]   // quem cuida de clientes (ficha do lead ganho)
   status: StatusLead[]
   admin: boolean
-  filtrosIniciais: Filtros
+  filtrosSalvos: ValoresFiltro    // filtros do endereço ou, sem eles, os últimos usados (cookie)
   corretoras: Corretora[]          // corretoras que o usuário vê (destino do lead ganho)
   assessores: AssessoresPorCorretora
   hoje: string
@@ -60,8 +70,14 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
   const { avisar } = useToast()
   // a lista chega compacta (colunas + arrays) e vira objetos aqui
   const leads = useMemo(() => expandir(compacto), [compacto])
-  const [f, setF] = useState<Filtros>(filtrosIniciais)
-  const [limite, setLimite] = useState(100)
+  // filtros e linhas à mostra no endereço e no cookie da lista: voltar da ficha do cliente (voltar do
+  // navegador ou menu) reabre a lista como estava. No navegador valem o endereço real e o cookie (no voltar,
+  // o Next reaproveita a página com as props antigas); no servidor, o que a página mandou.
+  const [inicio] = useState(() => filtrosNoNavegador(COOKIE_FILTROS_LEADS, CHAVES_FILTRO_LEADS) ?? filtrosSalvos)
+  const [f, setF] = useState<Filtros>(() => filtrosDe(inicio))
+  const [limite, setLimite] = useState(() => limiteDe(inicio.n))
+  useFiltrosNaUrl(COOKIE_FILTROS_LEADS, { ...f, alerta: f.alerta ? '1' : '', n: String(limite) }, PADROES_FILTRO)
+  useRolarAteAberto(COOKIE_FILTROS_LEADS)
   const [editando, setEditando] = useState<LeadRow | null>(null)
   const [registrando, setRegistrando] = useState<string | null>(null)
   const [ganhando, setGanhando] = useState<LeadRow | null>(null)
@@ -70,9 +86,12 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
   const [fechando, setFechando] = useState(false)
   const [erroPerda, setErroPerda] = useState<string | null>(null)
 
-  const origens = useMemo(() => [...new Set(leads.map(l => l.origem ?? ''))].filter(Boolean).sort(), [leads])
-  const corretorasOpera = useMemo(() => [...new Set(leads.map(l => l.corretora ?? ''))].filter(Boolean).sort(), [leads])
-  const respOpcoes = useMemo(() => [...new Set([...responsaveis, ...leads.map(l => l.responsavel ?? '')])].filter(Boolean).sort(), [leads, responsaveis])
+  // opções tiradas dos dados, sem perder o valor guardado que não aparece mais (senão o filtro fica escondido)
+  const origens = useMemo(() => comEscolhido([...new Set(leads.map(l => l.origem ?? ''))].filter(Boolean).sort(), f.origem), [leads, f.origem])
+  const corretorasOpera = useMemo(() => comEscolhido([...new Set(leads.map(l => l.corretora ?? ''))].filter(Boolean).sort(), f.corretora), [leads, f.corretora])
+  const respOpcoes = useMemo(() => comEscolhido([...new Set([...responsaveis, ...leads.map(l => l.responsavel ?? '')])].filter(Boolean).sort(), f.responsavel, ['__livre']), [leads, responsaveis, f.responsavel])
+  const statusOpcoes = useMemo(() => comEscolhido(status.map(s => s.status), f.status), [status, f.status])
+  const temFiltro = !!(f.busca || f.mes || f.status || f.responsavel || f.origem || f.corretora || f.alerta || f.clientes)
   // Mês de entrada de cada lead no fuso de Brasília (mesmo critério do funil)
   const mesPorLead = useMemo(() => new Map(leads.map(l => [l.id, mesBrasil(l.data_hora)])), [leads])
   const mesesOpcoes = useMemo(() => {
@@ -134,12 +153,13 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
           <input className="field-sm w-52 pl-8" placeholder="Nome, telefone, CPF, e-mail…" value={f.busca} onChange={e => sel('busca', e.target.value)} aria-label="Buscar" />
         </label>
         <select className="field-sm" value={f.mes} onChange={e => sel('mes', e.target.value)} aria-label="Mês de entrada"><option value="">Mês: todos</option>{mesesOpcoes.map(([m, n]) => <option key={m} value={m}>{labelMesCurto(m + '-01')} · {fmtNum(n)}</option>)}</select>
-        <select className="field-sm" value={f.status} onChange={e => sel('status', e.target.value)} aria-label="Status"><option value="">Status: todos</option>{status.map(s => <option key={s.status}>{s.status}</option>)}</select>
+        <select className="field-sm" value={f.status} onChange={e => sel('status', e.target.value)} aria-label="Status"><option value="">Status: todos</option>{statusOpcoes.map(s => <option key={s}>{s}</option>)}</select>
         <select className="field-sm" value={f.responsavel} onChange={e => sel('responsavel', e.target.value)} aria-label="Responsável"><option value="">Responsável: todos</option><option value="__livre">livres (sem responsável)</option>{respOpcoes.map(r => <option key={r}>{r}</option>)}</select>
         <select className="field-sm" value={f.origem} onChange={e => sel('origem', e.target.value)} aria-label="Origem"><option value="">Origem: todas</option>{origens.map(o => <option key={o}>{o}</option>)}</select>
         <select className="field-sm" value={f.corretora} onChange={e => sel('corretora', e.target.value)} aria-label="Corretora onde opera"><option value="">Opera em: todas</option>{corretorasOpera.map(c => <option key={c}>{c}</option>)}</select>
         <select className="field-sm" value={f.clientes} onChange={e => sel('clientes', e.target.value)} aria-label="Já é cliente"><option value="">Base: todos</option><option value="sim">já são clientes</option><option value="nao">não são clientes</option></select>
         <label className="flex items-center gap-1.5 text-label text-fg-muted"><input type="checkbox" checked={f.alerta} onChange={e => sel('alerta', e.target.checked)} />só com alerta</label>
+        {temFiltro && <button type="button" className="link text-label" onClick={() => setF(FILTROS_VAZIOS)}>limpar</button>}
       </div>
       <div className="tbl-wrap max-h-[70vh]">
         <table className="tbl tbl-dense">
@@ -154,7 +174,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
             {visiveis.map(l => {
               const href = fichaHref(l)
               return (
-                <tr key={l.id} className="cursor-pointer" onClick={() => setEditando(l)}>
+                <tr key={l.id} data-linha={l.id} className="cursor-pointer" onClick={() => setEditando(l)}>
                   <td className="num whitespace-nowrap col-p2">{new Date(l.data_hora).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                   <td className="max-w-[200px] truncate font-medium">
                     {l.nome}
@@ -175,7 +195,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
                     {l.cliente_id ? (
                       <span className="inline-flex items-center gap-1.5 text-label">
                         <span className={l.girou ? 'text-gain' : 'text-fg-muted'}>{l.cliente_status ?? 'cliente'}{l.girou ? ` · ${n0(l.lotes_12m)} lotes` : ''}</span>
-                        {href && <Link href={href} className="link">ficha</Link>}
+                        {href && <Link href={href} onClick={() => lembrarAberto(COOKIE_FILTROS_LEADS, l.id)} className="link">ficha</Link>}
                       </span>
                     ) : <span className="text-fg-subtle">{TRACO}</span>}
                   </td>

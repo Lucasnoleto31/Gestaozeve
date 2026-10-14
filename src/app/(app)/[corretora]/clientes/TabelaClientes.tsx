@@ -8,29 +8,56 @@ import { Button } from '@/components/ui/Button'
 import { ExcluirClienteButton } from './ExcluirClienteButton'
 import type { Corretora } from '@/lib/corretoras'
 import { NivelMarca, RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, n2, r0 } from '@/components/gestao/Celulas'
-import { GRUPOS_CORRETAGEM, NIVEIS, RISCOS, type ClienteLinha } from '@/lib/gestao/tipos'
+import { CAMPOS_CLIENTE_LINHA, GRUPOS_CORRETAGEM, NIVEIS, RISCOS, type ClienteLinha } from '@/lib/gestao/tipos'
 import { expandir, type Compacto } from '@/lib/compacto'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { casaBusca, indexarBusca, lerBusca } from '@/lib/busca'
+import { CHAVES_FILTRO_CLIENTES, comEscolhido, cookieFiltrosClientes, limiteDe, opcaoValida, type ValoresFiltro } from '@/lib/filtrosLista'
+import { filtrosNoNavegador, lembrarAberto, useFiltrosNaUrl, useRolarAteAberto } from '@/lib/useFiltrosNaUrl'
 
 type Filtros = { busca: string; status: string; situacao: string; responsavel: string; assessor: string; alerta: string; grupo: string; risco: string; nivel: string }
 type Ordem = { col: keyof ClienteLinha; dir: 'asc' | 'desc' }
+// Padrões dos filtros (o que não vai para o endereço nem para o cookie da lista)
+const PADROES_FILTRO = { busca: '', status: '', situacao: '', responsavel: '', assessor: '', alerta: '', grupo: '', risco: '', nivel: '', ordem: 'lotes_12m:desc', n: '100' }
+// "lotes_12m:desc" → ordem; inválida → padrão
+function lerOrdem(v: string | null | undefined): Ordem {
+  const [col, dir] = String(v ?? '').split(':')
+  if ((CAMPOS_CLIENTE_LINHA as readonly string[]).includes(col) && (dir === 'asc' || dir === 'desc')) return { col: col as keyof ClienteLinha, dir }
+  return { col: 'lotes_12m', dir: 'desc' }
+}
 
 const SITUACOES = ['Ativo', 'Inativo', 'Nunca girou', 'Em processamento', 'Recusou']
 const STATUS = ['Migrado', 'Em processamento', 'Recusou']
+// Filtros a partir dos valores guardados: opção de lista fixa que não existe vira vazio (filtro escondido não)
+function filtrosDe(v: ValoresFiltro): Filtros {
+  return {
+    busca: v.busca ?? '', status: opcaoValida(v.status, STATUS), situacao: opcaoValida(v.situacao, SITUACOES),
+    responsavel: v.responsavel ?? '', assessor: v.assessor ?? '', alerta: v.alerta ?? '',
+    grupo: opcaoValida(v.grupo, [...GRUPOS_CORRETAGEM, 'vazio']), risco: opcaoValida(v.risco, ['qualquer', ...RISCOS]),
+    nivel: opcaoValida(v.nivel, [...NIVEIS, 'vazio']),
+  }
+}
 
-export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosIniciais, corretora, comAcoes = false, podeExcluir = false }: { clientes: Compacto<ClienteLinha>; base: string; mesRef: MesRef; filtrosIniciais: Filtros; corretora: Corretora; comAcoes?: boolean; podeExcluir?: boolean }) {
+export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, filtrosSalvos, corretora, comAcoes = false, podeExcluir = false }: { clientes: Compacto<ClienteLinha>; base: string; mesRef: MesRef; mesParam?: string | null; filtrosSalvos: ValoresFiltro; corretora: Corretora; comAcoes?: boolean; podeExcluir?: boolean }) {
   // a lista chega compacta (colunas + arrays) e vira objetos aqui
   const clientes = useMemo(() => expandir(compacto), [compacto])
-  const [f, setF] = useState<Filtros>(filtrosIniciais)
-  const [ordem, setOrdem] = useState<Ordem>({ col: 'lotes_12m', dir: 'desc' })
-  const [limite, setLimite] = useState(100)
+  // filtros, ordenação e linhas à mostra guardados no endereço e no cookie da lista: voltar da ficha (seta,
+  // menu ou voltar do navegador) reabre a lista como estava. No navegador valem o endereço real e o cookie
+  // (no voltar, o Next reaproveita a página com as props antigas); no servidor, o que a página mandou.
+  const nomeCookie = cookieFiltrosClientes(corretora)
+  const [inicio] = useState(() => filtrosNoNavegador(nomeCookie, CHAVES_FILTRO_CLIENTES) ?? filtrosSalvos)
+  const [f, setF] = useState<Filtros>(() => filtrosDe(inicio))
+  const [ordem, setOrdem] = useState<Ordem>(() => lerOrdem(inicio.ordem))
+  const [limite, setLimite] = useState(() => limiteDe(inicio.n))
+  useFiltrosNaUrl(nomeCookie, { ...f, ordem: `${String(ordem.col)}:${ordem.dir}`, n: String(limite) }, PADROES_FILTRO)
+  useRolarAteAberto(nomeCookie)
 
-  const responsaveis = useMemo(() => [...new Set(clientes.map(c => c.responsavel ?? ''))].filter(Boolean).sort(), [clientes])
-  const assessores = useMemo(() => [...new Set(clientes.map(c => c.assessor_nome ?? ''))].filter(Boolean).sort(), [clientes])
-  const alertas = useMemo(() => [...new Set(clientes.flatMap(c => c.alertas.map(a => (/^\d+ contas$/.test(a) ? 'contas' : a))))].sort(), [clientes])
+  // opções tiradas dos dados, sem perder o valor guardado que não aparece mais (senão o filtro fica escondido)
+  const responsaveis = useMemo(() => comEscolhido([...new Set(clientes.map(c => c.responsavel ?? ''))].filter(Boolean).sort(), f.responsavel), [clientes, f.responsavel])
+  const assessores = useMemo(() => comEscolhido([...new Set(clientes.map(c => c.assessor_nome ?? ''))].filter(Boolean).sort(), f.assessor), [clientes, f.assessor])
+  const alertas = useMemo(() => comEscolhido([...new Set(clientes.flatMap(c => c.alertas.map(a => (/^\d+ contas$/.test(a) ? 'contas' : a))))].sort(), f.alerta, ['qualquer']), [clientes, f.alerta])
 
   // índice de busca de cada cliente (nome, assessor, parceiro, e-mail, telefone, CPF/CNPJ e conta), montado uma vez
   const indice = useMemo(() => new Map(clientes.map(c => [c.cliente_id, indexarBusca({
@@ -167,8 +194,8 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, filtrosInicia
           <tbody>
             {visiveis.length === 0 && <tr><td colSpan={comAcoes ? 22 : 21} className="py-10 text-center text-dense text-fg-subtle">Nenhum cliente com esses filtros.</td></tr>}
             {visiveis.map(c => (
-              <tr key={c.cliente_id}>
-                <td className="max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link></td>
+              <tr key={c.cliente_id} data-linha={c.cliente_id}>
+                <td className="max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}${mesParam ? `?mes=${mesParam}` : ''}`} onClick={() => lembrarAberto(nomeCookie, c.cliente_id)} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link></td>
                 <td className="col-p2"><NivelMarca nivel={c.nivel} media={c.lotes_media_3m} mostrarMedia /></td>
                 <td className="num muted col-p2">{c.documento ?? TRACO}</td>
                 <td className="num col-p2">{c.conta_principal ?? TRACO}</td>

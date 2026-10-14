@@ -87,7 +87,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
     <>
       <PageHeader
         eyebrow={`${ctx.eyebrow} · Consulta`}
-        title={<Link href={`${base}/clientes`} className="inline-flex items-center gap-2 text-fg hover:text-accent"><ArrowLeft className="h-5 w-5" aria-hidden />Cliente</Link>}
+        title={<Link href={`${base}/clientes${ctx.mesEscolhido ? `?mes=${mesRef.slice(0, 7)}` : ''}`} className="inline-flex items-center gap-2 text-fg hover:text-accent"><ArrowLeft className="h-5 w-5" aria-hidden />Cliente</Link>}
         actions={<><BuscaCliente corretora={corretora} base={base} /><MesPicker valor={mesRef} /></>}
       />
       <PageBody>

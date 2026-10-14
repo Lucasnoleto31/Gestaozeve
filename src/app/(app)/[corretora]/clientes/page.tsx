@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic'
 
+import { cookies } from 'next/headers'
+import { CHAVES_FILTRO_CLIENTES, cookieFiltrosClientes, filtrosIniciais } from '@/lib/filtrosLista'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { assessoresPorCorretora, clientesLista, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { resumoClientes } from '@/lib/gestao/derivados'
@@ -20,6 +22,8 @@ import { NovoClienteButton } from './NovoClienteButton'
 export default async function ClientesPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base, q } = ctx
+  // filtros da tabela: os do endereço; sem nenhum no endereço (seta da ficha, menu), os últimos usados
+  const fi = filtrosIniciais(q, (await cookies()).get(cookieFiltrosClientes(corretora))?.value, CHAVES_FILTRO_CLIENTES)
   const listaPropria = temListaPropria(corretora)
   const [clientes, responsaveis, assessores, profile] = await Promise.all([
     clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(),
@@ -61,7 +65,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
         <TabelaClientes
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
-          filtrosIniciais={{ situacao: q.situacao ?? '', status: q.status ?? '', alerta: q.alerta ?? '', responsavel: q.responsavel ?? '', assessor: q.assessor ?? '', busca: q.busca ?? '', grupo: q.grupo ?? '', risco: q.risco ?? '', nivel: q.nivel ?? '' }}
+          filtrosSalvos={fi} mesParam={ctx.mesEscolhido ? mesRef.slice(0, 7) : null}
         />
       </PageBody>
     </>

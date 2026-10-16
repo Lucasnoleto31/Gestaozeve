@@ -733,3 +733,23 @@ html {
     padding-bottom: 0.6rem;
   }
 }
+
+/* Extrato para imprimir (/extrato): folha deitada e tabela um pouco mais compacta para caberem as 11 colunas */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+  .claro .tbl-wrap {
+    overflow: visible;
+    max-height: none;
+  }
+  .claro .tbl {
+    font-size: 11px;
+  }
+  .claro .tbl th,
+  .claro .tbl td {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+}

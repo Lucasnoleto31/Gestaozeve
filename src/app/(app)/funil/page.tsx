@@ -3,9 +3,9 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { funilMensal, funilSafra, funilSafraPor, leadsDiario, leadsResumo } from '@/lib/gestao/consultas'
-import { fmtMedia, somaUltimos } from '@/lib/gestao/contatos'
-import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes } from '@/lib/gestao/meses'
+import { contatosParaResumo, funilMensal, funilSafra, funilSafraPor, leadsDiario, leadsResumo } from '@/lib/gestao/consultas'
+import { fmtMedia, resumoContatosPorAtendente, somaUltimos, type ResumoAtendente } from '@/lib/gestao/contatos'
+import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes, somarMeses } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
@@ -29,9 +29,12 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const periodo: 'mes' | '12m' = sp.periodo === '12m' ? '12m' : 'mes'
   const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
-  const [mensal, safra, porResp, porOrigem, leads, diario] = await Promise.all([
+  const [mensal, safra, porResp, porOrigem, leads, diario, dadosContatos] = await Promise.all([
     funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40), leadsDiario(30),
+    contatosParaResumo(),
   ])
+  // contatos realizados no período (pela data do contato), por responsável do lead
+  const contatosAt = resumoContatosPorAtendente(dadosContatos.contatos, dadosContatos.leads, soMes ? mesRef : meses[0], somarMeses(mesRef, 1))
   const m = new Map(mensal.map(x => [x.mes_ref, x]))
   const s = new Map(safra.map(x => [x.mes_ref, x]))
   const semSafra = safra.length === 0 && leads.total > 0   // S27 ainda não rodou
@@ -164,6 +167,21 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
             series={[{ key: 'entraram', nome: 'Entraram', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'contatos', nome: 'Contatos', tipo: 'line', cor: 'neutral' }]} altura={220} />
         </Panel>
 
+        <Panel title="Contatos realizados" subtitle={`Contatos registrados em ${rotuloPeriodo}, pela data do contato, agrupados pelo responsável do lead. Por lead = contatos ÷ leads contatados; por dia = contatos ÷ dias com contato; até ganhar = todos os contatos (de todo o atendimento) dos leads ganhos contatados no período ÷ esses ganhos.`}>
+          <div className="tbl-wrap">
+            <table className="tbl tbl-dense">
+              <thead>
+                <tr><th>Atendente</th><th className="num">Contatos</th><th className="num">Leads contatados</th><th className="num">Por lead</th><th className="num col-p2">Dias com contato</th><th className="num col-p2">Por dia</th><th className="num">Ganhos</th><th className="num">Contatos até ganhar</th></tr>
+              </thead>
+              <tbody>
+                {contatosAt.linhas.length === 0 && <LinhaVazia colunas={8}>Nenhum contato registrado em {rotuloPeriodo}.</LinhaVazia>}
+                {contatosAt.linhas.map(a => <LinhaAtendente key={a.grupo} a={a} />)}
+              </tbody>
+              {contatosAt.linhas.length > 1 && <tfoot><LinhaAtendente a={contatosAt.total} total /></tfoot>}
+            </table>
+          </div>
+        </Panel>
+
         <Panel title="Safra mês a mês" subtitle={`Cada coluna é o mês em que o lead entrou; os números dizem o que aconteceu com esses leads até hoje. De ${mesCurto(meses[0])} a ${mesCurto(mesRef)}; a coluna do mês escolhido fica em destaque.`}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
@@ -213,6 +231,23 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
         </Panel>
       </PageBody>
     </>
+  )
+}
+
+// Uma linha de "Contatos realizados": médias com uma casa, traço quando não há base
+function LinhaAtendente({ a, total }: { a: ResumoAtendente; total?: boolean }) {
+  const media = (x: number, n: number) => (n ? fmtMedia(x / n) : TRACO)
+  return (
+    <tr className={cn(total && 'total')}>
+      <td className="font-medium">{a.grupo}</td>
+      <td className="num font-semibold">{n0(a.contatos)}</td>
+      <td className="num">{n0(a.leads)}</td>
+      <td className="num">{media(a.contatos, a.leads)}</td>
+      <td className="num col-p2">{n0(a.dias)}</td>
+      <td className="num col-p2">{media(a.contatos, a.dias)}</td>
+      <td className={cn('num', a.ganhos && 'text-gain')}>{n0(a.ganhos)}</td>
+      <td className="num font-semibold">{media(a.contatos_ganhos, a.ganhos)}</td>
+    </tr>
   )
 }
 

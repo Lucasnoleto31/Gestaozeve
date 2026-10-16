@@ -3,7 +3,7 @@
 import type { Corretora } from '@/lib/corretoras'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { mesAtual } from './meses'
-import { diarioPelaLista } from './contatos'
+import { diarioPelaLista, type ContatoLeve, type LeadLeve } from './contatos'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import { grupoCorretagem, nivel as nivelDe, nivelPelaMedia, risco as riscoDe } from './tipos'
@@ -423,6 +423,22 @@ export async function leadContatos(leadId: string): Promise<LeadContato[]> {
   return linhas(data, r => ({
     id: String(r.id), lead_id: String(r.lead_id), data: String(r.data), nota: str(r.nota), criado_por_nome: str(r.criado_por_nome), created_at: String(r.created_at),
   }))
+}
+
+// Histórico de contatos inteiro (lead e data) e os leads (responsável e status), para o resumo de
+// contatos por atendente no Funil. São tabelas pequenas (duas colunas); antes da S47 vem vazio.
+export async function contatosParaResumo(): Promise<{ contatos: ContatoLeve[]; leads: LeadLeve[] }> {
+  const { db } = await equipe()
+  const [contatos, leads] = await Promise.all([
+    db.from('lead_contatos').select('lead_id, data').range(0, PAGINA - 1),
+    db.from('leads').select('id, responsavel, status').range(0, PAGINA - 1),
+  ])
+  if (contatos.error) { if (tabelaAusente(contatos.error)) return { contatos: [], leads: [] }; falha(contatos.error, 'lead_contatos') }
+  if (leads.error) falha(leads.error, 'leads')
+  return {
+    contatos: linhas(contatos.data, r => ({ lead_id: String(r.lead_id), data: String(r.data) })),
+    leads: linhas(leads.data, r => ({ id: String(r.id), responsavel: str(r.responsavel), status: String(r.status ?? 'Novo') })),
+  }
 }
 
 // Série diária dos leads (S47): quantos entraram, contatos feitos, ganhos, perdidos e contas abertas

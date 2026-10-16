@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diarioPelaLista, fmtMedia, mediaContatos, rotuloDia, somaUltimos, ultimosDias } from './contatos'
+import { diarioPelaLista, fmtMedia, mediaContatos, resumoContatosPorAtendente, rotuloDia, somaUltimos, ultimosDias } from './contatos'
 
 describe('mediaContatos', () => {
   it('ignora quem não tem contato registrado', () => {
@@ -41,5 +41,36 @@ describe('diarioPelaLista', () => {
     expect(s[2]).toEqual({ dia: '2026-10-16', entraram: 1, contatos: 0, ganhos: 2, perdidos: 0, contas_abertas: 0 })
     expect(somaUltimos(s, 7, 'ganhos')).toBe(2)
     expect(somaUltimos(s, 1, 'entraram')).toBe(1)
+  })
+})
+
+describe('resumoContatosPorAtendente', () => {
+  const leads = [
+    { id: 'a', responsavel: 'Artur', status: 'Ganho' },
+    { id: 'b', responsavel: 'Artur', status: 'Em contato' },
+    { id: 'c', responsavel: 'Lucas', status: 'Ganho' },
+    { id: 'd', responsavel: null, status: 'Perdido' },
+  ]
+  const contatos = [
+    { lead_id: 'a', data: '2026-09-28' },   // antes do período: conta só no "até ganhar"
+    { lead_id: 'a', data: '2026-10-02' }, { lead_id: 'a', data: '2026-10-05' },
+    { lead_id: 'b', data: '2026-10-05' },
+    { lead_id: 'c', data: '2026-10-10' },
+    { lead_id: 'd', data: '2026-10-10' },
+    { lead_id: 'c', data: '2026-11-01' },   // depois do período
+    { lead_id: 'zz', data: '2026-10-11' },  // lead que não existe mais
+  ]
+  it('agrupa pelo responsável do lead, no período, com total de leads e dias distintos', () => {
+    const { linhas, total } = resumoContatosPorAtendente(contatos, leads, '2026-10-01', '2026-11-01')
+    expect(linhas.map(l => l.grupo)).toEqual(['Artur', 'Lucas', 'Sem responsável'])
+    expect(linhas[0]).toEqual({ grupo: 'Artur', contatos: 3, leads: 2, dias: 2, ganhos: 1, contatos_ganhos: 3 })
+    expect(linhas[1]).toEqual({ grupo: 'Lucas', contatos: 1, leads: 1, dias: 1, ganhos: 1, contatos_ganhos: 2 })
+    expect(linhas[2]).toEqual({ grupo: 'Sem responsável', contatos: 1, leads: 1, dias: 1, ganhos: 0, contatos_ganhos: 0 })
+    expect(total).toEqual({ grupo: 'Total', contatos: 5, leads: 4, dias: 3, ganhos: 2, contatos_ganhos: 5 })
+  })
+  it('sem contatos no período devolve vazio', () => {
+    const { linhas, total } = resumoContatosPorAtendente(contatos, leads, '2026-12-01', '2027-01-01')
+    expect(linhas).toEqual([])
+    expect(total.contatos).toBe(0)
   })
 })

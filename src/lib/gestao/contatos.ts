@@ -50,3 +50,42 @@ export function diarioPelaLista(leads: Pick<LeadRow, 'data_hora' | 'status' | 'd
   }
   return [...porDia.values()]
 }
+
+// ── Contatos realizados por atendente (Funil) ───────────────────────────────
+export type ContatoLeve = { lead_id: string; data: string }
+export type LeadLeve = { id: string; responsavel: string | null; status: string }
+export type ResumoAtendente = {
+  grupo: string            // responsável do lead ('Sem responsável' quando vazio)
+  contatos: number         // contatos registrados no período
+  leads: number            // leads distintos contatados no período
+  dias: number             // dias distintos com contato
+  ganhos: number           // desses leads, quantos estão como Ganho
+  contatos_ganhos: number  // contatos de todo o atendimento desses ganhos (média até ganhar = contatos_ganhos / ganhos)
+}
+
+// Contatos feitos em [inicio, fimExclusivo) ('YYYY-MM-DD'), agrupados pelo responsável do lead, mais a
+// linha de total (leads e dias distintos no conjunto todo, não a soma das linhas).
+export function resumoContatosPorAtendente(contatos: ContatoLeve[], leads: LeadLeve[], inicio: string, fimExclusivo: string): { linhas: ResumoAtendente[]; total: ResumoAtendente } {
+  const porLead = new Map(leads.map(l => [l.id, l]))
+  const totalPorLead = new Map<string, number>()
+  for (const c of contatos) totalPorLead.set(c.lead_id, (totalPorLead.get(c.lead_id) ?? 0) + 1)
+  type Acc = { grupo: string; contatos: number; leads: Set<string>; dias: Set<string>; ganhos: Set<string>; contatos_ganhos: number }
+  const novo = (grupo: string): Acc => ({ grupo, contatos: 0, leads: new Set(), dias: new Set(), ganhos: new Set(), contatos_ganhos: 0 })
+  const grupos = new Map<string, Acc>()
+  const total = novo('Total')
+  const soma = (a: Acc, c: ContatoLeve, l: LeadLeve) => {
+    a.contatos++; a.leads.add(c.lead_id); a.dias.add(c.data)
+    if (l.status === 'Ganho' && !a.ganhos.has(c.lead_id)) { a.ganhos.add(c.lead_id); a.contatos_ganhos += totalPorLead.get(c.lead_id) ?? 0 }
+  }
+  for (const c of contatos) {
+    if (c.data < inicio || c.data >= fimExclusivo) continue
+    const l = porLead.get(c.lead_id)
+    if (!l) continue
+    const g = l.responsavel?.trim() || 'Sem responsável'
+    let a = grupos.get(g)
+    if (!a) { a = novo(g); grupos.set(g, a) }
+    soma(a, c, l); soma(total, c, l)
+  }
+  const fechar = (a: Acc): ResumoAtendente => ({ grupo: a.grupo, contatos: a.contatos, leads: a.leads.size, dias: a.dias.size, ganhos: a.ganhos.size, contatos_ganhos: a.contatos_ganhos })
+  return { linhas: [...grupos.values()].map(fechar).sort((a, b) => b.contatos - a.contatos || a.grupo.localeCompare(b.grupo)), total: fechar(total) }
+}

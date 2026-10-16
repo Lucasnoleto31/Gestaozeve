@@ -480,6 +480,9 @@ export type Faixa = { pontos_min: number; valor: number }
 export type Consolidado = { nome: string }
 export type StatusLead = { status: string; tipo: 'Aberto' | 'Fechado'; ordem: number }
 export type Responsavel = { nome: string; atende_clientes: boolean; atende_leads: boolean; ativo: boolean; comissionado: boolean }
+// Parceiro da tela Comissões e do extrato: comissionado (Parâmetros › Responsáveis) ou citado no campo
+// Parceiro da ficha dos clientes / dos assessores; clientes = quantas fichas trazem o nome
+export type Parceiro = { nome: string; comissionado: boolean; clientes: number }
 
 // Comissão de parceiros por abertura e ativação de conta (S39)
 export type ComissaoItem = {

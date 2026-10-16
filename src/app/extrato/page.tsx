@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic'
 // a navegação do sistema. Abre a partir da tela Comissões (?parceiro=&mes=AAAA-MM&corretora=&receita=0).
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { comissaoCarteiraMes, parceirosComissionados } from '@/lib/gestao/consultas'
+import { comissaoCarteiraMes, parceirosLista } from '@/lib/gestao/consultas'
+import { normTexto } from '@/lib/texto'
 import { mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { CORRETORA_LABEL, isCorretora } from '@/lib/corretoras'
 import { totaisExtrato } from '@/lib/gestao/extrato'
@@ -21,8 +22,9 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
   if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor')) redirect('/login')
   const sp = await searchParams
   const q = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '')
-  const parceiros = await parceirosComissionados()
-  const parceiro = parceiros.includes(q('parceiro')) ? q('parceiro') : (parceiros[0] ?? null)
+  const parceiros = await parceirosLista()
+  const pedido = normTexto(q('parceiro'))
+  const parceiro = (parceiros.find(p => normTexto(p.nome) === pedido) ?? parceiros[0])?.nome ?? null
   if (!parceiro) redirect('/comissoes')
   const corretoraParam = q('corretora')
   const corretora = isCorretora(corretoraParam) ? corretoraParam : null

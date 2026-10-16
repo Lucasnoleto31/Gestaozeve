@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { comissaoCarteiraMes, comissaoContasMes, comissaoItens, comissaoMensal, comissaoPagamentos, comissaoRegras, parceirosComissionados } from '@/lib/gestao/consultas'
+import { comissaoCarteiraMes, comissaoContasMes, comissaoItens, comissaoMensal, comissaoPagamentos, comissaoRegras, parceirosLista } from '@/lib/gestao/consultas'
+import { normTexto } from '@/lib/texto'
 import { linhasPlanilha, nomeArquivoExtrato, totaisExtrato } from '@/lib/gestao/extrato'
 import { lerFaixasComissao, resumirComissao, valorDaFaixa } from '@/lib/gestao/comissao'
 import { janelaMeses, mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
@@ -68,8 +69,11 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   const admin = profile.role === 'admin'
   const sp = await searchParams
   const q = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '')
-  const parceiros = await parceirosComissionados()
-  const parceiro = parceiros.includes(q('parceiro')) ? q('parceiro') : (parceiros[0] ?? null)
+  // comissionados e parceiros das fichas/assessores; o pedido no endereço casa sem acento nem caixa
+  const parceiros = await parceirosLista()
+  const pedido = normTexto(q('parceiro'))
+  const parceiroSel = parceiros.find(p => normTexto(p.nome) === pedido) ?? parceiros[0] ?? null
+  const parceiro = parceiroSel?.nome ?? null
   const corretoraParam = q('corretora')
   const corretora = isCorretora(corretoraParam) ? corretoraParam : null
   const mesRef = parseMes(q('mes')) ?? mesAtual()
@@ -80,8 +84,8 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
       <>
         <PageHeader eyebrow="Parceiros · todas as corretoras" title="Comissão de parceiros" description="Abertura, ativação e reativação de contas por mês, com a receita que as contas geraram." />
         <PageBody>
-          <Alert tone="neutral" title="Nenhum parceiro comissionado ainda">
-            Marque quem é comissionado em Parâmetros › Responsáveis (coluna Comissão). Se a S39 ainda não rodou no banco, rode primeiro.
+          <Alert tone="neutral" title="Nenhum parceiro ainda">
+            Marque quem é comissionado em Parâmetros › Responsáveis (coluna Comissão) ou preencha o campo Parceiro na ficha dos clientes. Se a S39 ainda não rodou no banco, rode primeiro.
           </Alert>
         </PageBody>
       </>
@@ -145,12 +149,17 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
         title="Comissão de parceiros"
         description={<>Abertura = conta migrada na corretora. Ativação = primeira operação em até {prazo} dias da abertura. Reativação = cliente da carteira que volta a operar depois de {mesesReativacao} meses sem girar (vale como ativação). A comissão segue a faixa alcançada no mês, pela regra vigente na data do evento.</>}
         actions={<>
-          <SelectParam param="parceiro" valor={parceiro} opcoes={parceiros.map(p => ({ valor: p, label: p }))} label="Parceiro" todos={null} />
+          <SelectParam param="parceiro" valor={parceiro} opcoes={parceiros.map(p => ({ valor: p.nome, label: p.comissionado ? `${p.nome} · comissionado` : `${p.nome} · ${fmtNum(p.clientes)} ${p.clientes === 1 ? 'ficha' : 'fichas'}` }))} label="Parceiro" todos={null} />
           <SelectParam param="corretora" valor={corretora ?? ''} opcoes={CORRETORAS.map(c => ({ valor: c, label: CORRETORA_LABEL[c] }))} label="Corretora" todos="Todas" />
           <MesPicker valor={mesRef} />
         </>}
       />
       <PageBody>
+        {parceiroSel && !parceiroSel.comissionado && (
+          <Alert tone="neutral" title={`${parceiro} vem do campo Parceiro na ficha dos clientes`}>
+            Carteira, contas do mês e extrato funcionam normalmente. Para calcular comissão, marque {parceiro} em Parâmetros › Responsáveis (coluna Comissão) e cadastre as regras abaixo.
+          </Alert>
+        )}
         {semValorAbertura.length > 0 && (
           <Alert tone="warn" title={`Abertura sem valor na ${semValorAbertura.map(c => CORRETORA_LABEL[c]).join(' e ')}`}>
             A regra está com R$ 0 por conta aberta. {admin ? 'Preencha as faixas em "Regras" abaixo (formato mínimo no mês:R$ por conta, separado por ponto e vírgula).' : 'Peça ao administrador para preencher as faixas.'}

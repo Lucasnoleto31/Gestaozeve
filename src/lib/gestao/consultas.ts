@@ -16,7 +16,7 @@ import type {
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
   IncentivoRow, LeadAcao, LeadContato, LeadDiaRow, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
-  Parametro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
+  Parametro, Parceiro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
 } from './tipos'
 
 type Row = Record<string, unknown>
@@ -704,6 +704,37 @@ export async function parceirosComissionados(): Promise<string[]> {
   const { data, error } = await db.from('responsaveis').select('nome').eq('comissionado', true).eq('ativo', true).order('nome')
   if (error) { if (semS39(error)) return []; falha(error, 'responsaveis') }
   return ((data ?? []) as Row[]).map(r => String(r.nome))
+}
+
+// Parceiros da tela Comissões e do extrato: quem é comissionado (Parâmetros › Responsáveis) mais quem
+// aparece no campo Parceiro da ficha dos clientes e nos assessores (S40). Agrupado sem acento nem caixa,
+// como o banco casa (norm_texto); a grafia mostrada é a mais usada nas fichas. Comissionados primeiro,
+// depois em ordem alfabética (o campo mistura parceiros e origens, como "Direto" e "Indicação").
+// As fontes que ainda não existem no banco são ignoradas.
+export async function parceirosLista(): Promise<Parceiro[]> {
+  const { db } = await equipe()
+  const [resp, fichas, ass] = await Promise.all([
+    db.from('responsaveis').select('nome').eq('comissionado', true).eq('ativo', true),
+    db.from('cliente_corretora').select('parceiro').not('parceiro', 'is', null).range(0, PAGINA - 1),
+    db.from('assessores').select('parceiro').not('parceiro', 'is', null),
+  ])
+  type Acum = { nome: string; comissionado: boolean; clientes: number; grafias: Map<string, number> }
+  const porNorm = new Map<string, Acum>()
+  const entrada = (nome: string | null, comissionado: boolean, ficha: boolean) => {
+    const n = (nome ?? '').trim()
+    if (!n) return
+    const k = normTexto(n)
+    let p = porNorm.get(k)
+    if (!p) { p = { nome: n, comissionado: false, clientes: 0, grafias: new Map() }; porNorm.set(k, p) }
+    if (comissionado) { p.comissionado = true; p.nome = n }
+    if (ficha) { p.clientes++; p.grafias.set(n, (p.grafias.get(n) ?? 0) + 1) }
+  }
+  for (const r of (resp.error ? [] : resp.data ?? []) as Row[]) entrada(str(r.nome), true, false)
+  for (const r of (fichas.error ? [] : fichas.data ?? []) as Row[]) entrada(str(r.parceiro), false, true)
+  for (const r of (ass.error ? [] : ass.data ?? []) as Row[]) entrada(str(r.parceiro), false, false)
+  return [...porNorm.values()]
+    .map(p => ({ nome: p.comissionado ? p.nome : ([...p.grafias.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? p.nome), comissionado: p.comissionado, clientes: p.clientes }))
+    .sort((a, b) => Number(b.comissionado) - Number(a.comissionado) || a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }))
 }
 
 export async function comissaoItens(parceiro: string, corretora: Corretora | null): Promise<ComissaoItem[]> {

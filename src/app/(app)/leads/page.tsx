@@ -5,7 +5,8 @@ import { CHAVES_FILTRO_LEADS, COOKIE_FILTROS_LEADS, filtrosIniciais } from '@/li
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { assessoresPorCorretora, leadsLista, parametroGeral, responsaveisAtivos, statusLeadLista } from '@/lib/gestao/consultas'
+import { assessoresPorCorretora, leadsDiario, leadsLista, parametroGeral, responsaveisAtivos, statusLeadLista } from '@/lib/gestao/consultas'
+import { fmtMedia, mediaContatos } from '@/lib/gestao/contatos'
 import { mesAtual } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { corretorasDoPerfil } from '@/lib/corretoras'
@@ -18,14 +19,16 @@ import { TabelaLeads } from './TabelaLeads'
 import { compactar } from '@/lib/compacto'
 import { CAMPOS_LEAD } from '@/lib/gestao/tipos'
 import { AcoesLeads } from './AcoesLeads'
+import { GanhosPorDia } from './GanhosPorDia'
 
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const profile = await getProfile()
   if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor')) redirect('/dashboard')
   const sp = await searchParams
-  const [leads, responsaveis, status, diasAlerta, assessores] = await Promise.all([
-    leadsLista(), responsaveisAtivos(), statusLeadLista(), parametroGeral('dias_alerta_lead', '7'), assessoresPorCorretora(),
+  const [leads, responsaveis, status, diasAlerta, assessores, diario] = await Promise.all([
+    leadsLista(), responsaveisAtivos(), statusLeadLista(), parametroGeral('dias_alerta_lead', '7'), assessoresPorCorretora(), leadsDiario(14),
   ])
+  const hoje = fmtDate(hojeBrasil())
 
   const mes = mesAtual().slice(0, 7)
   const nesteMes = leads.filter(l => mesBrasil(l.data_hora) === mes).length
@@ -44,6 +47,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const motivos = new Map<string, number>()
   for (const p of perdidos) if (p.motivo_perda) motivos.set(p.motivo_perda, (motivos.get(p.motivo_perda) ?? 0) + 1)
   const motivoComum = [...motivos.entries()].sort((a, b) => b[1] - a[1])[0]
+  // contatos até ganhar (S47): média entre os ganhos com contato registrado; perdidos para comparar
+  const contatosGanhos = mediaContatos(ganhos)
+  const contatosPerdidos = mediaContatos(perdidos)
   // filtros da tabela: os do endereço; sem nenhum no endereço (menu, volta da ficha), os últimos usados
   const daUrl: Record<string, string> = {}
   for (const [k, v] of Object.entries(sp)) if (typeof v === 'string') daUrl[k] = v
@@ -58,13 +64,15 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         actions={<AcoesLeads responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)} status={status} admin={profile.role === 'admin'} />}
       />
       <PageBody>
-        <KpiRow cols={6}>
+        <KpiRow cols={7}>
           <KpiCard label="Total de leads" value={fmtNum(leads.length)} sub={`${fmtNum(nesteMes)} neste mês`} />
           <KpiCard label="Em aberto" value={fmtNum(abertos.length)} sub={`${fmtNum(comAlerta)} com alerta de contato`} tone={comAlerta ? 'warn' : 'neutral'} />
           <KpiCard label="Ganhos" value={fmtNum(ganhos.length)} sub={fechados ? `${fmtPct((ganhos.length / fechados) * 100, 0)} dos fechados` : 'nenhum fechado ainda'} />
           <KpiCard label="Perdidos" value={fmtNum(perdidos.length)} sub={motivoComum ? `motivo mais comum: ${motivoComum[0]}` : TRACO} />
           <KpiCard label="Já eram clientes" value={fmtNum(jaClientes)} sub={`${fmtNum(jaGiraram)} já giraram lotes`} />
           <KpiCard label="Tempo até fechar" value={mediaFechar != null ? `${Math.round(mediaFechar)} dias` : TRACO} sub={mediaAberto != null ? `${Math.round(mediaAberto)} dias em aberto (média)` : undefined} />
+          <KpiCard label="Contatos até ganhar" value={fmtMedia(contatosGanhos.media) ?? TRACO}
+            sub={contatosGanhos.n ? `média de ${fmtNum(contatosGanhos.n)} ganhos com contato registrado${contatosPerdidos.media != null ? ` · perdidos: ${fmtMedia(contatosPerdidos.media)}` : ''}` : 'registre os contatos pelo telefone da lista'} />
         </KpiRow>
         {ganhosSemCliente.length > 0 && (
           <Alert tone="warn" title={`${fmtNum(ganhosSemCliente.length)} ${ganhosSemCliente.length === 1 ? 'lead marcado como Ganho sem cliente cadastrado' : 'leads marcados como Ganho sem cliente cadastrado'}`}>
@@ -72,6 +80,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
             {' '}{ganhosSemCliente.slice(0, 8).map(l => l.nome).join(', ')}{ganhosSemCliente.length > 8 ? '…' : ''}.
           </Alert>
         )}
+        <GanhosPorDia serie={diario} hoje={hoje} />
         <TabelaLeads
           leads={compactar(leads, CAMPOS_LEAD)}
           responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)}
@@ -80,7 +89,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           admin={profile.role === 'admin'}
           corretoras={corretorasDoPerfil(profile)}
           assessores={assessores}
-          hoje={fmtDate(hojeBrasil())}
+          hoje={hoje}
           usuario={profile.nome}
           filtrosSalvos={fi}
         />

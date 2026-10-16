@@ -1,8 +1,9 @@
 // Leituras do controle (só servidor: páginas e server actions). Cada função chama uma
 // RPC da S19 com o client service_role e devolve linhas tipadas.
 import type { Corretora } from '@/lib/corretoras'
-import { mesBrasil } from '@/lib/periodo'
+import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { mesAtual } from './meses'
+import { diarioPelaLista } from './contatos'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import { grupoCorretagem, nivel as nivelDe, nivelPelaMedia, risco as riscoDe } from './tipos'
@@ -14,7 +15,7 @@ import type {
   ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
-  IncentivoRow, LeadAcao, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
+  IncentivoRow, LeadAcao, LeadContato, LeadDiaRow, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
   Parametro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
 } from './tipos'
 
@@ -401,12 +402,41 @@ export const mapLead = (r: Row): LeadRow => ({
   tipo_status: (str(r.tipo_status) ?? 'Aberto') as LeadRow['tipo_status'], ultimo_contato: str(r.ultimo_contato), data_fechamento: str(r.data_fechamento),
   motivo_perda: str(r.motivo_perda), observacoes: str(r.observacoes), cliente_id: str(r.cliente_id), cliente_nome: str(r.cliente_nome),
   cliente_status: str(r.cliente_status), cliente_corretora: str(r.cliente_corretora), conta: str(r.conta), girou: bool(r.girou), lotes_12m: num(r.lotes_12m),
-  dias: r.dias == null ? null : num(r.dias), alerta: bool(r.alerta),
+  dias: r.dias == null ? null : num(r.dias), alerta: bool(r.alerta), contatos: num(r.contatos),
 })
 
 export async function leadsLista(): Promise<LeadRow[]> {
   const { db } = await equipe()
   return linhas(await rpc(db, 'leads_lista', { p_corretora_opera: null }), mapLead)
+}
+
+// Erro da API quando a tabela ainda não existe no banco (script SQL não aplicado)
+const tabelaAusente = (e: { code?: string; message: string } | null) =>
+  !!e && (e.code === 'PGRST205' || e.code === '42P01' || /could not find the table|does not exist/i.test(e.message))
+
+// Histórico de contatos de um lead (S47), do mais recente para o mais antigo
+export async function leadContatos(leadId: string): Promise<LeadContato[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('lead_contatos').select('id, lead_id, data, nota, criado_por_nome, created_at')
+    .eq('lead_id', leadId).order('data', { ascending: false }).order('created_at', { ascending: false })
+  if (error) { if (tabelaAusente(error)) return []; falha(error, 'lead_contatos') }
+  return linhas(data, r => ({
+    id: String(r.id), lead_id: String(r.lead_id), data: String(r.data), nota: str(r.nota), criado_por_nome: str(r.criado_por_nome), created_at: String(r.created_at),
+  }))
+}
+
+// Série diária dos leads (S47): quantos entraram, contatos feitos, ganhos, perdidos e contas abertas
+// nos últimos N dias. Antes da S47 (função ausente) calcula da lista, sem contatos nem contas.
+export async function leadsDiario(dias = 30): Promise<LeadDiaRow[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.rpc('leads_diario', { p_dias: dias })
+  if (error) {
+    if (!funcaoAusente(error)) falha(error, 'leads_diario')
+    return diarioPelaLista(await leadsLista(), fmtDate(hojeBrasil()), dias)
+  }
+  return linhas(data, r => ({
+    dia: String(r.dia), entraram: num(r.entraram), contatos: num(r.contatos), ganhos: num(r.ganhos), perdidos: num(r.perdidos), contas_abertas: num(r.contas_abertas),
+  }))
 }
 
 // Contagens dos leads + lista de ação (abertos com alerta, mais antigos primeiro), sem baixar a
@@ -631,6 +661,7 @@ const mapSafra = (r: Row) => ({
   recebidos: num(r.recebidos), contatados: num(r.contatados), perdidos: num(r.perdidos), ganhos: num(r.ganhos), em_aberto: num(r.em_aberto),
   ja_clientes: num(r.ja_clientes), viraram_clientes: num(r.viraram_clientes), com_giro: num(r.com_giro),
   ativados: num(r.ativados), em_processamento: num(r.em_processamento), recusaram: num(r.recusaram), lotes: num(r.lotes), receita: num(r.receita),
+  contatos: num(r.contatos), contatos_ganhos: num(r.contatos_ganhos), ganhos_contatados: num(r.ganhos_contatados),
 })
 export async function funilSafra(mesRef: string | null, meses = 12): Promise<FunilSafraRow[]> {
   const { db } = await equipe()

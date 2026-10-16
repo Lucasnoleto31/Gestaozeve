@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toast'
 import { excluirLead, salvarLead } from '@/lib/gestao/acoes'
 import type { LeadCampos, LeadRow, StatusLead } from '@/lib/gestao/tipos'
 import { mesmaPessoa } from '@/lib/texto'
+import { ContatosLead } from './ContatosLead'
 
 const CORRETORAS_OPERA = ['Genial', 'XP', 'BTG', 'Toro', 'Outra']
 const JA_OPERA = ['Sim, já opero', 'Estou começando agora', 'Já operei e parei']
@@ -87,6 +88,11 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin, u
             </Field>
           </div>
         </div>
+        {lead && (
+          <ContatosLead leadId={lead.id} nome={lead.nome} status={f.status} aberto={lead.tipo_status === 'Aberto'}
+            onRegistrado={(data, novoStatus) => setF(x => ({ ...x, ultimo_contato: !x.ultimo_contato || data > x.ultimo_contato ? data : x.ultimo_contato, status: novoStatus ?? x.status }))}
+            onExcluido={ultimo => setF(x => ({ ...x, ultimo_contato: ultimo ?? '' }))} />
+        )}
         <div>
           <p className="label mb-3">Acompanhamento da equipe</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -102,7 +108,7 @@ export function LeadForm({ lead, aberto, onClose, responsaveis, status, admin, u
               </select>
               {f.status === 'Ganho' && !lead?.cliente_id && <p className="mt-1 text-micro text-warn">Ganho sem cliente: use o troféu na lista, ele cadastra o cliente e liga ao lead.</p>}
             </Field>
-            <Input label="Último contato" type="date" value={f.ultimo_contato ?? ''} onChange={e => set('ultimo_contato', e.target.value)} />
+            <Input label="Último contato" type="date" value={f.ultimo_contato ?? ''} onChange={e => set('ultimo_contato', e.target.value)} hint={lead ? 'Prefira registrar o contato no histórico acima; mudar a data aqui também entra nele.' : undefined} />
             <Input label="Data do fechamento" type="date" value={f.data_fechamento ?? ''} onChange={e => set('data_fechamento', e.target.value)} hint={fechado && !f.data_fechamento ? 'Preencha para o funil contar o fechamento no mês certo' : undefined} />
             <Input label="Motivo da perda" value={f.motivo_perda ?? ''} onChange={e => set('motivo_perda', e.target.value)}
               placeholder={f.status === 'Perdido' ? 'Sem interesse, outra corretora, não respondeu…' : undefined}

@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { funilMensal, funilSafra, funilSafraPor, leadsResumo } from '@/lib/gestao/consultas'
+import { funilMensal, funilSafra, funilSafraPor, leadsDiario, leadsResumo } from '@/lib/gestao/consultas'
+import { fmtMedia, somaUltimos } from '@/lib/gestao/contatos'
 import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -28,8 +29,8 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const periodo: 'mes' | '12m' = sp.periodo === '12m' ? '12m' : 'mes'
   const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
-  const [mensal, safra, porResp, porOrigem, leads] = await Promise.all([
-    funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40),
+  const [mensal, safra, porResp, porOrigem, leads, diario] = await Promise.all([
+    funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40), leadsDiario(30),
   ])
   const m = new Map(mensal.map(x => [x.mes_ref, x]))
   const s = new Map(safra.map(x => [x.mes_ref, x]))
@@ -38,9 +39,11 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
 
   // Totais do período: do que entrou nele, o que aconteceu até hoje
   const base = soMes ? safra.filter(x => x.mes_ref === mesRef) : safra
-  const chaves: (keyof FunilSafraBase)[] = ['recebidos', 'contatados', 'perdidos', 'ganhos', 'em_aberto', 'ja_clientes', 'viraram_clientes', 'ativados', 'em_processamento', 'recusaram', 'com_giro', 'lotes', 'receita']
+  const chaves: (keyof FunilSafraBase)[] = ['recebidos', 'contatados', 'perdidos', 'ganhos', 'em_aberto', 'ja_clientes', 'viraram_clientes', 'ativados', 'em_processamento', 'recusaram', 'com_giro', 'lotes', 'receita', 'contatos', 'contatos_ganhos', 'ganhos_contatados']
   const t = Object.fromEntries(chaves.map(k => [k, base.reduce((acc, x) => acc + x[k], 0)])) as FunilSafraBase
   const jaClientes = t.ja_clientes || (soMes ? m.get(mesRef)?.ja_clientes ?? 0 : mensal.reduce((acc, x) => acc + x.ja_clientes, 0))
+  // contatos por lead ganho (S47): só entre os ganhos com contato registrado
+  const contatosPorGanho = (x: Pick<FunilSafraBase, 'contatos_ganhos' | 'ganhos_contatados'> | undefined) => (x && x.ganhos_contatados ? x.contatos_ganhos / x.ganhos_contatados : null)
   const abertosHoje = leads.abertos
   const acao = leads.acao
   const colMes = (i: number) => (i < meses.length - 4 ? 'col-p2' : '')
@@ -48,7 +51,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   // Etapas do funil. Quem já era cliente antes de entrar fica fora das etapas.
   const etapas = [
     { nome: 'Entraram', valor: t.recebidos, nota: `${fmtNum(jaClientes)} já eram clientes` },
-    { nome: 'Contatados', valor: t.contatados, nota: 'registramos contato ou mudamos o status' },
+    { nome: 'Contatados', valor: t.contatados, nota: t.contatos ? `${fmtNum(t.contatos)} contatos registrados${contatosPorGanho(t) != null ? ` · ${fmtMedia(contatosPorGanho(t))} por lead ganho` : ''}` : 'registramos contato ou mudamos o status' },
     { nome: 'Cadastrados', valor: t.viraram_clientes, nota: `${fmtNum(t.ganhos)} marcados como ganho` },
     { nome: 'Tombaram', valor: t.ativados, nota: 'viraram clientes: abriram a conta' },
     { nome: 'Ativados', valor: t.com_giro, nota: 'abriram a conta e operaram' },
@@ -66,12 +69,15 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const nn = (v: number | null) => (v == null ? TRACO : n0(v))
   const pp = (v: number | null) => (v == null ? TRACO : p1(v))
   const rr = (v: number | null) => (v == null ? TRACO : rCurto(v))
+  const mm = (v: number | null) => (v == null ? TRACO : (fmtMedia(v) ?? TRACO))
   const tudo = Object.fromEntries(chaves.map(k => [k, safra.reduce((acc, x) => acc + x[k], 0)])) as FunilSafraBase
   const linhas: Linha[] = [
     { label: 'Leads que entraram', valor: x => x?.recebidos ?? null, fmt: nn, total: tudo.recebidos, destaque: 'bold' },
     { label: 'já eram clientes ao entrar', valor: x => x?.ja_clientes ?? null, fmt: nn, total: tudo.ja_clientes, destaque: 'sub' },
     { label: 'Contatados', valor: x => x?.contatados ?? null, fmt: nn, total: tudo.contatados },
     { label: '% contatados', valor: x => (x ? pct(x.contatados, x.recebidos) : null), fmt: pp, total: pct(tudo.contatados, tudo.recebidos), destaque: 'sub' },
+    { label: 'Contatos registrados', valor: x => x?.contatos ?? null, fmt: nn, total: tudo.contatos },
+    { label: 'contatos por lead ganho (média)', valor: contatosPorGanho, fmt: mm, total: contatosPorGanho(tudo), destaque: 'sub' },
     { label: 'Perdidos', valor: x => x?.perdidos ?? null, fmt: nn, total: tudo.perdidos, destaque: 'loss' },
     { label: 'Ainda em aberto', valor: x => x?.em_aberto ?? null, fmt: nn, total: tudo.em_aberto },
     { label: 'Cadastrados (ganhos ou cadastro novo)', valor: x => x?.viraram_clientes ?? null, fmt: nn, total: tudo.viraram_clientes },
@@ -104,7 +110,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
         <KpiRow cols={7}>
           <KpiCard label={`Entraram em ${soMes ? mesCurto(mesRef) : '12 m'}`} value={fmtNum(t.recebidos)} sub={`${fmtNum(jaClientes)} já eram clientes`} />
           <KpiCard label="Contatados" value={fmtNum(t.contatados)} sub={t.recebidos ? `${fmtPct(pct(t.contatados, t.recebidos) ?? 0, 0)} dos que entraram` : undefined} />
-          <KpiCard label="Cadastrados" value={fmtNum(t.viraram_clientes)} sub={`${fmtNum(t.ganhos)} marcados como ganho`} />
+          <KpiCard label="Cadastrados" value={fmtNum(t.viraram_clientes)} sub={`${fmtNum(t.ganhos)} marcados como ganho${contatosPorGanho(t) != null ? ` · ${fmtMedia(contatosPorGanho(t))} contatos por ganho` : ''}`} />
           <KpiCard label="Tombaram" value={fmtNum(t.ativados)} sub={`abriram a conta · ${fmtNum(t.em_processamento)} em abertura`} tone={t.ativados ? 'gain' : 'neutral'} />
           <KpiCard label="Ativados" value={fmtNum(t.com_giro)} sub={t.ativados ? `operaram · ${fmtPct(pct(t.com_giro, t.ativados) ?? 0, 0)} dos que tombaram` : 'operaram'} tone={t.com_giro ? 'gain' : 'neutral'} />
           <KpiCard label="Perdidos" value={fmtNum(t.perdidos)} sub={`${fmtNum(t.recusaram)} recusaram a corretora`} tone={t.perdidos || t.recusaram ? 'loss' : 'neutral'} />
@@ -151,6 +157,11 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
 
         <Panel title="Leads por mês" subtitle="Por mês de entrada: entraram, tombaram (abriram a conta), ativados (operaram) e perdidos.">
           <GraficoSeries dados={grafico} series={[{ key: 'entraram', nome: 'Entraram', tipo: 'bar' }, { key: 'tombaram', nome: 'Tombaram', tipo: 'bar', cor: 'neutral' }, { key: 'ativados', nome: 'Ativados', tipo: 'bar', cor: 'gain' }, { key: 'perdidos', nome: 'Perdidos', tipo: 'bar', cor: 'loss' }]} altura={260} />
+        </Panel>
+
+        <Panel title="Últimos 30 dias" subtitle={`Por dia: leads que entraram, contatos registrados e leads ganhos (clientes trazidos). ${fmtNum(somaUltimos(diario, 7, 'ganhos'))} ganhos nos últimos 7 dias, ${fmtNum(somaUltimos(diario, 30, 'ganhos'))} em 30.`}>
+          <GraficoSeries dados={diario.map(d => ({ label: `${d.dia.slice(8, 10)}/${d.dia.slice(5, 7)}`, entraram: d.entraram, contatos: d.contatos, ganhos: d.ganhos }))}
+            series={[{ key: 'entraram', nome: 'Entraram', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'contatos', nome: 'Contatos', tipo: 'line', cor: 'neutral' }]} altura={220} />
         </Panel>
 
         <Panel title="Safra mês a mês" subtitle={`Cada coluna é o mês em que o lead entrou; os números dizem o que aconteceu com esses leads até hoje. De ${mesCurto(meses[0])} a ${mesCurto(mesRef)}; a coluna do mês escolhido fica em destaque.`}>
@@ -212,18 +223,19 @@ function TabelaSafra({ titulo, descricao, dados }: { titulo: string; descricao: 
         <table className="tbl tbl-dense">
           <thead>
             <tr>
-              <th>Grupo</th><th className="num">Entraram</th><th className="num col-p3">Já clientes</th><th className="num col-p2">Contatados</th><th className="num">Perdidos</th><th className="num col-p3">Em aberto</th>
+              <th>Grupo</th><th className="num">Entraram</th><th className="num col-p3">Já clientes</th><th className="num col-p2">Contatados</th><th className="num col-p2">Contatos/ganho</th><th className="num">Perdidos</th><th className="num col-p3">Em aberto</th>
               <th className="num col-p2">Cadastrados</th><th className="num">Tombaram</th><th className="num col-p2">Recusaram</th><th className="num">Ativados</th><th className="num col-p2">% tombaram</th><th className="num col-p3">Lotes</th><th className="num">Receita</th>
             </tr>
           </thead>
           <tbody>
-            {dados.length === 0 && <LinhaVazia colunas={13}>Sem leads no período.</LinhaVazia>}
+            {dados.length === 0 && <LinhaVazia colunas={14}>Sem leads no período.</LinhaVazia>}
             {dados.map(g => (
               <tr key={g.grupo}>
                 <td className="font-medium">{g.grupo}</td>
                 <td className="num">{n0(g.recebidos)}</td>
                 <td className="num muted col-p3">{n0(g.ja_clientes)}</td>
                 <td className="num col-p2">{n0(g.contatados)}</td>
+                <td className="num col-p2" title={g.ganhos_contatados ? `${fmtNum(g.contatos_ganhos)} contatos em ${fmtNum(g.ganhos_contatados)} ganhos com contato registrado` : undefined}>{g.ganhos_contatados ? fmtMedia(g.contatos_ganhos / g.ganhos_contatados) : TRACO}</td>
                 <td className={cn('num', g.perdidos && 'text-loss')}>{n0(g.perdidos)}</td>
                 <td className="num col-p3">{n0(g.em_aberto)}</td>
                 <td className="num col-p2">{n0(g.viraram_clientes)}</td>

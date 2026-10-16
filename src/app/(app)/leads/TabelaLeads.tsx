@@ -130,7 +130,12 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
     const r = await registrarContatoLead(l.id, l.status === 'Novo' ? 'Em contato' : undefined)
     setRegistrando(null)
     if (!r.ok) { avisar({ titulo: 'Não consegui registrar o contato', detalhe: r.erro, tom: 'loss' }); return }
-    avisar({ titulo: `Contato registrado · ${l.nome}`, detalhe: l.status === 'Novo' ? 'Status passou para Em contato.' : undefined, tom: 'gain' })
+    const n = r.dados.contatos
+    avisar({
+      titulo: `Contato registrado · ${l.nome}`,
+      detalhe: [n != null ? `${fmtNum(n)}º contato com este lead.` : null, l.status === 'Novo' ? 'Status passou para Em contato.' : null].filter(Boolean).join(' ') || undefined,
+      tom: 'gain',
+    })
     router.refresh()
   }
   const perder = async () => {
@@ -146,7 +151,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
   const fichaHref = (l: LeadRow) => (l.cliente_id && l.cliente_corretora && isCorretora(l.cliente_corretora) ? `/${CORRETORA_SLUG[l.cliente_corretora]}/clientes/${l.cliente_id}` : null)
 
   return (
-    <Panel title={`${fmtNum(filtrados.length)} de ${fmtNum(leads.length)} leads`} subtitle="Clique na linha para editar tudo. Ícones: telefone registra contato hoje (Novo vira Em contato), troféu marca Ganho e abre o cadastro do cliente (é o único jeito de marcar Ganho), X marca Perdido.">
+    <Panel title={`${fmtNum(filtrados.length)} de ${fmtNum(leads.length)} leads`} subtitle="Clique na linha para editar tudo e ver o histórico de contatos. Ícones: telefone registra um contato hoje (Novo vira Em contato), troféu marca Ganho e abre o cadastro do cliente (é o único jeito de marcar Ganho), X marca Perdido.">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
@@ -166,11 +171,11 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
           <thead>
             <tr>
               <th className="col-p2">Recebido</th><th>Nome</th><th>WhatsApp</th><th className="col-p3">CPF</th><th className="col-p3">E-mail</th><th className="col-p3">Já opera?</th><th className="col-p2">Opera em</th>
-              <th className="col-p3">Origem</th><th className="col-p2">Responsável</th><th>Status</th><th className="col-p2">Último contato</th><th className="col-p3">Fechamento</th><th className="col-p3">Motivo da perda</th><th className="col-p2">Cliente?</th><th className="num">Dias</th><th><span className="sr-only">Ações</span></th>
+              <th className="col-p3">Origem</th><th className="col-p2">Responsável</th><th>Status</th><th className="col-p2">Último contato</th><th className="num">Contatos</th><th className="col-p3">Fechamento</th><th className="col-p3">Motivo da perda</th><th className="col-p2">Cliente?</th><th className="num">Dias</th><th><span className="sr-only">Ações</span></th>
             </tr>
           </thead>
           <tbody>
-            {visiveis.length === 0 && <tr><td colSpan={16} className="py-10 text-center text-dense text-fg-subtle">Nenhum lead com esses filtros.</td></tr>}
+            {visiveis.length === 0 && <tr><td colSpan={17} className="py-10 text-center text-dense text-fg-subtle">Nenhum lead com esses filtros.</td></tr>}
             {visiveis.map(l => {
               const href = fichaHref(l)
               return (
@@ -189,6 +194,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
                   <td className="col-p2"><Atendimento responsavel={l.responsavel} aberto={l.tipo_status === 'Aberto'} meu={ehMeu(l.responsavel)} /></td>
                   <td><StatusLeadBadge status={l.status} tipo={l.tipo_status} /></td>
                   <td className="num col-p2">{dataCurta(l.ultimo_contato)}</td>
+                  <td className={cn('num', l.contatos > 0 && 'font-medium')} title={l.contatos ? `${fmtNum(l.contatos)} ${l.contatos === 1 ? 'contato registrado' : 'contatos registrados'}` : 'Nenhum contato registrado'}>{n0(l.contatos)}</td>
                   <td className="num col-p3">{dataCurta(l.data_fechamento)}</td>
                   <td className="max-w-[160px] truncate muted col-p3">{l.motivo_perda ?? TRACO}</td>
                   <td className="col-p2" onClick={e => e.stopPropagation()}>

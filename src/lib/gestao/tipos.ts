@@ -382,13 +382,14 @@ export type LeadRow = {
   lotes_12m: number
   dias: number | null
   alerta: boolean
+  contatos: number             // contatos registrados no histórico (S47)
 }
 
 // Todos os campos do lead (a tela Leads usa quase todos; compactar só tira as chaves repetidas)
 export const CAMPOS_LEAD = [
   'id', 'corretora', 'data_hora', 'nome', 'whatsapp', 'cpf', 'email', 'ja_opera', 'origem', 'responsavel', 'status', 'tipo_status',
   'ultimo_contato', 'data_fechamento', 'motivo_perda', 'observacoes', 'cliente_id', 'cliente_nome', 'cliente_status', 'cliente_corretora',
-  'conta', 'girou', 'lotes_12m', 'dias', 'alerta',
+  'conta', 'girou', 'lotes_12m', 'dias', 'alerta', 'contatos',
 ] as const satisfies readonly (keyof LeadRow)[]
 
 export type FunilMensalRow = {
@@ -433,6 +434,9 @@ export type FunilSafraBase = {
   com_giro: number          // ativados de verdade: abriram a conta e operaram
   lotes: number             // lotes operados por quem tombou (todo o histórico)
   receita: number           // receita de quem tombou (todo o histórico)
+  contatos: number          // contatos registrados com os leads da safra (S47)
+  contatos_ganhos: number   // contatos registrados com os leads ganhos
+  ganhos_contatados: number // leads ganhos com pelo menos um contato registrado (base da média)
 }
 export type FunilSafraRow = FunilSafraBase & { mes_ref: string }
 export type FunilSafraPorRow = FunilSafraBase & { grupo: string }
@@ -440,6 +444,10 @@ export type FunilSafraPorRow = FunilSafraBase & { grupo: string }
 // Resumo dos leads para o Início e o Funil (leads_resumo): contagens + leads abertos com alerta
 export type LeadAcao = Pick<LeadRow, 'id' | 'nome' | 'whatsapp' | 'responsavel' | 'status' | 'tipo_status' | 'data_hora' | 'ultimo_contato' | 'dias' | 'corretora'>
 export type LeadsResumo = { total: number; neste_mes: number; abertos: number; com_alerta: number; ganhos: number; perdidos: number; ja_clientes: number; acao: LeadAcao[] }
+// Um contato registrado com o lead (lead_contatos, S47): a "rota" do atendimento
+export type LeadContato = { id: string; lead_id: string; data: string; nota: string | null; criado_por_nome: string | null; created_at: string }
+// Um dia da série de leads (leads_diario, S47): quantos entraram, contatos feitos, ganhos, perdidos e contas abertas
+export type LeadDiaRow = { dia: string; entraram: number; contatos: number; ganhos: number; perdidos: number; contas_abertas: number }
 // Outro cadastro que já tem o CPF/CNPJ informado (para unificar)
 export type ClienteDuplicado = { id: string; nome: string; corretora: string | null }
 

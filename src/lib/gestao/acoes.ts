@@ -8,7 +8,7 @@ import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './
 import { lerFaixas, lerMetas, lerParticipacoes, numeroParam } from './btg'
 import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from '@/lib/corretoras'
 import { mesmaPessoa, normTexto } from '@/lib/texto'
-import { buscarClientes, funcaoAusente, lotesNoPeriodo, todasAsLinhas } from './consultas'
+import { buscarClientes, funcaoAusente, leadContatos, lotesNoPeriodo, todasAsLinhas } from './consultas'
 import { esquecerMesReferencia } from './pagina'
 import { ehIso, parseMes } from './meses'
 import { faixasValidas } from './comissao'
@@ -642,17 +642,45 @@ export async function excluirLead(leadId: string) {
   })
 }
 
-// Registra um contato hoje (atalho da lista)
-export async function registrarContatoLead(leadId: string, status?: string) {
+// Registra um contato com o lead (telefone da lista: hoje; histórico da ficha: data e nota).
+// Entra no histórico (lead_contatos) e atualiza o último contato; devolve quantos contatos o lead tem.
+// Antes da S47 (função ausente) só grava a data do último contato.
+export async function registrarContatoLead(leadId: string, status?: string, data?: string | null, nota?: string | null) {
+  return tentar(async () => {
+    const { db, profile } = await equipe()
+    const hoje = hojeIso()
+    const dia = data && ehIso(data) ? data : hoje
+    if (dia > hoje) throw new Error('A data do contato não pode ser futura')
+    const { data: n, error } = await db.rpc('registrar_contato_lead', {
+      p_lead_id: leadId, p_data: dia, p_nota: nota?.trim() || null, p_status: status ?? null, p_criado_por: profile.user_id, p_criado_por_nome: profile.nome,
+    })
+    if (error) {
+      if (!funcaoAusente(error)) falha(error, 'registrar_contato_lead')
+      const patch: Record<string, unknown> = { ultimo_contato: dia, updated_at: new Date().toISOString() }
+      if (status) patch.status = status
+      const { error: e2 } = await db.from('leads').update(patch).eq('id', leadId)
+      if (e2) falha(e2, 'leads')
+    }
+    revalidatePath('/leads', 'layout')
+    revalidatePath('/funil')
+    return { contatos: error ? null : num(n) }
+  })
+}
+
+// Histórico de contatos de um lead (ficha)
+export async function listarContatosLead(leadId: string) {
+  return tentar(() => leadContatos(leadId))
+}
+
+// Apaga um contato registrado por engano; o último contato do lead volta a ser o mais recente que sobrou
+export async function excluirContatoLead(id: string) {
   return tentar(async () => {
     const { db } = await equipe()
-    const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-    const patch: Record<string, unknown> = { ultimo_contato: hoje, updated_at: new Date().toISOString() }
-    if (status) patch.status = status
-    const { error } = await db.from('leads').update(patch).eq('id', leadId)
-    if (error) falha(error, 'leads')
+    const { data: n, error } = await db.rpc('excluir_contato_lead', { p_id: id })
+    if (error) falha(error, 'excluir_contato_lead')
     revalidatePath('/leads', 'layout')
-    return { ok: true }
+    revalidatePath('/funil')
+    return { contatos: num(n) }
   })
 }
 

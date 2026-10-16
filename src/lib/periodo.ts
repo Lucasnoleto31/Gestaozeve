@@ -96,3 +96,11 @@ export function mesBrasil(iso: string): string {
   const parte = (tipo: string) => partes.find(p => p.type === tipo)?.value ?? ''
   return `${parte('year')}-${parte('month')}`
 }
+
+// timestamptz ISO → 'YYYY-MM-DD' no fuso de Brasília (o dia em que o lead entrou)
+const FMT_DIA_BR = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+export function diaBrasil(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+  return FMT_DIA_BR.format(d)
+}

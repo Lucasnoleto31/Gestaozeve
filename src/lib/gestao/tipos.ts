@@ -437,6 +437,11 @@ export type FunilSafraBase = {
   contatos: number          // contatos registrados com os leads da safra (S47)
   contatos_ganhos: number   // contatos registrados com os leads ganhos
   ganhos_contatados: number // leads ganhos com pelo menos um contato registrado (base da média)
+  // Destino de cada lead, um só por lead (S50); com ja_clientes (conta reativada) somam recebidos
+  em_contato: number        // lead aberto, ainda sendo trabalhado
+  perdidos_funil: number    // Perdido ou recusou a corretora
+  contas_abertas: number    // Ganho, Migrado ou Em processamento (não era cliente antes)
+  contas_em_abertura: number // parte de contas_abertas que ainda não migrou
 }
 export type FunilSafraRow = FunilSafraBase & { mes_ref: string }
 export type FunilSafraPorRow = FunilSafraBase & { grupo: string }

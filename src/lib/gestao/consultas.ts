@@ -678,6 +678,7 @@ const mapSafra = (r: Row) => ({
   ja_clientes: num(r.ja_clientes), viraram_clientes: num(r.viraram_clientes), com_giro: num(r.com_giro),
   ativados: num(r.ativados), em_processamento: num(r.em_processamento), recusaram: num(r.recusaram), lotes: num(r.lotes), receita: num(r.receita),
   contatos: num(r.contatos), contatos_ganhos: num(r.contatos_ganhos), ganhos_contatados: num(r.ganhos_contatados),
+  em_contato: num(r.em_contato), perdidos_funil: num(r.perdidos_funil), contas_abertas: num(r.contas_abertas), contas_em_abertura: num(r.contas_em_abertura),
 })
 export async function funilSafra(mesRef: string | null, meses = 12): Promise<FunilSafraRow[]> {
   const { db } = await equipe()

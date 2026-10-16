@@ -42,7 +42,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
 
   // Totais do período: do que entrou nele, o que aconteceu até hoje
   const base = soMes ? safra.filter(x => x.mes_ref === mesRef) : safra
-  const chaves: (keyof FunilSafraBase)[] = ['recebidos', 'contatados', 'perdidos', 'ganhos', 'em_aberto', 'ja_clientes', 'viraram_clientes', 'ativados', 'em_processamento', 'recusaram', 'com_giro', 'lotes', 'receita', 'contatos', 'contatos_ganhos', 'ganhos_contatados']
+  const chaves: (keyof FunilSafraBase)[] = ['recebidos', 'contatados', 'perdidos', 'ganhos', 'em_aberto', 'ja_clientes', 'viraram_clientes', 'ativados', 'em_processamento', 'recusaram', 'com_giro', 'lotes', 'receita', 'contatos', 'contatos_ganhos', 'ganhos_contatados', 'em_contato', 'perdidos_funil', 'contas_abertas', 'contas_em_abertura']
   const t = Object.fromEntries(chaves.map(k => [k, base.reduce((acc, x) => acc + x[k], 0)])) as FunilSafraBase
   const jaClientes = t.ja_clientes || (soMes ? m.get(mesRef)?.ja_clientes ?? 0 : mensal.reduce((acc, x) => acc + x.ja_clientes, 0))
   // contatos por lead ganho (S47): só entre os ganhos com contato registrado
@@ -59,13 +59,13 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
     { nome: 'Tombaram', valor: t.ativados, nota: 'viraram clientes: abriram a conta' },
     { nome: 'Ativados', valor: t.com_giro, nota: 'abriram a conta e operaram' },
   ]
-  const saidas = [
-    { nome: 'Perdidos', valor: t.perdidos, tom: 'loss' as const },
-    { nome: 'Recusaram a corretora', valor: t.recusaram, tom: 'loss' as const },
-    { nome: 'Tombaram sem operar', valor: Math.max(0, t.ativados - t.com_giro), tom: 'neutral' as const },
-    { nome: 'Conta em abertura', valor: t.em_processamento, tom: 'neutral' as const },
-    { nome: 'Ainda em aberto', valor: t.em_aberto, tom: 'neutral' as const },
-    { nome: 'Já eram clientes ao entrar', valor: jaClientes, tom: 'neutral' as const },
+  // Destino de cada lead do período, um só por lead (S50): os quatro somam os que entraram
+  const semS50 = t.recebidos > 0 && t.em_contato + t.perdidos_funil + t.contas_abertas + jaClientes === 0
+  const destinos = [
+    { nome: 'Perdido', valor: t.perdidos_funil, tom: 'loss' as const, nota: t.recusaram ? `${fmtNum(t.recusaram)} recusaram a corretora` : 'desistiram ou não responderam' },
+    { nome: 'Em contato', valor: t.em_contato, tom: 'neutral' as const, nota: 'em aberto, ainda sendo trabalhados' },
+    { nome: 'Conta aberta', valor: t.contas_abertas, tom: 'gain' as const, nota: `${fmtNum(t.contas_abertas - t.contas_em_abertura)} abriram a conta · ${fmtNum(t.contas_em_abertura)} em abertura · ${fmtNum(t.com_giro)} operaram` },
+    { nome: 'Conta reativada', valor: jaClientes, tom: 'neutral' as const, nota: 'já eram clientes e voltaram pelo formulário' },
   ]
 
   type Linha = { label: string; valor: (x: FunilSafraBase | undefined) => number | null; fmt: (v: number | null) => string; total: number | null; destaque?: 'sub' | 'bold' | 'gain' | 'loss' }
@@ -142,19 +142,23 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
               })}
             </ol>
           </Panel>
-          <Panel title="Saídas e pendências" subtitle={`O que não virou cliente ativo entre os leads de ${rotuloPeriodo}.`}>
-            <ul className="divide-y divide-line text-dense">
-              {saidas.map(x => (
-                <li key={x.nome} className="flex items-center justify-between gap-3 py-2.5">
-                  <span>{x.nome}</span>
-                  <span className={cn('tabular-nums font-semibold', x.tom === 'loss' && x.valor && 'text-loss')}>{fmtNum(x.valor)}{t.recebidos ? <span className="ml-1.5 text-micro font-normal text-fg-subtle">{fmtPct(pct(x.valor, t.recebidos) ?? 0, 0)}</span> : null}</span>
+          <Panel title="Destino dos leads" subtitle={`Cada lead de ${rotuloPeriodo} em um destino só; os quatro somam os que entraram.`}>
+            {semS50 && <Alert tone="warn" className="mb-3">Rode a S50 no Supabase para ver os destinos.</Alert>}
+            <ol className="space-y-3">
+              {destinos.map(d => (
+                <li key={d.nome}>
+                  <div className="flex items-baseline justify-between gap-3 text-dense">
+                    <span className="font-medium">{d.nome}<span className="ml-2 text-micro text-fg-subtle">{d.nota}</span></span>
+                    <span className="whitespace-nowrap tabular-nums text-fg-muted">
+                      <span className={cn('font-semibold', d.tom === 'loss' && d.valor ? 'text-loss' : d.tom === 'gain' && d.valor ? 'text-gain' : 'text-fg')}>{fmtNum(d.valor)}</span>
+                      {t.recebidos > 0 && <> · {fmtPct(pct(d.valor, t.recebidos) ?? 0, 0)}</>}
+                    </span>
+                  </div>
+                  <div className="bar-track mt-1 h-2" aria-hidden><div className="bar-fill" style={{ width: `${t.recebidos ? Math.min(100, (d.valor / t.recebidos) * 100) : 0}%` }} /></div>
                 </li>
               ))}
-              <li className="flex items-center justify-between gap-3 py-2.5">
-                <span>Em aberto hoje (todos os leads)</span>
-                <span className="tabular-nums font-semibold">{fmtNum(abertosHoje)}<span className="ml-1.5 text-micro font-normal text-fg-subtle">{fmtNum(leads.com_alerta)} com alerta</span></span>
-              </li>
-            </ul>
+            </ol>
+            <p className="mt-4 border-t border-line pt-3 text-label text-fg-muted">Em aberto hoje, somando todos os meses: <span className="font-semibold tabular-nums text-fg">{fmtNum(abertosHoje)}</span> · {fmtNum(leads.com_alerta)} com alerta de contato.</p>
           </Panel>
         </div>
 

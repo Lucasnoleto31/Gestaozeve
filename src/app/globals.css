@@ -84,8 +84,10 @@
   --shadow-float: var(--elev-float);
 }
 
-/* ─── Paleta clara (ficha padrão do Midiakit: medida no Business Plan XP) ─── */
-:root {
+/* ─── Paleta clara (ficha padrão do Midiakit: medida no Business Plan XP) ───
+   .claro força a paleta clara num trecho mesmo no tema escuro (extrato para imprimir) */
+:root,
+.claro {
   --bg: #ffffff;
   --surface: #f3f3f3;        /* card: fundo com L +4 */
   --surface-2: #eaeaea;
@@ -127,6 +129,18 @@
   --panel-line: transparent;
   --elev-float: 0 8px 24px rgba(17, 17, 17, 0.1);
   --bar-fill: var(--accent);
+}
+
+/* .claro: as --color-* do Tailwind se resolvem onde são declaradas (no :root), então um trecho
+   claro dentro do tema escuro precisa redeclará-las aqui, a partir dos tokens claros acima */
+.claro {
+  color-scheme: light;
+  --color-bg: var(--bg); --color-surface: var(--surface); --color-surface-2: var(--surface-2); --color-surface-3: var(--surface-3);
+  --color-line: var(--line); --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg); --color-fg-muted: var(--fg-muted); --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent); --color-accent-hover: var(--accent-hover); --color-accent-fg: var(--accent-fg); --color-accent-soft: var(--accent-soft);
+  --color-gain: var(--gain); --color-gain-soft: var(--gain-soft); --color-loss: var(--loss); --color-loss-soft: var(--loss-soft);
+  --color-warn: var(--warn); --color-warn-soft: var(--warn-soft); --color-focus: var(--focus); --color-popover: var(--popover); --color-marca: var(--marca);
 }
 
 /* ─── Paleta escura (padrão; derivada da clara pela regra do kit, não medida) ─── */

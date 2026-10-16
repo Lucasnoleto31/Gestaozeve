@@ -518,6 +518,11 @@ export type ComissaoContaMes = {
 }
 export type ComissaoPagamento = { id: string; parceiro: string; corretora: string | null; mes_ref: string; valor: number; data_pagamento: string; observacao: string | null; criado_por_nome: string | null }
 export type ComissaoRegra = { id: string; parceiro: string; corretora: string; vigencia: string; prazo_ativacao_dias: number; reativacao_meses: number; metas_abertura: string; metas_ativacao: string }
+// Extrato mensal do parceiro (S48): uma conta da carteira com lotes e receita bruta do mês e dos 12 meses
+export type ExtratoParceiroRow = {
+  cliente_id: string; nome: string; corretora: string; conta: string | null; status: string; origem: ComissaoItem['origem']; assessor_nome: string | null
+  data_abertura: string | null; lotes_mes: number; zerados_mes: number; receita_mes: number; lotes_12m: number; receita_12m: number; ultimo_mes_giro: string | null
+}
 export type SituacaoNaoMapeada = { situacao: string; contas: number }
 export type AssessorNaoCadastrado = { assessor_nome: string; contas: number; lotes: number }
 

@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { comissaoContasMes, comissaoItens, comissaoMensal, comissaoPagamentos, comissaoRegras, parceirosComissionados } from '@/lib/gestao/consultas'
+import { comissaoCarteiraMes, comissaoContasMes, comissaoItens, comissaoMensal, comissaoPagamentos, comissaoRegras, parceirosComissionados } from '@/lib/gestao/consultas'
+import { linhasPlanilha, nomeArquivoExtrato, totaisExtrato } from '@/lib/gestao/extrato'
 import { lerFaixasComissao, resumirComissao, valorDaFaixa } from '@/lib/gestao/comissao'
 import { janelaMeses, mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
 import type { ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento } from '@/lib/gestao/tipos'
@@ -18,6 +19,8 @@ import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { MesPicker, SelectParam } from '@/components/gestao/Filtros'
 import { LinhaVazia, TRACO, dataCurta, n0, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
+import { TabelaExtrato } from '@/components/gestao/TabelaExtrato'
+import { ExtratoAcoes } from './ExtratoAcoes'
 import { PagamentosComissao } from './PagamentosComissao'
 import { RegrasComissao } from './RegrasComissao'
 
@@ -85,10 +88,18 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
     )
   }
 
-  const [itens, mensal, eventos, pagamentos, regras] = await Promise.all([
+  const [itens, mensal, eventos, pagamentos, regras, carteiraMes] = await Promise.all([
     comissaoItens(parceiro, corretora), comissaoMensal(mesRef, 12, parceiro, corretora), comissaoContasMes(parceiro, corretora, mesRef, 12),
-    comissaoPagamentos(parceiro), comissaoRegras(parceiro),
+    comissaoPagamentos(parceiro), comissaoRegras(parceiro), comissaoCarteiraMes(parceiro, corretora, mesRef),
   ])
+  // extrato do mês (S48): carteira inteira com lotes e receita; vazio com carteira cheia = S48 ainda não rodou
+  const semS48 = carteiraMes.length === 0 && itens.length > 0
+  const totExtrato = totaisExtrato(carteiraMes)
+  const hrefExtrato = (() => {
+    const p = new URLSearchParams({ parceiro, mes: mesRef.slice(0, 7) })
+    if (corretora) p.set('corretora', corretora)
+    return `/extrato?${p.toString()}`
+  })()
   const regraAtual = (c: string) => [...regras].filter(r => r.corretora === c).sort((a, b) => b.vigencia.localeCompare(a.vigencia))[0]
   const valorAtivacaoBase = (c: string) => valorDaFaixa(lerFaixasComissao(regraAtual(c)?.metas_ativacao), 1)
   const pagamentosVisiveis = corretora ? pagamentos.filter(p => !p.corretora || p.corretora === corretora) : pagamentos
@@ -256,6 +267,18 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
                 </tfoot>
               )}
             </table>
+          </div>
+        </Panel>
+
+        <Panel title={`Extrato de ${parceiro} · ${mesLongo(mesRef)}`}
+          subtitle={semS48
+            ? 'Para enviar ao parceiro: todas as contas da carteira com lotes e receita do mês. Rode a S48 no Supabase para ver as contas.'
+            : `Para enviar ao parceiro: as ${fmtNum(totExtrato.contas)} contas da carteira${filtroCorretora}, com lotes e receita bruta de ${mesCurto(mesRef)} e dos 12 meses até ele · ${fmtNum(totExtrato.giraram)} ${totExtrato.giraram === 1 ? 'girou' : 'giraram'} no mês. A planilha e a versão para imprimir têm as mesmas colunas (acrescente receita=0 ao endereço da impressão para esconder a receita).`}>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <ExtratoAcoes matriz={linhasPlanilha(carteiraMes, true)} nomeArquivo={nomeArquivoExtrato(parceiro, mesRef, corretora)} hrefImpressao={hrefExtrato} />
+          </div>
+          <div className="tbl-wrap max-h-[70vh]">
+            <TabelaExtrato linhas={carteiraMes} comReceita vazio={semS48 ? 'A função comissao_carteira_mes ainda não existe no banco (S48).' : `Nenhuma conta na carteira de ${parceiro}${filtroCorretora}.`} />
           </div>
         </Panel>
 

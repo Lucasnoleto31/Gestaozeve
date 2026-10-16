@@ -12,7 +12,7 @@ import { normTexto } from '@/lib/texto'
 import type { ClienteEncontrado } from './tipos'
 import type {
   OperacaoDia, ClienteRiscoRow, GiroDiaRow,
-  ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra,
+  ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra, ExtratoParceiroRow,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
   IncentivoRow, LeadAcao, LeadContato, LeadDiaRow, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
@@ -760,6 +760,23 @@ export async function comissaoPagamentos(parceiro: string): Promise<ComissaoPaga
     id: String(r.id), parceiro: String(r.parceiro), corretora: str(r.corretora), mes_ref: String(r.mes_ref), valor: num(r.valor),
     data_pagamento: String(r.data_pagamento), observacao: str(r.observacao), criado_por_nome: str(r.criado_por_nome),
   }))
+}
+
+// Extrato mensal do parceiro (S48): a carteira inteira com lotes e receita bruta do mês e dos 12 meses.
+// Antes da S48 rodar devolve vazio (a tela avisa).
+export async function comissaoCarteiraMes(parceiro: string, corretora: Corretora | null, mesRef: string): Promise<ExtratoParceiroRow[]> {
+  const { db } = await equipe()
+  try {
+    return linhas(await rpc(db, 'comissao_carteira_mes', { p_parceiro: parceiro, p_corretora: corretora, p_mes_ref: mesRef }), r => ({
+      cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), conta: str(r.conta), status: String(r.status ?? ''),
+      origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
+      data_abertura: str(r.data_abertura), lotes_mes: num(r.lotes_mes), zerados_mes: num(r.zerados_mes), receita_mes: num(r.receita_mes),
+      lotes_12m: num(r.lotes_12m), receita_12m: num(r.receita_12m), ultimo_mes_giro: str(r.ultimo_mes_giro),
+    }))
+  } catch (e) {
+    if (e instanceof Error && semS39({ message: e.message })) return []
+    throw e
+  }
 }
 
 export async function comissaoRegras(parceiro: string): Promise<ComissaoRegra[]> {

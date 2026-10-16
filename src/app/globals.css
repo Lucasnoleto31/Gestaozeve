@@ -734,12 +734,13 @@ html {
   }
 }
 
-/* Extrato para imprimir (/extrato): folha deitada e tabela um pouco mais compacta para caberem as 11 colunas */
+/* Extrato para imprimir (/extrato): folha deitada (o @page vale para o documento todo e só na impressão;
+   dentro de @media print o compilador o descarta) e tabela um pouco mais compacta para caberem as 11 colunas */
+@page {
+  size: A4 landscape;
+  margin: 12mm;
+}
 @media print {
-  @page {
-    size: A4 landscape;
-    margin: 12mm;
-  }
   .claro .tbl-wrap {
     overflow: visible;
     max-height: none;

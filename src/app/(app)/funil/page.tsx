@@ -60,7 +60,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
     { nome: 'Ativados', valor: t.com_giro, nota: 'abriram a conta e operaram' },
   ]
   // Destino de cada lead do período, um só por lead (S50): os quatro somam os que entraram
-  const semS50 = t.recebidos > 0 && t.em_contato + t.perdidos_funil + t.contas_abertas + jaClientes === 0
+  const semS50 = t.recebidos > jaClientes && t.em_contato + t.perdidos_funil + t.contas_abertas === 0
   const destinos = [
     { nome: 'Perdido', valor: t.perdidos_funil, tom: 'loss' as const, nota: t.recusaram ? `${fmtNum(t.recusaram)} recusaram a corretora` : 'desistiram ou não responderam' },
     { nome: 'Em contato', valor: t.em_contato, tom: 'neutral' as const, nota: 'em aberto, ainda sendo trabalhados' },

@@ -2,14 +2,14 @@
 // RPC da S19 com o client service_role e devolve linhas tipadas.
 import type { Corretora } from '@/lib/corretoras'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
-import { mesAtual } from './meses'
+import { mesAtual, somarMeses } from './meses'
 import { diarioPelaLista, type ContatoLeve, type LeadLeve } from './contatos'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import { grupoCorretagem, nivel as nivelDe, nivelPelaMedia, risco as riscoDe } from './tipos'
 import { casaBusca, contaCasa, digitosTelefone, indexarBusca, lerBusca, regexDoTexto } from '@/lib/busca'
 import { normTexto } from '@/lib/texto'
-import type { ClienteEncontrado } from './tipos'
+import type { ClienteEncontrado, GanhoDia } from './tipos'
 import type {
   OperacaoDia, ClienteRiscoRow, GiroDiaRow, AtivacaoAtendenteRow, ClienteContato,
   ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra, ExtratoParceiroRow,
@@ -913,4 +913,14 @@ export async function comissaoRegras(parceiro: string): Promise<ComissaoRegra[]>
     id: String(r.id), parceiro: String(r.parceiro), corretora: String(r.corretora), vigencia: String(r.vigencia), prazo_ativacao_dias: num(r.prazo_ativacao_dias),
     reativacao_meses: num(r.reativacao_meses) || 4, metas_abertura: String(r.metas_abertura ?? ''), metas_ativacao: String(r.metas_ativacao ?? ''),
   }))
+}
+
+// Quem fechou como Ganho no mês: a lista por trás das barras de "clientes ganhos por dia" do Funil, direto
+// da tabela de leads e só com as colunas da tabela do dia (nome, telefone, responsável). `mes` = 'AAAA-MM-01'.
+export async function leadsGanhosDoMes(mes: string): Promise<GanhoDia[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('leads').select('id, nome, whatsapp, responsavel, data_fechamento')
+    .eq('status', 'Ganho').gte('data_fechamento', mes).lt('data_fechamento', somarMeses(mes, 1)).order('nome').range(0, PAGINA - 1)
+  if (error) falha(error, 'leads')
+  return linhas(data, r => ({ id: String(r.id), dia: String(r.data_fechamento).slice(0, 10), nome: String(r.nome ?? ''), whatsapp: str(r.whatsapp), responsavel: str(r.responsavel) }))
 }

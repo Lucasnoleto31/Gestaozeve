@@ -1,6 +1,6 @@
 // Contatos por lead (S47) e série diária de leads: média de contatos até converter, rótulos dos dias
 // e o cálculo de reserva antes da S47. Sem dependência de React nem de servidor.
-import type { AtivacaoAtendenteRow, LeadDiaRow, LeadRow } from './tipos'
+import type { AtivacaoAtendenteRow, GanhoDia, LeadDiaRow, LeadRow } from './tipos'
 import { diaBrasil } from '@/lib/periodo'
 import { somarDias } from './meses'
 
@@ -140,3 +140,19 @@ export function diasDoMes(serie: LeadDiaRow[], mes: string, hoje: string): LeadD
   for (let dia = mes; dia <= fim; dia = somarDias(dia, 1)) out.push(porDia.get(dia) ?? { dia, entraram: 0, contatos: 0, ganhos: 0, perdidos: 0, contas_abertas: 0 })
   return out
 }
+
+// Quem fechou em cada dia, por trás do "+N" da faixa e das barras de ganhos por dia: só os leads Ganho com
+// fechamento a partir de `desde` (AAAA-MM-DD), no formato leve que a tabela do dia mostra
+export function ganhosLeves(leads: Pick<LeadRow, 'id' | 'nome' | 'whatsapp' | 'responsavel' | 'status' | 'data_fechamento'>[], desde: string): GanhoDia[] {
+  const out: GanhoDia[] = []
+  for (const l of leads) {
+    if (l.status !== 'Ganho' || !l.data_fechamento) continue
+    const dia = l.data_fechamento.slice(0, 10)
+    if (dia >= desde) out.push({ id: l.id, dia, nome: l.nome, whatsapp: l.whatsapp, responsavel: l.responsavel })
+  }
+  return out
+}
+
+// Os ganhos de um dia, em ordem alfabética
+export const ganhosDoDia = (ganhos: GanhoDia[], dia: string): GanhoDia[] =>
+  ganhos.filter(g => g.dia === dia).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))

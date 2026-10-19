@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { contatosParaResumo, funilAtivacoesPorAtendente, funilMensal, funilResultado, funilSafra, funilSafraPor, leadsDiario, leadsResumo } from '@/lib/gestao/consultas'
+import { contatosParaResumo, funilAtivacoesPorAtendente, funilMensal, funilResultado, funilSafra, funilSafraPor, leadsDiario, leadsGanhosDoMes, leadsResumo } from '@/lib/gestao/consultas'
 import { diasDoMes, fmtMedia, resumoContatosPorAtendente, somaAtivacoes, type ResumoAtendente } from '@/lib/gestao/contatos'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes, somarMeses } from '@/lib/gestao/meses'
@@ -16,6 +16,7 @@ import { Alert } from '@/components/ui/Alert'
 import { MesPicker, SegParam } from '@/components/gestao/Filtros'
 import { LinhaVazia, Secao, StatusLeadBadge, TRACO, dataCurta, n0, p1, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
+import { GanhosDoMes } from './GanhosDoMes'
 import type { AtivacaoAtendenteRow, FunilResultadoRow, FunilSafraBase, FunilSafraPorRow } from '@/lib/gestao/tipos'
 
 const pct = (parte: number, total: number) => (total > 0 ? (parte / total) * 100 : null)
@@ -39,9 +40,9 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const periodo: 'mes' | '12m' = sp.periodo === '12m' ? '12m' : 'mes'
   const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
-  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos, resultado, ativacoes] = await Promise.all([
+  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos, resultado, ativacoes, ganhosMes] = await Promise.all([
     funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40), leadsDiario(366),
-    contatosParaResumo(), funilResultado(mesRef, 12, MESES_INATIVO), funilAtivacoesPorAtendente(mesRef, MESES_INATIVO),
+    contatosParaResumo(), funilResultado(mesRef, 12, MESES_INATIVO), funilAtivacoesPorAtendente(mesRef, MESES_INATIVO), leadsGanhosDoMes(mesRef),
   ])
   const hoje = fmtDate(hojeBrasil())
   const rotuloPeriodo = soMes ? mesLongo(mesRef) : `${mesCurto(meses[0])} a ${mesCurto(mesRef)}`
@@ -226,8 +227,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
           <Panel title={`Clientes ganhos por dia · ${mesLongo(mesRef)}`} subtitle={`Leads fechados como Ganho em cada dia (pela data de fechamento) e contas abertas na corretora (pela data de migração). ${fmtNum(ganhosDias.reduce((acc, d) => acc + d.ganhos, 0))} ganhos no mês até aqui.`}>
             {ganhosDias.length === 0
               ? <p className="py-10 text-center text-dense text-fg-subtle">Sem dias no período: a série diária cobre os últimos 12 meses.</p>
-              : <GraficoSeries dados={ganhosDias.map(d => ({ label: d.dia.slice(8, 10), ganhos: d.ganhos, contas: d.contas_abertas }))}
-                  series={[{ key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'contas', nome: 'Contas abertas', tipo: 'bar', cor: 'neutral' }]} altura={200} />}
+              : <GanhosDoMes dias={ganhosDias} ganhos={ganhosMes} hoje={hoje} />}
           </Panel>
           <Panel title="Contatos realizados" subtitle={`Contatos registrados em ${rotuloPeriodo}, pela data do contato, agrupados pelo responsável do lead. Por lead = contatos ÷ leads contatados; por dia = contatos ÷ dias com contato; até ganhar = todos os contatos (de todo o atendimento) dos leads ganhos contatados no período ÷ esses ganhos.`}>
             <div className="tbl-wrap">

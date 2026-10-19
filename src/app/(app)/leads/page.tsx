@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { assessoresPorCorretora, leadsDiario, leadsLista, parametroGeral, responsaveisAtivos, statusLeadLista } from '@/lib/gestao/consultas'
-import { fmtMedia, mediaContatos } from '@/lib/gestao/contatos'
+import { fmtMedia, ganhosLeves, mediaContatos } from '@/lib/gestao/contatos'
 import { mesAtual } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { corretorasDoPerfil } from '@/lib/corretoras'
@@ -80,7 +80,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
             {' '}{ganhosSemCliente.slice(0, 8).map(l => l.nome).join(', ')}{ganhosSemCliente.length > 8 ? '…' : ''}.
           </Alert>
         )}
-        <GanhosPorDia serie={diario} hoje={hoje} />
+        <GanhosPorDia serie={diario} hoje={hoje} ganhos={ganhosLeves(leads, diario[0]?.dia ?? hoje)} />
         <TabelaLeads
           leads={compactar(leads, CAMPOS_LEAD)}
           responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)}

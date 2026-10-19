@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diarioPelaLista, diasDoMes, fmtMedia, ganhosPorMes, mediaContatos, resumoContatosPorAtendente, rotuloDia, somaAtivacoes, somaUltimos, ultimosDias } from './contatos'
+import { diarioPelaLista, diasDoMes, fmtMedia, ganhosDoDia, ganhosLeves, ganhosPorMes, mediaContatos, resumoContatosPorAtendente, rotuloDia, somaAtivacoes, somaUltimos, ultimosDias } from './contatos'
 import type { LeadDiaRow } from './tipos'
 
 describe('mediaContatos', () => {
@@ -108,5 +108,27 @@ describe('somaAtivacoes', () => {
   })
   it('sem linhas devolve zeros', () => {
     expect(somaAtivacoes([]).contas).toBe(0)
+  })
+})
+
+describe('ganhosLeves / ganhosDoDia', () => {
+  const leads = [
+    { id: '1', nome: 'Carla', whatsapp: '11 9', responsavel: 'Lucas', status: 'Ganho', data_fechamento: '2026-10-19' },
+    { id: '2', nome: 'Ana', whatsapp: null, responsavel: null, status: 'Ganho', data_fechamento: '2026-10-19' },
+    { id: '3', nome: 'Bruno', whatsapp: '11 8', responsavel: 'Artur', status: 'Perdido', data_fechamento: '2026-10-19' },
+    { id: '4', nome: 'Dora', whatsapp: null, responsavel: 'Artur', status: 'Ganho', data_fechamento: '2026-09-30' },
+    { id: '5', nome: 'Edu', whatsapp: null, responsavel: 'Artur', status: 'Ganho', data_fechamento: null },
+  ]
+  it('fica só com os ganhos fechados a partir da data, no formato da tabela do dia', () => {
+    expect(ganhosLeves(leads, '2026-10-06')).toEqual([
+      { id: '1', dia: '2026-10-19', nome: 'Carla', whatsapp: '11 9', responsavel: 'Lucas' },
+      { id: '2', dia: '2026-10-19', nome: 'Ana', whatsapp: null, responsavel: null },
+    ])
+  })
+  it('a lista do dia sai em ordem alfabética e vazia quando ninguém fechou', () => {
+    const g = ganhosLeves(leads, '2026-09-01')
+    expect(ganhosDoDia(g, '2026-10-19').map(x => x.nome)).toEqual(['Ana', 'Carla'])
+    expect(ganhosDoDia(g, '2026-09-30').map(x => x.nome)).toEqual(['Dora'])
+    expect(ganhosDoDia(g, '2026-10-18')).toEqual([])
   })
 })

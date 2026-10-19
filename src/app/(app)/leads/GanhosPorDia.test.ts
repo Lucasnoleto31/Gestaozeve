@@ -18,4 +18,13 @@ describe('GanhosPorDia', () => {
     expect(html).toContain('>ontem<')
     expect((html.match(/<li /g) ?? []).length).toBe(14)
   })
+  it('o +N vira botão que abre a lista de quem fechou no dia', () => {
+    const hoje = '2026-10-16'
+    const serie = ultimosDias(hoje, 14).map(dia => ({ dia, entraram: 0, contatos: 0, ganhos: dia === hoje ? 2 : 0, perdidos: 0, contas_abertas: 0 }))
+    const ganhos = [{ id: 'a', dia: hoje, nome: 'Ana', whatsapp: '11 99999-0000', responsavel: 'Lucas' }, { id: 'b', dia: hoje, nome: 'Bia', whatsapp: null, responsavel: null }]
+    const html = renderToStaticMarkup(createElement(GanhosPorDia, { serie, hoje, ganhos }))
+    expect(html).toContain('aria-label="Ver os 2 ganhos de 16/10"')
+    expect((html.match(/<button /g) ?? []).length).toBe(1)
+    expect(html).not.toContain('role="dialog"')   // fechado até clicar
+  })
 })

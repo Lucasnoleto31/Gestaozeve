@@ -46,7 +46,7 @@ function useTooltipStyle() {
 }
 
 // Barras/linhas por categoria (meses, semanas, dias)
-export function GraficoSeries({ dados, series, altura = 260, formato = 'num', formatoDir, legenda = true, margemEsq, colorido = false }: {
+export function GraficoSeries({ dados, series, altura = 260, formato = 'num', formatoDir, legenda = true, margemEsq, colorido = false, aoClicar }: {
   dados: Record<string, string | number>[]
   series: Serie[]
   altura?: number
@@ -55,6 +55,7 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
   legenda?: boolean
   margemEsq?: number
   colorido?: boolean   // paleta de matizes em vez de série por valor
+  aoClicar?: (indice: number) => void   // clique numa categoria (a coluna inteira, não só a barra): índice em `dados`
 }) {
   const c = useChartColors()
   const tt = useTooltipStyle()
@@ -66,7 +67,8 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
   const fmtDirAxis = formatoDir === 'brl' ? (v: number) => `R$ ${compacto(v)}` : formatoDir === 'pct' ? (v: number) => `${v}%` : compacto
   return (
     <ResponsiveContainer width="100%" height={altura}>
-      <ComposedChart data={dados} margin={{ top: 8, right: temDir ? 8 : 12, left: margemEsq ?? 0, bottom: 0 }}>
+      <ComposedChart data={dados} margin={{ top: 8, right: temDir ? 8 : 12, left: margemEsq ?? 0, bottom: 0 }}
+        onClick={aoClicar ? st => { const i = Number(st?.activeTooltipIndex); if (Number.isInteger(i) && i >= 0 && i < dados.length) aoClicar(i) } : undefined}>
         <defs>
           {series.filter(s => s.tipo !== 'line').map((s, i) => {
             const cor = corDe(s.cor, c, series.indexOf(s), colorido)

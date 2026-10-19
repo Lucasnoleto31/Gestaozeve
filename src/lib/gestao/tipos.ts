@@ -465,6 +465,8 @@ export type LeadsResumo = { total: number; neste_mes: number; abertos: number; c
 export type LeadContato = { id: string; lead_id: string; data: string; nota: string | null; criado_por_nome: string | null; created_at: string }
 // Um dia da série de leads (leads_diario, S47): quantos entraram, contatos feitos, ganhos, perdidos e contas abertas
 export type LeadDiaRow = { dia: string; entraram: number; contatos: number; ganhos: number; perdidos: number; contas_abertas: number }
+// Um lead ganho num dia: a lista por trás do "+N" de clientes ganhos por dia (quem fechou, telefone e quem atendeu)
+export type GanhoDia = { id: string; dia: string; nome: string; whatsapp: string | null; responsavel: string | null }
 // Um contato registrado com o cliente numa corretora (cliente_contatos, S52): a rota da campanha de ativação
 export type ClienteContato = { id: string; cliente_id: string; corretora: string; data: string; nota: string | null; criado_por_nome: string | null; created_at: string }
 // Campanha de ativação por atendente no mês (funil_ativacoes_por_atendente, S52): as contas atribuídas a ele

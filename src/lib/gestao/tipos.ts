@@ -51,6 +51,8 @@ export type ClienteRow = {
   risco: Risco | null
   nivel: Nivel | null                        // pela média de lotes dos 3 meses anteriores (S46)
   ativador: string | null                    // atendente da campanha de ativação (S52); fora do responsável e da comissão
+  contatos: number                           // contatos registrados com o cliente nesta corretora (cliente_contatos, S52)
+  ultimo_contato: string | null              // data do último contato registrado
 }
 // Risco de inativação (S44, corrigido na S46): vale para quem girou nos 3 meses anteriores ou no mês.
 // parou = sem giro há N dias; em queda = no ritmo atual fecha o mês bem abaixo da média dos 3 meses
@@ -77,7 +79,7 @@ export const grupoCorretagem = (v: unknown): GrupoCorretagem | null =>
 export const CAMPOS_CLIENTE_LINHA = [
   'cliente_id', 'nome', 'documento', 'telefone', 'email', 'n_contas', 'conta_principal', 'status', 'assessor_nome', 'responsavel', 'tarifa',
   'data_migracao', 'data_entrada', 'lotes_mes', 'receita_mes', 'lotes_12m', 'receita_12m', 'ultimo_giro', 'meses_sem_giro', 'situacao', 'alertas', 'parceiro', 'grupo_corretagem',
-  'receita_total', 'lotes_mes_anterior', 'lotes_media_3m', 'dias_sem_giro', 'risco', 'nivel', 'ativador',
+  'receita_total', 'lotes_mes_anterior', 'lotes_media_3m', 'dias_sem_giro', 'risco', 'nivel', 'ativador', 'contatos', 'ultimo_contato',
 ] as const satisfies readonly (keyof ClienteRow)[]
 export type ClienteLinha = Pick<ClienteRow, (typeof CAMPOS_CLIENTE_LINHA)[number]>
 // Idem para a tabela da tela Receita
@@ -475,6 +477,10 @@ export type AtivacaoAtendenteRow = {
 }
 // Outro cadastro que já tem o CPF/CNPJ informado (para unificar)
 export type ClienteDuplicado = { id: string; nome: string; corretora: string | null }
+// Grupo de leads com o mesmo nome completo que as regras automáticas não unificam (leads_possiveis_duplicados, S53):
+// quantos são, quantos atendentes diferentes, quem atendeu primeiro (fica como responsável ao unificar) e uma linha
+// por lead (telefone, e-mail, CPF, responsável, status, contatos, entrada e, no fim, o id)
+export type LeadsDuplicadosRow = { nome: string; leads: number; atendentes: number; atendeu_primeiro: string | null; detalhes: string[] }
 
 // Parâmetros
 export type Parametro = { chave: string; valor: string; descricao: string | null }
@@ -514,7 +520,7 @@ export type ComissaoItem = {
   cliente_id: string
   nome: string
   corretora: string
-  origem: 'lead' | 'parceiro' | 'assessor' | 'responsavel'   // responsavel = responsável interno é o parceiro (ficha ou herdado do assessor)
+  origem: 'lead' | 'parceiro' | 'assessor' | 'responsavel' | 'campanha'   // responsavel = responsável interno é o parceiro (ficha ou herdado do assessor); campanha = conta atribuída na campanha de ativação (S54)
   data_lead: string | null
   assessor_nome: string | null     // assessor do cliente, quando a origem é o assessor ou o responsável
   status: string

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { cookies } from 'next/headers'
 import { CHAVES_FILTRO_CLIENTES, cookieFiltrosClientes, filtrosIniciais } from '@/lib/filtrosLista'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { assessoresPorCorretora, clientesLista, responsaveisAtivos } from '@/lib/gestao/consultas'
+import { assessoresPorCorretora, clientesLista, contatosClientesResumo, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { resumoClientes } from '@/lib/gestao/derivados'
 import { mesCurto, mesLongo, somarDias } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
@@ -25,9 +25,11 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   // filtros da tabela: os do endereço; sem nenhum no endereço (seta da ficha, menu), os últimos usados
   const fi = filtrosIniciais(q, (await cookies()).get(cookieFiltrosClientes(corretora))?.value, CHAVES_FILTRO_CLIENTES)
   const listaPropria = temListaPropria(corretora)
-  const [clientes, responsaveis, assessores, profile] = await Promise.all([
-    clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(),
+  const [lista, responsaveis, assessores, profile, contatos] = await Promise.all([
+    clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(), contatosClientesResumo(corretora),
   ])
+  // contatos registrados com cada cliente (campanha de ativação, S52): quantos e o último
+  const clientes = lista.map(c => { const x = contatos.get(c.cliente_id); return x ? { ...c, contatos: x.contatos, ultimo_contato: x.ultimo_contato } : c })
   const admin = profile?.role === 'admin'
   const r = resumoClientes(clientes)
   const hoje = fmtDate(hojeBrasil())

@@ -15,7 +15,7 @@ import type {
   ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra, ExtratoParceiroRow,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilResultadoRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
-  IncentivoRow, LeadAcao, LeadContato, LeadDiaRow, LeadRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
+  IncentivoRow, LeadAcao, LeadContato, LeadDiaRow, LeadRow, LeadsDuplicadosRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
   Parametro, Parceiro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
 } from './tipos'
 
@@ -73,6 +73,7 @@ export const mapCliente = (r: Row): ClienteRow => ({
   receita_total: num(r.receita_total), primeiro_mes_giro: str(r.primeiro_mes_giro), meses_ativos: num(r.meses_ativos),
   lotes_mes_anterior: num(r.lotes_mes_anterior), lotes_media_3m: num(r.lotes_media_3m),
   dias_sem_giro: r.dias_sem_giro == null ? null : num(r.dias_sem_giro), risco: riscoDe(r.risco), nivel: nivelDoBanco(r),
+  contatos: num(r.contatos), ultimo_contato: str(r.ultimo_contato),   // preenchidos pela página a partir de cliente_contatos
   ativador: str(r.ativador),
 })
 
@@ -438,6 +439,22 @@ export async function clienteContatos(corretora: Corretora, clienteId: string): 
   }))
 }
 
+// Contatos registrados com os clientes de uma corretora (cliente_contatos, S52): quantos e o último, por cliente.
+// Antes da S52 (tabela ausente) devolve vazio.
+export async function contatosClientesResumo(corretora: Corretora): Promise<Map<string, { contatos: number; ultimo_contato: string }>> {
+  const { db } = await equipe()
+  const out = new Map<string, { contatos: number; ultimo_contato: string }>()
+  const { data, error } = await db.from('cliente_contatos').select('cliente_id, data').eq('corretora', corretora).range(0, PAGINA - 1)
+  if (error) { if (tabelaAusente(error)) return out; falha(error, 'cliente_contatos') }
+  for (const r of (data ?? []) as Row[]) {
+    const id = String(r.cliente_id), d = String(r.data)
+    const x = out.get(id)
+    if (!x) out.set(id, { contatos: 1, ultimo_contato: d })
+    else { x.contatos++; if (d > x.ultimo_contato) x.ultimo_contato = d }
+  }
+  return out
+}
+
 // Histórico de contatos inteiro (lead e data) e os leads (responsável e status), para o resumo de
 // contatos por atendente no Funil. São tabelas pequenas (duas colunas); antes da S47 vem vazio.
 export async function contatosParaResumo(): Promise<{ contatos: ContatoLeve[]; leads: LeadLeve[] }> {
@@ -497,6 +514,22 @@ function resumoPelaListaLeads(leads: LeadRow[], limite: number): LeadsResumo {
     ja_clientes: leads.filter(l => l.cliente_id).length,
     acao: leads.filter(l => l.alerta).sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0)).slice(0, limite),
   }
+}
+
+// Leads com o mesmo nome completo (nome e sobrenome) que as regras automáticas não unificam (S53): a lista de
+// revisão, com quem atendeu primeiro (fica como responsável ao unificar) e uma linha por lead. Antes da S53
+// (função ausente) vem vazio.
+export async function leadsPossiveisDuplicados(): Promise<LeadsDuplicadosRow[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.rpc('leads_possiveis_duplicados')
+  if (error) {
+    if (funcaoAusente(error)) return []
+    falha(error, 'leads_possiveis_duplicados')
+  }
+  return linhas(data, r => ({
+    nome: String(r.nome ?? ''), leads: num(r.leads), atendentes: num(r.atendentes), atendeu_primeiro: str(r.atendeu_primeiro),
+    detalhes: String(r.detalhes ?? '').split('\n').filter(Boolean),
+  }))
 }
 
 export async function funilMensal(mesRef: string | null, meses = 12): Promise<FunilMensalRow[]> {
@@ -803,7 +836,7 @@ export async function comissaoItens(parceiro: string, corretora: Corretora | nul
   const { db } = await equipe()
   try {
     return linhas(await rpc(db, 'comissao_itens', { p_parceiro: parceiro, p_corretora: corretora }), r => ({
-      cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
+      cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' || r.origem === 'campanha' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
       data_lead: str(r.data_lead), status: String(r.status ?? ''), data_abertura: str(r.data_abertura), data_ativacao: str(r.data_ativacao),
       prazo_dias: num(r.prazo_dias), limite_ativacao: str(r.limite_ativacao), ativou_no_prazo: bool(r.ativou_no_prazo),
       mes_abertura: str(r.mes_abertura), mes_ativacao: str(r.mes_ativacao), valor_abertura: num(r.valor_abertura), valor_ativacao: num(r.valor_ativacao),
@@ -835,7 +868,7 @@ export async function comissaoContasMes(parceiro: string, corretora: Corretora |
   try {
     return linhas(await rpc(db, 'comissao_contas_mes', { p_parceiro: parceiro, p_corretora: corretora, p_mes_ref: mesRef, p_meses: meses }), r => ({
       mes_ref: String(r.mes_ref), cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''),
-      origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
+      origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' || r.origem === 'campanha' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
       tipo: (r.tipo === 'abertura' || r.tipo === 'reativacao' ? r.tipo : 'ativacao') as ComissaoContaMes['tipo'], data: String(r.data ?? ''), valor: num(r.valor),
       lotes_mes: num(r.lotes_mes), receita_mes: num(r.receita_mes), receita_desde: num(r.receita_desde),
     }))
@@ -862,7 +895,7 @@ export async function comissaoCarteiraMes(parceiro: string, corretora: Corretora
   try {
     return linhas(await rpc(db, 'comissao_carteira_mes', { p_parceiro: parceiro, p_corretora: corretora, p_mes_ref: mesRef }), r => ({
       cliente_id: String(r.cliente_id), nome: String(r.nome ?? ''), corretora: String(r.corretora ?? ''), conta: str(r.conta), status: String(r.status ?? ''),
-      origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
+      origem: (r.origem === 'parceiro' || r.origem === 'assessor' || r.origem === 'responsavel' || r.origem === 'campanha' ? r.origem : 'lead') as ComissaoItem['origem'], assessor_nome: str(r.assessor_nome),
       data_abertura: str(r.data_abertura), lotes_mes: num(r.lotes_mes), zerados_mes: num(r.zerados_mes), receita_mes: num(r.receita_mes),
       lotes_12m: num(r.lotes_12m), receita_12m: num(r.receita_12m), ultimo_mes_giro: str(r.ultimo_mes_giro),
     }))

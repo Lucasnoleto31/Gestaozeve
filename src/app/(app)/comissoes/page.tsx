@@ -41,6 +41,7 @@ function origemTexto(origem: ComissaoItem['origem'], dataLead: string | null, as
   if (origem === 'lead') return dataLead ? `lead em ${dataCurta(dataLead)}` : 'lead'
   if (origem === 'assessor') return `assessor ${assessor ?? ''}`.trim()
   if (origem === 'responsavel') return 'responsável interno' + (assessor ? ` · ${assessor}` : '')
+  if (origem === 'campanha') return 'campanha de ativação'
   return 'parceiro na ficha'
 }
 
@@ -303,7 +304,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
           <RegrasComissao parceiro={parceiro} regras={regras} admin={admin} />
         </div>
 
-        <Panel title={`Carteira de ${parceiro} · ${fmtNum(itens.length)} contas`} subtitle="Lead que virou cliente, cliente com o parceiro marcado na ficha, cliente de um assessor ligado ao parceiro (Parâmetros › Assessores) ou cliente cujo responsável interno é o parceiro (na ficha ou herdado do assessor).">
+        <Panel title={`Carteira de ${parceiro} · ${fmtNum(itens.length)} contas`} subtitle="Lead que virou cliente, cliente com o parceiro marcado na ficha, cliente de um assessor ligado ao parceiro (Parâmetros › Assessores), cliente cujo responsável interno é o parceiro (na ficha ou herdado do assessor) ou conta atribuída ao parceiro na campanha de ativação (sem crédito de abertura: só ativação e reativação).">
           <details>
             <summary className="cursor-pointer text-label text-fg-muted hover:text-fg">
               Mostrar todas as contas · {fmtNum(res.abertasTotal)} abertas, {fmtNum(res.ativadasTotal)} ativações, {fmtNum(res.pendentes)} no prazo, {fmtNum(res.reativadasTotal)} reativações

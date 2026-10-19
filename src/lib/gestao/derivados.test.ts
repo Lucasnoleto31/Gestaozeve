@@ -8,7 +8,7 @@ const base: ClienteRow = {
   data_migracao: null, data_entrada: null, dias_ate_migrar: null, lotes_total: 0, lotes_mes: 0, zerados_mes: 0, receita_mes: 0,
   receita_corretagem_mes: 0, receita_zeragem_mes: 0, lotes_12m: 0, receita_12m: 0, ultimo_giro: null, ultimo_mes_giro: null, meses_sem_giro: null,
   situacao: 'Nunca girou', alertas: [], parceiro: null, observacoes: null, motivo_recusa: null, grupo_corretagem: null,
-  receita_total: 0, primeiro_mes_giro: null, meses_ativos: 0, lotes_mes_anterior: 0, lotes_media_3m: 0, dias_sem_giro: null, risco: null, nivel: null, ativador: null,
+  receita_total: 0, primeiro_mes_giro: null, meses_ativos: 0, lotes_mes_anterior: 0, lotes_media_3m: 0, dias_sem_giro: null, risco: null, nivel: null, ativador: null, contatos: 0, ultimo_contato: null,
 }
 const c = (p: Partial<ClienteRow>): ClienteRow => ({ ...base, ...p })
 

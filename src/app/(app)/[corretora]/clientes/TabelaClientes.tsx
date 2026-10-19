@@ -18,11 +18,11 @@ import { casaBusca, indexarBusca, lerBusca } from '@/lib/busca'
 import { CHAVES_FILTRO_CLIENTES, comEscolhido, cookieFiltrosClientes, limiteDe, opcaoValida, type ValoresFiltro } from '@/lib/filtrosLista'
 import { filtrosNoNavegador, lembrarAberto, useFiltrosNaUrl, useRolarAteAberto } from '@/lib/useFiltrosNaUrl'
 
-type Filtros = { busca: string; status: string; situacao: string; responsavel: string; ativacao: string; assessor: string; alerta: string; grupo: string; risco: string; nivel: string }
+type Filtros = { busca: string; status: string; situacao: string; responsavel: string; ativacao: string; contato: string; assessor: string; alerta: string; grupo: string; risco: string; nivel: string }
 type Ordem = { col: keyof ClienteLinha; dir: 'asc' | 'desc' }
 // Padrões dos filtros (o que não vai para o endereço nem para o cookie da lista)
-const PADROES_FILTRO = { busca: '', status: '', situacao: '', responsavel: '', ativacao: '', assessor: '', alerta: '', grupo: '', risco: '', nivel: '', ordem: 'lotes_12m:desc', n: '100' }
-const SEM_FILTRO: Filtros = { busca: '', status: '', situacao: '', responsavel: '', ativacao: '', assessor: '', alerta: '', grupo: '', risco: '', nivel: '' }
+const PADROES_FILTRO = { busca: '', status: '', situacao: '', responsavel: '', ativacao: '', contato: '', assessor: '', alerta: '', grupo: '', risco: '', nivel: '', ordem: 'lotes_12m:desc', n: '100' }
+const SEM_FILTRO: Filtros = { busca: '', status: '', situacao: '', responsavel: '', ativacao: '', contato: '', assessor: '', alerta: '', grupo: '', risco: '', nivel: '' }
 // "lotes_12m:desc" → ordem; inválida → padrão
 function lerOrdem(v: string | null | undefined): Ordem {
   const [col, dir] = String(v ?? '').split(':')
@@ -36,7 +36,7 @@ const STATUS = ['Migrado', 'Em processamento', 'Recusou']
 function filtrosDe(v: ValoresFiltro): Filtros {
   return {
     busca: v.busca ?? '', status: opcaoValida(v.status, STATUS), situacao: opcaoValida(v.situacao, SITUACOES),
-    responsavel: v.responsavel ?? '', ativacao: v.ativacao ?? '', assessor: v.assessor ?? '', alerta: v.alerta ?? '',
+    responsavel: v.responsavel ?? '', ativacao: v.ativacao ?? '', contato: opcaoValida(v.contato, ['sim', 'nao']), assessor: v.assessor ?? '', alerta: v.alerta ?? '',
     grupo: opcaoValida(v.grupo, [...GRUPOS_CORRETAGEM, 'vazio']), risco: opcaoValida(v.risco, ['qualquer', ...RISCOS]),
     nivel: opcaoValida(v.nivel, [...NIVEIS, 'vazio']),
   }
@@ -80,6 +80,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
       if (f.situacao && c.situacao !== f.situacao) return false
       if (f.responsavel && (c.responsavel ?? '') !== f.responsavel) return false
       if (f.ativacao === 'sem' ? c.ativador != null : f.ativacao && c.ativador !== f.ativacao) return false
+      if (f.contato === 'sim' ? !c.contatos : f.contato === 'nao' && c.contatos > 0) return false
       if (f.assessor && (c.assessor_nome ?? '') !== f.assessor) return false
       if (f.alerta === 'qualquer' && c.alertas.length === 0) return false
       if (f.alerta && f.alerta !== 'qualquer' && !c.alertas.some(a => (f.alerta === 'contas' ? /^\d+ contas$/.test(a) : a === f.alerta))) return false
@@ -117,8 +118,8 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
   )
 
   const exportar = () => {
-    const cab = ['Cliente', 'Nível', 'Média de lotes 3 m', 'CPF/CNPJ', 'Conta principal', 'Contas', 'Status', 'Situação', 'Risco', 'Assessor', 'Responsável', 'Ativação', 'Tarifa', 'Grupo de corretagem', 'Migração', 'Entrada', 'Parceiro', `Lotes ${mesCurto(mesRef)}`, `Receita ${mesCurto(mesRef)}`, 'Lotes 12m', 'Receita 12m', 'Receita total', 'Último giro', 'Dias sem giro', 'Telefone', 'E-mail', 'Alertas']
-    const linhas = filtrados.map(c => [c.nome, c.nivel ?? '', Math.round(c.lotes_media_3m), c.documento ?? '', c.conta_principal ?? '', c.n_contas, c.status, c.situacao, c.risco ?? '', c.assessor_nome ?? '', c.responsavel ?? '', c.ativador ?? '', c.tarifa, c.grupo_corretagem ?? '', c.data_migracao ?? '', c.data_entrada ?? '', c.parceiro ?? '', c.lotes_mes, c.receita_mes, c.lotes_12m, c.receita_12m, c.receita_total, c.ultimo_giro ?? '', c.dias_sem_giro ?? '', c.telefone ?? '', c.email ?? '', c.alertas.join('; ')])
+    const cab = ['Cliente', 'Nível', 'Média de lotes 3 m', 'CPF/CNPJ', 'Conta principal', 'Contas', 'Status', 'Situação', 'Risco', 'Assessor', 'Responsável', 'Ativação', 'Último contato', 'Contatos', 'Tarifa', 'Grupo de corretagem', 'Migração', 'Entrada', 'Parceiro', `Lotes ${mesCurto(mesRef)}`, `Receita ${mesCurto(mesRef)}`, 'Lotes 12m', 'Receita 12m', 'Receita total', 'Último giro', 'Dias sem giro', 'Telefone', 'E-mail', 'Alertas']
+    const linhas = filtrados.map(c => [c.nome, c.nivel ?? '', Math.round(c.lotes_media_3m), c.documento ?? '', c.conta_principal ?? '', c.n_contas, c.status, c.situacao, c.risco ?? '', c.assessor_nome ?? '', c.responsavel ?? '', c.ativador ?? '', c.ultimo_contato ?? '', c.contatos, c.tarifa, c.grupo_corretagem ?? '', c.data_migracao ?? '', c.data_entrada ?? '', c.parceiro ?? '', c.lotes_mes, c.receita_mes, c.lotes_12m, c.receita_12m, c.receita_total, c.ultimo_giro ?? '', c.dias_sem_giro ?? '', c.telefone ?? '', c.email ?? '', c.alertas.join('; ')])
     const csv = [cab, ...linhas].map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
@@ -129,8 +130,8 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
   }
 
   const sel = (k: keyof Filtros, v: string) => setF(x => ({ ...x, [k]: v }))
-  const temFiltro = !!(f.busca || f.status || f.situacao || f.responsavel || f.ativacao || f.assessor || f.alerta || f.grupo || f.risco || f.nivel)
-  const colunas = 22 + (comAcoes ? 2 : 0)
+  const temFiltro = !!(f.busca || f.status || f.situacao || f.responsavel || f.ativacao || f.contato || f.assessor || f.alerta || f.grupo || f.risco || f.nivel)
+  const colunas = 23 + (comAcoes ? 2 : 0)
 
   return (
     <Panel
@@ -156,6 +157,11 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
           <option value="">Ativação: todos</option>
           {ativacoes.map(a => <option key={a} value={a}>{a}</option>)}
           <option value="sem">sem atendente</option>
+        </select>
+        <select className="field-sm" value={f.contato} onChange={e => sel('contato', e.target.value)} aria-label="Contato" title="Contatos registrados na ficha do cliente (campanha de ativação)">
+          <option value="">Contato: todos</option>
+          <option value="sim">já chamados</option>
+          <option value="nao">ainda não chamados</option>
         </select>
         <select className="field-sm max-w-[220px]" value={f.assessor} onChange={e => sel('assessor', e.target.value)} aria-label="Assessor">
           <option value="">Assessor: todos</option>{assessores.map(s => <option key={s}>{s}</option>)}
@@ -213,6 +219,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
               {th('assessor_nome', 'Assessor', { prio: 'p2' })}
               {th('responsavel', 'Resp.', { prio: 'p3' })}
               {th('ativador', 'Ativação', { prio: 'p2' })}
+              {th('ultimo_contato', 'Contato', { prio: 'p2' })}
               {th('tarifa', 'Tarifa', { num: true, prio: 'p3' })}
               {th('grupo_corretagem', 'Grupo corr.', { prio: 'p2' })}
               {th('data_migracao', 'Migração', { prio: 'p3' })}
@@ -247,6 +254,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
                 <td className="max-w-[180px] truncate muted col-p2">{c.assessor_nome ?? TRACO}</td>
                 <td className="muted col-p3">{c.responsavel ?? TRACO}</td>
                 <td className={cn('col-p2 whitespace-nowrap', c.ativador ? 'font-medium' : 'subtle')} title={c.ativador ? `Na campanha de ativação com ${c.ativador}` : undefined}>{c.ativador ?? TRACO}</td>
+                <td className={cn('num col-p2 whitespace-nowrap', !c.contatos && 'subtle')} title={c.contatos ? `${fmtNum(c.contatos)} ${c.contatos === 1 ? 'contato registrado' : 'contatos registrados'} · último em ${dataCurta(c.ultimo_contato)}` : 'Nenhum contato registrado'}>{c.contatos ? `${dataCurta(c.ultimo_contato)} · ${fmtNum(c.contatos)}` : TRACO}</td>
                 <td className="num col-p3">{n2(c.tarifa)}</td>
                 <td className={cn('col-p2 whitespace-nowrap', c.grupo_corretagem === 'Vinculado' ? 'text-gain' : c.grupo_corretagem === 'Bloqueado' ? 'text-loss' : c.grupo_corretagem === 'Não vinculado' ? 'text-warn' : 'subtle')} title={c.grupo_corretagem === 'Bloqueado' ? 'Alteração do grupo bloqueada pelo banco: pedir o desbloqueio' : 'Situação no grupo de corretagem'}>{c.grupo_corretagem ?? TRACO}</td>
                 <td className="num col-p3">{dataCurta(c.data_migracao)}</td>

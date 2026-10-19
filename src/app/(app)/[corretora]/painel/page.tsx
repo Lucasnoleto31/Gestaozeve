@@ -118,7 +118,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const pp = (v: number | null) => (v == null ? TRACO : p1(v))
   // A mesma ordem do fechamento mensal do BTG: bruta → líquida → comissão → Delta → imposto → líquida
   const linhasRepasse: Linha[] = comRepasse ? [
-    { label: `Receita bruta ${ctx.label} (impostos de ${fmtPct(cfg.impostosEmbutidosPct, 2)} no preço)`, valores: col(m => (m ? repasseDe(m).bruta : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: `Receita bruta ${ctx.label} — preço pago pelo cliente: receita ÷ (1 − ${fmtPct(cfg.impostosEmbutidosPct, 2)} de impostos no preço)`, valores: col(m => (m ? repasseDe(m).bruta : null)), fmt: rr, destaque: 'sub', total: true },
     { label: `(–) Impostos ${ctx.label} ${fmtPct(cfg.impostoBtgPct, 2)}`, valores: col(m => (m ? repasseDe(m).impostoBtg : null)), fmt: rr, destaque: 'sub', total: true },
     { label: `Receita líquida ${ctx.label}`, valores: col(m => (m ? repasseDe(m).liquida : null)), fmt: rr, total: true },
     { label: `Comissão ${ctx.label} (% efetivo)`, valores: col(m => (m && m.receita ? repasseDe(m).pctEfetivo : null)), fmt: pp, destaque: 'sub' },
@@ -148,7 +148,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
       { label: 'operações de ações e cripto (day trade)', valores: col(m => m?.acoes_operacoes ?? null), fmt: nn, destaque: 'sub', total: true } as Linha,
     ] : []),
     ...(atp ? [] : [{ label: `Incentivo ${ctx.label}`, valores: col(m => m?.incentivo ?? null), fmt: rr, total: true } as Linha]),
-    { label: 'Receita total', valores: col(m => (m ? receitaTotal(m) : null)), fmt: rr, destaque: 'total', total: true },
+    { label: comRepasse ? 'Receita total (lotes × tarifa + zeragem; a tarifa não inclui os impostos do preço)' : 'Receita total', valores: col(m => (m ? receitaTotal(m) : null)), fmt: rr, destaque: 'total', total: true },
     ...linhasRepasse,
     ...(comissoes.length ? [
       { label: 'Comissão de parceiros (abertura e ativação de conta)', valores: meses.map(m => comissaoPorMes.get(m)?.valor ?? null), fmt: rr, total: true } as Linha,
@@ -275,7 +275,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           />
         </Panel>
 
-        <Panel title="Indicadores mensais" subtitle={comRepasse ? 'O último mês pode estar parcial · a cadeia de impostos, comissão e Delta segue o fechamento mensal do BTG (Parâmetros).' : 'O último mês pode estar parcial.'}>
+        <Panel title="Indicadores mensais" subtitle={comRepasse ? `O último mês pode estar parcial · a cadeia de impostos, comissão e Delta segue o fechamento mensal do ${ctx.label} (Parâmetros). A receita bruta do ${ctx.label} é maior que a receita total porque o preço cobrado do cliente embute ${fmtPct(cfg.impostosEmbutidosPct, 2)} de impostos e a tarifa cadastrada (R$/lote) é o valor sem eles.` : 'O último mês pode estar parcial.'}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>

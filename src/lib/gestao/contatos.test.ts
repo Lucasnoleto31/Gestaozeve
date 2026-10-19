@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { diarioPelaLista, fmtMedia, mediaContatos, resumoContatosPorAtendente, rotuloDia, somaUltimos, ultimosDias } from './contatos'
+import { diarioPelaLista, diasDoMes, fmtMedia, ganhosPorMes, mediaContatos, resumoContatosPorAtendente, rotuloDia, somaUltimos, ultimosDias } from './contatos'
+import type { LeadDiaRow } from './tipos'
 
 describe('mediaContatos', () => {
   it('ignora quem não tem contato registrado', () => {
@@ -72,5 +73,27 @@ describe('resumoContatosPorAtendente', () => {
     const { linhas, total } = resumoContatosPorAtendente(contatos, leads, '2026-12-01', '2027-01-01')
     expect(linhas).toEqual([])
     expect(total.contatos).toBe(0)
+  })
+})
+
+describe('ganhosPorMes e diasDoMes', () => {
+  const dia = (d: string, ganhos: number, contas = 0): LeadDiaRow => ({ dia: d, entraram: 0, contatos: 0, ganhos, perdidos: 0, contas_abertas: contas })
+  const serie = [dia('2026-09-29', 1), dia('2026-09-30', 0), dia('2026-10-01', 2, 1), dia('2026-10-02', 0), dia('2026-10-03', 1), dia('2026-10-05', 4, 2), dia('2026-10-06', 0)]
+  it('soma por mês com dias úteis, melhor dia e contas abertas', () => {
+    const m = ganhosPorMes(serie, '2026-10-06', '2026-10-01')
+    expect(m).toHaveLength(1)
+    // 01/10 (qui) e 02/10 (sex) úteis, 03/10 sábado não, 05/10 (seg) e 06/10 (ter) úteis
+    expect(m[0]).toEqual({ mes: '2026-10-01', ganhos: 7, contas_abertas: 3, dias_uteis: 4, dias_com_ganho: 3, melhor_dia: '2026-10-05', melhor_ganhos: 4 })
+  })
+  it('ignora o que vem antes de "desde" e depois de hoje, e ordena do mais recente', () => {
+    const m = ganhosPorMes(serie, '2026-10-05', '2026-09-01')
+    expect(m.map(x => `${x.mes}:${x.ganhos}`)).toEqual(['2026-10-01:7', '2026-09-01:1'])
+  })
+  it('preenche os dias do mês até hoje com zeros', () => {
+    const d = diasDoMes(serie, '2026-10-01', '2026-10-06')
+    expect(d.map(x => `${x.dia.slice(8)}:${x.ganhos}`)).toEqual(['01:2', '02:0', '03:1', '04:0', '05:4', '06:0'])
+    const set = diasDoMes(serie, '2026-09-01', '2026-10-06')
+    expect(set).toHaveLength(30)
+    expect(set[28].ganhos).toBe(1)
   })
 })

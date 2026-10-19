@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { contatosParaResumo, funilMensal, funilSafra, funilSafraPor, leadsDiario, leadsResumo } from '@/lib/gestao/consultas'
-import { fmtMedia, resumoContatosPorAtendente, somaUltimos, type ResumoAtendente } from '@/lib/gestao/contatos'
+import { diasDoMes, fmtMedia, ganhosPorMes, resumoContatosPorAtendente, somaUltimos, type ResumoAtendente } from '@/lib/gestao/contatos'
+import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes, somarMeses } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -29,10 +30,16 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const periodo: 'mes' | '12m' = sp.periodo === '12m' ? '12m' : 'mes'
   const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
-  const [mensal, safra, porResp, porOrigem, leads, diario, dadosContatos] = await Promise.all([
-    funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40), leadsDiario(30),
+  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos] = await Promise.all([
+    funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40), leadsDiario(366),
     contatosParaResumo(),
   ])
+  const diario = diario12m.slice(-30)
+  // clientes ganhos por dia (do mês escolhido) e por mês (últimos 12), pela data de fechamento do lead
+  const hoje = fmtDate(hojeBrasil())
+  const ganhosDias = diasDoMes(diario12m, mesRef, hoje)
+  const ganhosMeses = ganhosPorMes(diario12m, hoje, somarMeses(mesAtual(), -11))
+  const totGanhos = ganhosMeses.reduce((t, m) => ({ ganhos: t.ganhos + m.ganhos, dias_uteis: t.dias_uteis + m.dias_uteis, contas: t.contas + m.contas_abertas }), { ganhos: 0, dias_uteis: 0, contas: 0 })
   // contatos realizados no período (pela data do contato), por responsável do lead
   const contatosAt = resumoContatosPorAtendente(dadosContatos.contatos, dadosContatos.leads, soMes ? mesRef : meses[0], somarMeses(mesRef, 1))
   const m = new Map(mensal.map(x => [x.mes_ref, x]))
@@ -170,6 +177,45 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
           <GraficoSeries dados={diario.map(d => ({ label: `${d.dia.slice(8, 10)}/${d.dia.slice(5, 7)}`, entraram: d.entraram, contatos: d.contatos, ganhos: d.ganhos }))}
             series={[{ key: 'entraram', nome: 'Entraram', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'contatos', nome: 'Contatos', tipo: 'line', cor: 'neutral' }]} altura={220} />
         </Panel>
+
+        <div className="grid gap-8 xl:grid-cols-3">
+          <Panel className="xl:col-span-2" title={`Clientes ganhos por dia · ${mesLongo(mesRef)}`} subtitle={`Leads fechados como Ganho em cada dia do mês (pela data de fechamento) e contas abertas na corretora (pela data de migração). ${fmtNum(ganhosDias.reduce((s, d) => s + d.ganhos, 0))} ganhos no mês até aqui.`}>
+            {ganhosDias.length === 0
+              ? <p className="py-10 text-center text-dense text-fg-subtle">Sem dias no período: a série diária cobre os últimos 12 meses.</p>
+              : <GraficoSeries dados={ganhosDias.map(d => ({ label: d.dia.slice(8, 10), ganhos: d.ganhos, contas: d.contas_abertas }))}
+                  series={[{ key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'contas', nome: 'Contas abertas', tipo: 'bar', cor: 'neutral' }]} altura={240} />}
+          </Panel>
+          <Panel title="Clientes ganhos por mês" subtitle="Últimos 12 meses. Média por dia útil (segunda a sexta, feriados não descontados); o mês atual conta só os dias já decorridos.">
+            <div className="tbl-wrap">
+              <table className="tbl tbl-dense">
+                <thead><tr><th>Mês</th><th className="num">Ganhos</th><th className="num">Por dia útil</th><th className="num col-p2">Melhor dia</th><th className="num">Contas abertas</th></tr></thead>
+                <tbody>
+                  {ganhosMeses.length === 0 && <LinhaVazia colunas={5}>Nenhum ganho nos últimos 12 meses.</LinhaVazia>}
+                  {ganhosMeses.map(m => (
+                    <tr key={m.mes} className={cn(m.mes === mesRef && 'bg-surface-2')}>
+                      <td className="font-medium"><Link href={`/funil?mes=${mesInput(m.mes)}${soMes ? '' : '&periodo=12m'}`} className="link">{mesCurto(m.mes)}</Link></td>
+                      <td className={cn('num font-semibold', m.ganhos && 'text-gain')}>{n0(m.ganhos)}</td>
+                      <td className={cn('num', !m.ganhos && 'subtle')}>{m.ganhos && m.dias_uteis ? fmtMedia(m.ganhos / m.dias_uteis) : TRACO}</td>
+                      <td className="num col-p2" title={m.melhor_dia ? `${fmtNum(m.melhor_ganhos)} ganhos em ${dataCurta(m.melhor_dia)}` : undefined}>{m.melhor_dia ? `${dataCurta(m.melhor_dia).slice(0, 5)} · +${fmtNum(m.melhor_ganhos)}` : TRACO}</td>
+                      <td className={cn('num', !m.contas_abertas && 'subtle')}>{n0(m.contas_abertas)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {ganhosMeses.length > 1 && (
+                  <tfoot>
+                    <tr className="total">
+                      <td>12 meses</td>
+                      <td className="num">{n0(totGanhos.ganhos)}</td>
+                      <td className="num">{totGanhos.ganhos && totGanhos.dias_uteis ? fmtMedia(totGanhos.ganhos / totGanhos.dias_uteis) : TRACO}</td>
+                      <td className="num col-p2" />
+                      <td className="num">{n0(totGanhos.contas)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </Panel>
+        </div>
 
         <Panel title="Contatos realizados" subtitle={`Contatos registrados em ${rotuloPeriodo}, pela data do contato, agrupados pelo responsável do lead. Por lead = contatos ÷ leads contatados; por dia = contatos ÷ dias com contato; até ganhar = todos os contatos (de todo o atendimento) dos leads ganhos contatados no período ÷ esses ganhos.`}>
           <div className="tbl-wrap">

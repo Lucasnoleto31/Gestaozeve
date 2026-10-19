@@ -89,3 +89,43 @@ export function resumoContatosPorAtendente(contatos: ContatoLeve[], leads: LeadL
   const fechar = (a: Acc): ResumoAtendente => ({ grupo: a.grupo, contatos: a.contatos, leads: a.leads.size, dias: a.dias.size, ganhos: a.ganhos.size, contatos_ganhos: a.contatos_ganhos })
   return { linhas: [...grupos.values()].map(fechar).sort((a, b) => b.contatos - a.contatos || a.grupo.localeCompare(b.grupo)), total: fechar(total) }
 }
+
+// ── Clientes ganhos por dia e por mês (Funil) ───────────────────────────────
+export type GanhosMes = {
+  mes: string              // 'YYYY-MM-01'
+  ganhos: number           // leads fechados como Ganho no mês (pela data de fechamento)
+  contas_abertas: number   // contas migradas no mês (pela data de migração)
+  dias_uteis: number       // dias úteis decorridos (seg–sex; feriados não entram)
+  dias_com_ganho: number
+  melhor_dia: string | null
+  melhor_ganhos: number
+}
+
+export const ehDiaUtil = (iso: string) => { const d = new Date(iso + 'T12:00:00').getDay(); return d >= 1 && d <= 5 }
+
+// Soma a série diária por mês, só dos meses a partir de `desde` ('YYYY-MM-01') e até hoje; do mais recente ao mais antigo
+export function ganhosPorMes(serie: LeadDiaRow[], hoje: string, desde: string): GanhosMes[] {
+  const porMes = new Map<string, GanhosMes>()
+  for (const d of serie) {
+    if (d.dia > hoje || d.dia < desde) continue
+    const mes = `${d.dia.slice(0, 7)}-01`
+    let m = porMes.get(mes)
+    if (!m) { m = { mes, ganhos: 0, contas_abertas: 0, dias_uteis: 0, dias_com_ganho: 0, melhor_dia: null, melhor_ganhos: 0 }; porMes.set(mes, m) }
+    m.ganhos += d.ganhos
+    m.contas_abertas += d.contas_abertas
+    if (ehDiaUtil(d.dia)) m.dias_uteis++
+    if (d.ganhos > 0) m.dias_com_ganho++
+    if (d.ganhos > m.melhor_ganhos) { m.melhor_ganhos = d.ganhos; m.melhor_dia = d.dia }
+  }
+  return [...porMes.values()].sort((a, b) => b.mes.localeCompare(a.mes))
+}
+
+// Os dias de um mês ('YYYY-MM-01') do dia 1 até o fim do mês ou hoje, com zero onde a série não tem o dia
+export function diasDoMes(serie: LeadDiaRow[], mes: string, hoje: string): LeadDiaRow[] {
+  const porDia = new Map(serie.map(d => [d.dia, d]))
+  const ultimo = (() => { const a = Number(mes.slice(0, 4)), m = Number(mes.slice(5, 7)); const d = new Date(a, m, 0, 12); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+  const fim = ultimo < hoje ? ultimo : hoje
+  const out: LeadDiaRow[] = []
+  for (let dia = mes; dia <= fim; dia = somarDias(dia, 1)) out.push(porDia.get(dia) ?? { dia, entraram: 0, contatos: 0, ganhos: 0, perdidos: 0, contas_abertas: 0 })
+  return out
+}

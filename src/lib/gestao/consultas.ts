@@ -11,7 +11,7 @@ import { casaBusca, contaCasa, digitosTelefone, indexarBusca, lerBusca, regexDoT
 import { normTexto } from '@/lib/texto'
 import type { ClienteEncontrado } from './tipos'
 import type {
-  OperacaoDia, ClienteRiscoRow, GiroDiaRow,
+  OperacaoDia, ClienteRiscoRow, GiroDiaRow, AtivacaoAtendenteRow, ClienteContato,
   ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra, ExtratoParceiroRow,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
   ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilResultadoRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
@@ -73,6 +73,7 @@ export const mapCliente = (r: Row): ClienteRow => ({
   receita_total: num(r.receita_total), primeiro_mes_giro: str(r.primeiro_mes_giro), meses_ativos: num(r.meses_ativos),
   lotes_mes_anterior: num(r.lotes_mes_anterior), lotes_media_3m: num(r.lotes_media_3m),
   dias_sem_giro: r.dias_sem_giro == null ? null : num(r.dias_sem_giro), risco: riscoDe(r.risco), nivel: nivelDoBanco(r),
+  ativador: str(r.ativador),
 })
 
 // ── Clientes ───────────────────────────────────────────────────────────────
@@ -119,7 +120,7 @@ export async function clienteFicha(corretora: Corretora, clienteId: string, mesR
   return {
     resumo: lista.length ? mapCliente(lista[0]) : null,
     cadastro,
-    manual: { status: str(manualRow?.status), responsavel: str(manualRow?.responsavel), assessor: str(manualRow?.assessor), data_migracao: str(manualRow?.data_migracao) },
+    manual: { status: str(manualRow?.status), responsavel: str(manualRow?.responsavel), assessor: str(manualRow?.assessor), data_migracao: str(manualRow?.data_migracao), ativador: str(manualRow?.ativador) },
     contas: linhas<ContaRow>(contas, r => ({
       conta_id: String(r.conta_id), conta: String(r.conta ?? ''), conta_digito: str(r.conta_digito), situacao_conta: str(r.situacao_conta),
       status: (str(r.status) ?? 'Em processamento') as ContaRow['status'], assessor_nome: str(r.assessor_nome), filial: str(r.filial),
@@ -425,6 +426,18 @@ export async function leadContatos(leadId: string): Promise<LeadContato[]> {
   }))
 }
 
+// Histórico de contatos de um cliente numa corretora (S52), do mais recente para o mais antigo; antes da S52 vem vazio
+export async function clienteContatos(corretora: Corretora, clienteId: string): Promise<ClienteContato[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('cliente_contatos').select('id, cliente_id, corretora, data, nota, criado_por_nome, created_at')
+    .eq('cliente_id', clienteId).eq('corretora', corretora).order('data', { ascending: false }).order('created_at', { ascending: false })
+  if (error) { if (tabelaAusente(error)) return []; falha(error, 'cliente_contatos') }
+  return linhas(data, r => ({
+    id: String(r.id), cliente_id: String(r.cliente_id), corretora: String(r.corretora), data: String(r.data), nota: str(r.nota),
+    criado_por_nome: str(r.criado_por_nome), created_at: String(r.created_at),
+  }))
+}
+
 // Histórico de contatos inteiro (lead e data) e os leads (responsável e status), para o resumo de
 // contatos por atendente no Funil. São tabelas pequenas (duas colunas); antes da S47 vem vazio.
 export async function contatosParaResumo(): Promise<{ contatos: ContatoLeve[]; leads: LeadLeve[] }> {
@@ -714,6 +727,21 @@ export async function funilResultado(mesRef: string | null, meses = 12, mesesIna
     if (e instanceof Error && funcaoAusente({ message: e.message })) return []
     throw e
   }
+}
+
+// Campanha de ativação por atendente no mês (S52). null = a função ainda não existe no banco (S52 não
+// rodou); [] = ninguém atribuído à campanha ainda.
+export async function funilAtivacoesPorAtendente(mesRef: string | null, mesesInativo = 4): Promise<AtivacaoAtendenteRow[] | null> {
+  const { db } = await equipe()
+  const { data, error } = await db.rpc('funil_ativacoes_por_atendente', { p_mes_ref: mesRef, p_meses_inativo: mesesInativo })
+  if (error) {
+    if (funcaoAusente(error)) return null
+    falha(error, 'funil_ativacoes_por_atendente')
+  }
+  return linhas(data, r => ({
+    ativador: String(r.ativador ?? '—'), contas: num(r.contas), contatos: num(r.contatos), contas_contatadas: num(r.contas_contatadas),
+    operaram: num(r.operaram), ativados: num(r.ativados), reativados: num(r.reativados), lotes: num(r.lotes), receita: num(r.receita),
+  }))
 }
 
 // ── Operações de um dia ────────────────────────────────────────────────────

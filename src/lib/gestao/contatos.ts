@@ -1,6 +1,6 @@
 // Contatos por lead (S47) e série diária de leads: média de contatos até converter, rótulos dos dias
 // e o cálculo de reserva antes da S47. Sem dependência de React nem de servidor.
-import type { LeadDiaRow, LeadRow } from './tipos'
+import type { AtivacaoAtendenteRow, LeadDiaRow, LeadRow } from './tipos'
 import { diaBrasil } from '@/lib/periodo'
 import { somarDias } from './meses'
 
@@ -88,6 +88,17 @@ export function resumoContatosPorAtendente(contatos: ContatoLeve[], leads: LeadL
   }
   const fechar = (a: Acc): ResumoAtendente => ({ grupo: a.grupo, contatos: a.contatos, leads: a.leads.size, dias: a.dias.size, ganhos: a.ganhos.size, contatos_ganhos: a.contatos_ganhos })
   return { linhas: [...grupos.values()].map(fechar).sort((a, b) => b.contatos - a.contatos || a.grupo.localeCompare(b.grupo)), total: fechar(total) }
+}
+
+// ── Campanha de ativação por atendente (Funil, S52) ─────────────────────────
+// Linha de total do painel: a soma de cada coluna (cada conta tem um atendente só, então somar não repete conta)
+export function somaAtivacoes(linhas: AtivacaoAtendenteRow[]): AtivacaoAtendenteRow {
+  const t: AtivacaoAtendenteRow = { ativador: 'Total', contas: 0, contatos: 0, contas_contatadas: 0, operaram: 0, ativados: 0, reativados: 0, lotes: 0, receita: 0 }
+  for (const l of linhas) {
+    t.contas += l.contas; t.contatos += l.contatos; t.contas_contatadas += l.contas_contatadas; t.operaram += l.operaram
+    t.ativados += l.ativados; t.reativados += l.reativados; t.lotes += l.lotes; t.receita += l.receita
+  }
+  return t
 }
 
 // ── Clientes ganhos por dia e por mês (Funil) ───────────────────────────────

@@ -8,7 +8,7 @@ import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './
 import { lerFaixas, lerMetas, lerParticipacoes, numeroParam } from './btg'
 import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from '@/lib/corretoras'
 import { mesmaPessoa, normTexto } from '@/lib/texto'
-import { buscarClientes, funcaoAusente, leadContatos, lotesNoPeriodo, todasAsLinhas } from './consultas'
+import { buscarClientes, clienteContatos, funcaoAusente, leadContatos, lotesNoPeriodo, todasAsLinhas } from './consultas'
 import { esquecerMesReferencia } from './pagina'
 import { ehIso, parseMes } from './meses'
 import { faixasValidas } from './comissao'
@@ -213,6 +213,7 @@ export async function salvarCamposCliente(corretoraIn: string, clienteId: string
   data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null
   status?: string | null; responsavel?: string | null; data_migracao?: string | null; assessor?: string | null
   grupo_corretagem?: string | null    // Vinculado / Não vinculado / Bloqueado (vazio = não informado)
+  ativador?: string | null            // atendente da campanha de ativação (S52); vazio = fora da campanha
 }) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
@@ -239,9 +240,10 @@ export async function salvarCamposCliente(corretoraIn: string, clienteId: string
       if (g && !(GRUPOS_CORRETAGEM as readonly string[]).includes(g)) throw new Error('Grupo de corretagem inválido')
       registro.grupo_corretagem = g
     }
+    if (campos.ativador !== undefined) registro.ativador = limpo(campos.ativador)
     let { error } = await db.from('cliente_corretora').upsert(registro, { onConflict: 'cliente_id,corretora' })
-    // antes da S25 (assessor) e da S33 (grupo_corretagem) a coluna não existe: grava o resto mesmo assim
-    for (const col of ['assessor', 'grupo_corretagem'] as const) {
+    // antes da S25 (assessor), da S33 (grupo_corretagem) e da S52 (ativador) a coluna não existe: grava o resto mesmo assim
+    for (const col of ['assessor', 'grupo_corretagem', 'ativador'] as const) {
       if (error && col in registro && new RegExp(col, 'i').test(error.message)) {
         delete registro[col]
         ;({ error } = await db.from('cliente_corretora').upsert(registro, { onConflict: 'cliente_id,corretora' }))
@@ -679,6 +681,65 @@ export async function excluirContatoLead(id: string) {
     const { data: n, error } = await db.rpc('excluir_contato_lead', { p_id: id })
     if (error) falha(error, 'excluir_contato_lead')
     revalidatePath('/leads', 'layout')
+    revalidatePath('/funil')
+    return { contatos: num(n) }
+  })
+}
+
+// ── Campanha de ativação (S52) ─────────────────────────────────────────────
+const semS52 = (e: { code?: string; message: string } | null) =>
+  !!e && (funcaoAusente(e) || /cliente_contatos|ativador/i.test(e.message))
+const SEM_S52 = 'Campanha de ativação ainda não ativada no banco: rode a S52 no Supabase'
+
+// Marca o atendente da campanha nas contas escolhidas (lista de Clientes, em lote); vazio tira da campanha.
+// Não mexe no responsável nem na comissão. Devolve quantas contas mudaram.
+export async function atribuirAtivador(corretoraIn: string, clienteIds: string[], ativador: string | null) {
+  return tentar(async () => {
+    const corretora = await corretoraValida(corretoraIn)
+    const { db } = await equipe()
+    const ids = [...new Set(clienteIds.filter(id => /^[0-9a-f-]{36}$/i.test(id)))]
+    if (ids.length === 0) throw new Error('Selecione pelo menos um cliente')
+    if (ids.length > 5000) throw new Error('Selecione até 5.000 clientes por vez')
+    const nome = ativador?.trim() || null
+    const { data: n, error } = await db.rpc('atribuir_ativador', { p_corretora: corretora, p_cliente_ids: ids, p_ativador: nome })
+    if (error) { if (semS52(error)) throw new Error(SEM_S52); falha(error, 'atribuir_ativador') }
+    revalidarCorretora(corretora)
+    revalidatePath('/funil')
+    return { contas: num(n) }
+  })
+}
+
+// Registra um contato com o cliente (ficha: data e nota). Devolve quantos contatos a conta tem nesta corretora.
+export async function registrarContatoCliente(corretoraIn: string, clienteId: string, data?: string | null, nota?: string | null) {
+  return tentar(async () => {
+    const corretora = await corretoraValida(corretoraIn)
+    const { db, profile } = await equipe()
+    const hoje = hojeIso()
+    const dia = data && ehIso(data) ? data : hoje
+    if (dia > hoje) throw new Error('A data do contato não pode ser futura')
+    const { data: n, error } = await db.rpc('registrar_contato_cliente', {
+      p_cliente_id: clienteId, p_corretora: corretora, p_data: dia, p_nota: nota?.trim() || null, p_criado_por: profile.user_id, p_criado_por_nome: profile.nome,
+    })
+    if (error) { if (semS52(error)) throw new Error(SEM_S52); falha(error, 'registrar_contato_cliente') }
+    revalidarCorretora(corretora)
+    revalidatePath('/funil')
+    return { contatos: num(n) }
+  })
+}
+
+// Histórico de contatos de um cliente na corretora (ficha)
+export async function listarContatosCliente(corretoraIn: string, clienteId: string) {
+  return tentar(async () => clienteContatos(await corretoraValida(corretoraIn), clienteId))
+}
+
+// Apaga um contato registrado por engano
+export async function excluirContatoCliente(corretoraIn: string, id: string) {
+  return tentar(async () => {
+    const corretora = await corretoraValida(corretoraIn)
+    const { db } = await equipe()
+    const { data: n, error } = await db.rpc('excluir_contato_cliente', { p_id: id })
+    if (error) { if (semS52(error)) throw new Error(SEM_S52); falha(error, 'excluir_contato_cliente') }
+    revalidarCorretora(corretora)
     revalidatePath('/funil')
     return { contatos: num(n) }
   })

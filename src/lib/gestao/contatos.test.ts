@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diarioPelaLista, diasDoMes, fmtMedia, ganhosPorMes, mediaContatos, resumoContatosPorAtendente, rotuloDia, somaUltimos, ultimosDias } from './contatos'
+import { diarioPelaLista, diasDoMes, fmtMedia, ganhosPorMes, mediaContatos, resumoContatosPorAtendente, rotuloDia, somaAtivacoes, somaUltimos, ultimosDias } from './contatos'
 import type { LeadDiaRow } from './tipos'
 
 describe('mediaContatos', () => {
@@ -95,5 +95,18 @@ describe('ganhosPorMes e diasDoMes', () => {
     const set = diasDoMes(serie, '2026-09-01', '2026-10-06')
     expect(set).toHaveLength(30)
     expect(set[28].ganhos).toBe(1)
+  })
+})
+
+describe('somaAtivacoes', () => {
+  it('soma as colunas da campanha por atendente numa linha de total', () => {
+    const t = somaAtivacoes([
+      { ativador: 'Milena', contas: 40, contatos: 30, contas_contatadas: 18, operaram: 6, ativados: 3, reativados: 2, lotes: 120, receita: 350.5 },
+      { ativador: 'Lucas', contas: 10, contatos: 4, contas_contatadas: 4, operaram: 1, ativados: 0, reativados: 1, lotes: 20, receita: 49.5 },
+    ])
+    expect(t).toEqual({ ativador: 'Total', contas: 50, contatos: 34, contas_contatadas: 22, operaram: 7, ativados: 3, reativados: 3, lotes: 140, receita: 400 })
+  })
+  it('sem linhas devolve zeros', () => {
+    expect(somaAtivacoes([]).contas).toBe(0)
   })
 })

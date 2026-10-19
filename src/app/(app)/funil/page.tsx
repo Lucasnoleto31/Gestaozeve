@@ -3,8 +3,8 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { contatosParaResumo, funilMensal, funilResultado, funilSafra, funilSafraPor, leadsDiario, leadsResumo } from '@/lib/gestao/consultas'
-import { diasDoMes, fmtMedia, resumoContatosPorAtendente, type ResumoAtendente } from '@/lib/gestao/contatos'
+import { contatosParaResumo, funilAtivacoesPorAtendente, funilMensal, funilResultado, funilSafra, funilSafraPor, leadsDiario, leadsResumo } from '@/lib/gestao/consultas'
+import { diasDoMes, fmtMedia, resumoContatosPorAtendente, somaAtivacoes, type ResumoAtendente } from '@/lib/gestao/contatos'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes, somarMeses } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -16,7 +16,7 @@ import { Alert } from '@/components/ui/Alert'
 import { MesPicker, SegParam } from '@/components/gestao/Filtros'
 import { LinhaVazia, Secao, StatusLeadBadge, TRACO, dataCurta, n0, p1, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
-import type { FunilResultadoRow, FunilSafraBase, FunilSafraPorRow } from '@/lib/gestao/tipos'
+import type { AtivacaoAtendenteRow, FunilResultadoRow, FunilSafraBase, FunilSafraPorRow } from '@/lib/gestao/tipos'
 
 const pct = (parte: number, total: number) => (total > 0 ? (parte / total) * 100 : null)
 // Mesma regra da comissão (S41): voltar a operar depois de N meses parado é reativação
@@ -39,9 +39,9 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const periodo: 'mes' | '12m' = sp.periodo === '12m' ? '12m' : 'mes'
   const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
-  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos, resultado] = await Promise.all([
+  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos, resultado, ativacoes] = await Promise.all([
     funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40), leadsDiario(366),
-    contatosParaResumo(), funilResultado(mesRef, 12, MESES_INATIVO),
+    contatosParaResumo(), funilResultado(mesRef, 12, MESES_INATIVO), funilAtivacoesPorAtendente(mesRef, MESES_INATIVO),
   ])
   const hoje = fmtDate(hojeBrasil())
   const rotuloPeriodo = soMes ? mesLongo(mesRef) : `${mesCurto(meses[0])} a ${mesCurto(mesRef)}`
@@ -222,7 +222,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
 
         {/* 2 · Ritmo do mês */}
         <section className="space-y-6">
-          <Secao numero={2} titulo="Ritmo" descricao={`Ganhos dia a dia em ${mesLongo(mesRef)} e os contatos feitos pela equipe em ${rotuloPeriodo}.`} />
+          <Secao numero={2} titulo="Ritmo" descricao={`Ganhos dia a dia em ${mesLongo(mesRef)}, os contatos feitos com leads em ${rotuloPeriodo} e a campanha de ativação de contas em ${mesLongo(mesRef)}.`} />
           <Panel title={`Clientes ganhos por dia · ${mesLongo(mesRef)}`} subtitle={`Leads fechados como Ganho em cada dia (pela data de fechamento) e contas abertas na corretora (pela data de migração). ${fmtNum(ganhosDias.reduce((acc, d) => acc + d.ganhos, 0))} ganhos no mês até aqui.`}>
             {ganhosDias.length === 0
               ? <p className="py-10 text-center text-dense text-fg-subtle">Sem dias no período: a série diária cobre os últimos 12 meses.</p>
@@ -242,6 +242,25 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
                 {contatosAt.linhas.length > 1 && <tfoot><LinhaAtendente a={contatosAt.total} total /></tfoot>}
               </table>
             </div>
+          </Panel>
+          <Panel title={`Ativações e reativações por atendente · ${mesLongo(mesRef)}`}
+            subtitle={`Campanha de ativação: as contas atribuídas a cada atendente hoje (lista de Clientes › Atribuir à campanha, ou o campo Ativação da ficha) e, no mês, os contatos registrados com elas, quantas operaram, quantas fizeram a 1ª operação e quantas voltaram a operar depois de ${MESES_INATIVO} meses paradas (a regra da comissão). Lotes e receita bruta são das contas com 1ª operação ou reativação no mês. Não mexe no responsável nem na comissão.`}>
+            {ativacoes === null ? (
+              <Alert tone="warn" title="Campanha de ativação ainda não ativada no banco">Rode a S52 no Supabase para atribuir contas, registrar contatos com clientes e ver este painel.</Alert>
+            ) : (
+              <div className="tbl-wrap">
+                <table className="tbl tbl-dense">
+                  <thead>
+                    <tr><th>Atendente</th><th className="num">Contas</th><th className="num">Contatos</th><th className="num col-p2">Contatadas</th><th className="num col-p2">Operaram</th><th className="num">1ª operação</th><th className="num">Reativadas</th><th className="num col-p3">Lotes</th><th className="num">Receita</th></tr>
+                  </thead>
+                  <tbody>
+                    {ativacoes.length === 0 && <LinhaVazia colunas={9}>Nenhuma conta na campanha ainda: em Clientes, marque as contas e use “Atribuir à campanha”.</LinhaVazia>}
+                    {ativacoes.map(a => <LinhaAtivacao key={a.ativador} a={a} />)}
+                  </tbody>
+                  {ativacoes.length > 1 && <tfoot><LinhaAtivacao a={somaAtivacoes(ativacoes)} total /></tfoot>}
+                </table>
+              </div>
+            )}
           </Panel>
         </section>
 
@@ -363,6 +382,23 @@ function LinhaAtendente({ a, total }: { a: ResumoAtendente; total?: boolean }) {
       <td className="num col-p2">{media(a.contatos, a.dias)}</td>
       <td className={cn('num', a.ganhos && 'text-gain')}>{n0(a.ganhos)}</td>
       <td className="num font-semibold">{media(a.contatos_ganhos, a.ganhos)}</td>
+    </tr>
+  )
+}
+
+// Uma linha de "Ativações e reativações por atendente" (S52)
+function LinhaAtivacao({ a, total }: { a: AtivacaoAtendenteRow; total?: boolean }) {
+  return (
+    <tr className={cn(total && 'total')}>
+      <td className="font-medium">{a.ativador}</td>
+      <td className="num">{n0(a.contas)}</td>
+      <td className="num font-semibold">{n0(a.contatos)}</td>
+      <td className="num col-p2">{n0(a.contas_contatadas)}</td>
+      <td className="num col-p2">{n0(a.operaram)}</td>
+      <td className={cn('num font-semibold', a.ativados && 'text-gain')}>{n0(a.ativados)}</td>
+      <td className={cn('num font-semibold', a.reativados && 'text-gain')}>{n0(a.reativados)}</td>
+      <td className="num col-p3">{n0(a.lotes)}</td>
+      <td className="num">{r0(a.receita)}</td>
     </tr>
   )
 }

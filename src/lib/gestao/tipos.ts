@@ -50,6 +50,7 @@ export type ClienteRow = {
   dias_sem_giro: number | null               // contados até o último dia lançado na corretora
   risco: Risco | null
   nivel: Nivel | null                        // pela média de lotes dos 3 meses anteriores (S46)
+  ativador: string | null                    // atendente da campanha de ativação (S52); fora do responsável e da comissão
 }
 // Risco de inativação (S44, corrigido na S46): vale para quem girou nos 3 meses anteriores ou no mês.
 // parou = sem giro há N dias; em queda = no ritmo atual fecha o mês bem abaixo da média dos 3 meses
@@ -76,7 +77,7 @@ export const grupoCorretagem = (v: unknown): GrupoCorretagem | null =>
 export const CAMPOS_CLIENTE_LINHA = [
   'cliente_id', 'nome', 'documento', 'telefone', 'email', 'n_contas', 'conta_principal', 'status', 'assessor_nome', 'responsavel', 'tarifa',
   'data_migracao', 'data_entrada', 'lotes_mes', 'receita_mes', 'lotes_12m', 'receita_12m', 'ultimo_giro', 'meses_sem_giro', 'situacao', 'alertas', 'parceiro', 'grupo_corretagem',
-  'receita_total', 'lotes_mes_anterior', 'lotes_media_3m', 'dias_sem_giro', 'risco', 'nivel',
+  'receita_total', 'lotes_mes_anterior', 'lotes_media_3m', 'dias_sem_giro', 'risco', 'nivel', 'ativador',
 ] as const satisfies readonly (keyof ClienteRow)[]
 export type ClienteLinha = Pick<ClienteRow, (typeof CAMPOS_CLIENTE_LINHA)[number]>
 // Idem para a tabela da tela Receita
@@ -462,6 +463,16 @@ export type LeadsResumo = { total: number; neste_mes: number; abertos: number; c
 export type LeadContato = { id: string; lead_id: string; data: string; nota: string | null; criado_por_nome: string | null; created_at: string }
 // Um dia da série de leads (leads_diario, S47): quantos entraram, contatos feitos, ganhos, perdidos e contas abertas
 export type LeadDiaRow = { dia: string; entraram: number; contatos: number; ganhos: number; perdidos: number; contas_abertas: number }
+// Um contato registrado com o cliente numa corretora (cliente_contatos, S52): a rota da campanha de ativação
+export type ClienteContato = { id: string; cliente_id: string; corretora: string; data: string; nota: string | null; criado_por_nome: string | null; created_at: string }
+// Campanha de ativação por atendente no mês (funil_ativacoes_por_atendente, S52): as contas atribuídas a ele
+// hoje; contatos e contas contatadas no mês; quantas operaram, quantas fizeram a 1ª operação e quantas voltaram
+// a operar (regra da S51: N meses após o último giro, ou após a migração se nunca girou); lotes e receita
+// bruta do mês das contas com 1ª operação ou reativação
+export type AtivacaoAtendenteRow = {
+  ativador: string; contas: number; contatos: number; contas_contatadas: number
+  operaram: number; ativados: number; reativados: number; lotes: number; receita: number
+}
 // Outro cadastro que já tem o CPF/CNPJ informado (para unificar)
 export type ClienteDuplicado = { id: string; nome: string; corretora: string | null }
 

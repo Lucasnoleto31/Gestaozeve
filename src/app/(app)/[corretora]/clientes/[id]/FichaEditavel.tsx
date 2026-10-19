@@ -14,10 +14,11 @@ import { CORRETORA_LABEL, CORRETORA_SLUG, isCorretora, temListaPropria, termosDa
 import { GRUPOS_CORRETAGEM, type ClienteCadastro, type ClienteDuplicado, type GrupoCorretagem } from '@/lib/gestao/tipos'
 
 type Manuais = { data_entrada: string | null; parceiro: string | null; observacoes: string | null; motivo_recusa: string | null; grupo_corretagem: GrupoCorretagem | null }
-// Status manual (vazio = automático), responsável interno, assessor informado à mão e data de migração manual
-type Manual = { status: string | null; responsavel: string | null; assessor: string | null; data_migracao: string | null }
+// Status manual (vazio = automático), responsável interno, assessor informado à mão, data de migração manual
+// e o atendente da campanha de ativação (S52; fora do responsável e da comissão)
+type Manual = { status: string | null; responsavel: string | null; assessor: string | null; data_migracao: string | null; ativador: string | null }
 
-export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, contas: contasIniciais, responsaveis, assessores, statusAutomatico, temConta, abrirInicial = false }: {
+export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, contas: contasIniciais, responsaveis, atendentes, assessores, statusAutomatico, temConta, abrirInicial = false }: {
   corretora: Corretora
   clienteId: string
   admin: boolean
@@ -26,6 +27,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   manual: Manual
   contas: { id: string; conta: string }[]   // contas do cliente nesta corretora (editáveis, até 10)
   responsaveis: string[]
+  atendentes: string[]              // quem pode trabalhar a conta na campanha de ativação (responsáveis que atendem clientes)
   assessores: string[]              // assessores cadastrados na corretora
   statusAutomatico: string | null   // status que vale quando não há manual (pela conta da corretora)
   temConta: boolean                 // com conta no export, o assessor vem de lá
@@ -45,12 +47,14 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
     data_entrada: manuais.data_entrada ?? '', parceiro: manuais.parceiro ?? '', observacoes: manuais.observacoes ?? '', motivo_recusa: manuais.motivo_recusa ?? '',
     grupo_corretagem: (manuais.grupo_corretagem ?? '') as string,
     status: manual.status ?? '', responsavel: manual.responsavel ?? '', assessor: manual.assessor ?? '', data_migracao: manual.data_migracao ?? '',
+    ativador: manual.ativador ?? '',
   })
   const [c, setC] = useState({ nome: cadastro.nome, documento: cadastro.documento ?? '', telefone: cadastro.telefone ?? '', email: cadastro.email ?? '' })
   const [contas, setContas] = useState<string[]>(contasIniciais.map(x => x.conta))
   const chaveContas = (xs: string[]) => [...new Set(xs.map(x => x.replace(/\D/g, '')).filter(Boolean))].sort().join(',')
   const opcoesResponsavel = [...new Set([...responsaveis, ...(manual.responsavel ? [manual.responsavel] : [])])]
   const opcoesAssessor = [...new Set([...assessores, ...(manual.assessor ? [manual.assessor] : [])])]
+  const opcoesAtendente = [...new Set([...atendentes, ...(manual.ativador ? [manual.ativador] : [])])]
 
   // Ao fechar, tira o ?editar=1 da URL para não reabrir numa atualização
   const fechar = () => {
@@ -80,6 +84,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
       data_entrada: m.data_entrada || null, parceiro: m.parceiro, observacoes: m.observacoes, motivo_recusa: m.motivo_recusa,
       grupo_corretagem: m.grupo_corretagem || null,
       status: m.status || null, responsavel: m.responsavel || null, data_migracao: m.data_migracao || null,
+      ativador: m.ativador || null,
       ...(listaPropria ? {} : { assessor: m.assessor || null }),
     })
     if (!r1.ok) { setErro(r1.erro); setSalvando(false); return }
@@ -133,6 +138,11 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
                 {opcoesAssessor.map(a => <option key={a} value={a}>{a}</option>)}
               </Select>
             )}
+            <Select label="Ativação" value={m.ativador} onChange={e => setM({ ...m, ativador: e.target.value })}
+              hint="Quem trabalha a conta na campanha de ativação; não mexe no responsável nem na comissão">
+              <option value="">Fora da campanha</option>
+              {opcoesAtendente.map(a => <option key={a} value={a}>{a}</option>)}
+            </Select>
             <Input label="Data de migração" type="date" value={m.data_migracao} onChange={e => setM({ ...m, data_migracao: e.target.value })} hint="Só conta com status Migrado" />
             <Input label="Data de entrada" type="date" value={m.data_entrada} onChange={e => setM({ ...m, data_entrada: e.target.value })} hint="Quando o cliente foi levado para a corretora" />
             <Input label="Parceiro" value={m.parceiro} onChange={e => setM({ ...m, parceiro: e.target.value })} placeholder="Direto, Aikon…" />

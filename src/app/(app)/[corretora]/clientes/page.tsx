@@ -65,6 +65,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
         <TabelaClientes
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
+          atendentes={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)}
           filtrosSalvos={fi} mesParam={ctx.mesEscolhido ? mesRef.slice(0, 7) : null}
         />
       </PageBody>

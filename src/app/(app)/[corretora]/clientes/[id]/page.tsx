@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { AlertTriangle, ArrowLeft, Check, Info, MessageCircle } from 'lucide-react'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { assessoresPorCorretora, clienteContexto, clienteFicha, responsaveisAtivos } from '@/lib/gestao/consultas'
+import { assessoresPorCorretora, clienteContatos, clienteContexto, clienteFicha, responsaveisAtivos } from '@/lib/gestao/consultas'
 import { getProfile } from '@/lib/auth/getProfile'
 import { janelaMeses, mesAtual, mesCurto, mesLongo, somarMeses } from '@/lib/gestao/meses'
 import { variacaoMensal } from '@/lib/gestao/projecao'
@@ -23,6 +23,7 @@ import { BuscaCliente } from '../BuscaCliente'
 import { ExcluirClienteButton } from '../ExcluirClienteButton'
 import { FichaEditavel } from './FichaEditavel'
 import { TarifasCliente } from './TarifasCliente'
+import { ContatosCliente } from './ContatosCliente'
 
 // Link de WhatsApp a partir do telefone do cadastro (55 + DDD + número)
 function linkWhatsApp(telefone: string | null): string | null {
@@ -37,7 +38,9 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   const { id } = await params
   if (!id) notFound()
   const { corretora, mesRef, base } = ctx
-  const [profile, ficha, contexto360, responsaveis, assessoresTodos] = await Promise.all([getProfile(), clienteFicha(corretora, id, mesRef), clienteContexto(corretora, id, mesRef), responsaveisAtivos(), assessoresPorCorretora()])
+  const [profile, ficha, contexto360, responsaveis, assessoresTodos, contatos] = await Promise.all([
+    getProfile(), clienteFicha(corretora, id, mesRef), clienteContexto(corretora, id, mesRef), responsaveisAtivos(), assessoresPorCorretora(), clienteContatos(corretora, id),
+  ])
   const { resumo, cadastro, contas, mensal, tarifas, extrato, porAtivo } = ficha
   if (!cadastro) notFound()
   const admin = profile?.role === 'admin'
@@ -111,6 +114,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                   <dt className="text-fg-subtle">Conta</dt><dd className="tabular-nums">{resumo?.conta_principal ?? TRACO}{contas.length > 1 ? <span className="text-fg-subtle"> +{contas.length - 1}</span> : ''}</dd>
                   <dt className="text-fg-subtle">Assessor</dt><dd className="truncate">{resumo?.assessor_nome ?? TRACO}</dd>
                   <dt className="text-fg-subtle">Responsável</dt><dd>{resumo?.responsavel ?? TRACO}</dd>
+                  <dt className="text-fg-subtle">Ativação</dt><dd title="Atendente da campanha de ativação; não mexe no responsável nem na comissão">{resumo?.ativador ?? <span className="text-fg-subtle">fora da campanha</span>}</dd>
                 </dl>
               </div>
             </div>
@@ -121,6 +125,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 manuais={{ data_entrada: resumo?.data_entrada ?? null, parceiro: resumo?.parceiro ?? null, observacoes: resumo?.observacoes ?? null, motivo_recusa: resumo?.motivo_recusa ?? null, grupo_corretagem: resumo?.grupo_corretagem ?? null }}
                 manual={ficha.manual}
                 responsaveis={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
+                atendentes={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
                 assessores={assessoresTodos[corretora]}
                 statusAutomatico={ficha.manual.status ? null : (resumo?.status ?? null)}
                 temConta={(resumo?.n_contas ?? 0) > 0}
@@ -249,6 +254,8 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 })}
               </ul>
             </Panel>
+
+            <ContatosCliente corretora={corretora} clienteId={id} nome={cadastro.nome} ativador={resumo?.ativador ?? null} contatos={contatos} />
 
             <TarifasCliente corretora={corretora} clienteId={id} tarifas={tarifas} admin={admin} tarifaAtual={resumo?.tarifa ?? 0} />
 

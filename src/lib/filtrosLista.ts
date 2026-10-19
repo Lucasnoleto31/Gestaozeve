@@ -9,7 +9,7 @@
 export type ValoresFiltro = Record<string, string>
 
 // 'n' = quantas linhas estão à mostra ("mostrar mais"), para o cliente aberto continuar na lista
-export const CHAVES_FILTRO_CLIENTES = ['busca', 'status', 'situacao', 'responsavel', 'assessor', 'alerta', 'grupo', 'risco', 'nivel', 'ordem', 'n'] as const
+export const CHAVES_FILTRO_CLIENTES = ['busca', 'status', 'situacao', 'responsavel', 'ativacao', 'assessor', 'alerta', 'grupo', 'risco', 'nivel', 'ordem', 'n'] as const
 export const CHAVES_FILTRO_LEADS = ['busca', 'mes', 'status', 'responsavel', 'origem', 'corretora', 'alerta', 'clientes', 'n'] as const
 
 export const cookieFiltrosClientes = (corretora: string) => `zf_clientes_${corretora.toLowerCase()}`

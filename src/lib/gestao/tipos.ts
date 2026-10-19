@@ -444,6 +444,15 @@ export type FunilSafraBase = {
   contas_em_abertura: number // parte de contas_abertas que ainda não migrou
 }
 export type FunilSafraRow = FunilSafraBase & { mes_ref: string }
+
+// Resultado do mês (funil_resultado, S51): eventos pela data no mês e quem operou, em um tipo só
+// (novo = conta migrada no mês; reativado = voltou após N meses; ativado = 1ª operação; carteira = os demais)
+export type FunilResultadoRow = {
+  mes_ref: string; ganhos: number; perdidos: number
+  contas_novas: number; novos_operaram: number; ativados: number; reativados: number; carteira_operou: number
+  receita_total: number; receita_novos: number; receita_ativados: number; receita_reativados: number; receita_carteira: number
+  lotes_total: number; lotes_novos: number; lotes_ativados: number; lotes_reativados: number; lotes_carteira: number
+}
 export type FunilSafraPorRow = FunilSafraBase & { grupo: string }
 
 // Resumo dos leads para o Início e o Funil (leads_resumo): contagens + leads abertos com alerta

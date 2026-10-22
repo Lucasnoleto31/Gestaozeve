@@ -14,7 +14,7 @@ import type {
   OperacaoDia, ClienteRiscoRow, GiroDiaRow, AtivacaoAtendenteRow, ClienteContato,
   ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento, ComissaoRegra, ExtratoParceiroRow,
   AssessorMensalRow, AssessorNaoCadastrado, AssessorParam, AssessorResumoRow, AssessoresPorCorretora, ClienteCadastro, ClienteContexto, ClienteMensalRow, ClienteMesRow,
-  ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilResultadoRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
+  ClienteRow, Consolidado, ContaRow, DiarioRow, ExtratoRow, Faixa, FunilMensalRow, FunilPorRow, FunilResultadoCorretora, FunilResultadoRow, FunilSafraPorRow, FunilSafraRow, GrupoPainel, Importacao, IncentivoHistRow,
   IncentivoRow, LeadAcao, LeadContato, LeadDiaRow, LeadRow, LeadsDuplicadosRow, LeadsResumo, LoteNaoCadastradoRow, MigracaoDiaRow, MixPlataformaRow, Multiplicador, PainelKpis, PainelMensalRow, PainelResumo,
   Parametro, Parceiro, PorAtivoRow, ReceitaMensalRow, Responsavel, SituacaoNaoMapeada, StatusContaMapa, StatusLead, TarifaCliente, TopClienteRow,
 } from './tipos'
@@ -747,10 +747,13 @@ export async function funilSafraPor(campo: 'responsavel' | 'origem' | 'corretora
 
 // Resultado do mês (S51): ganhos e perdidos pela data de fechamento, contas novas pela migração, e quem
 // operou no mês em um tipo só (novo, ativado, reativado, carteira) com lotes e receita. Antes da S51: vazio.
-export async function funilResultado(mesRef: string | null, meses = 12, mesesInativo = 4): Promise<FunilResultadoRow[]> {
+// Com corretora (S56) só as contas dela entram; ganhos e perdidos continuam sendo o total do escritório.
+export async function funilResultado(mesRef: string | null, meses = 12, mesesInativo = 4, corretora: Corretora | null = null): Promise<FunilResultadoRow[]> {
   const { db } = await equipe()
   try {
-    return linhas(await rpc(db, 'funil_resultado', { p_mes_ref: mesRef, p_meses: meses, p_meses_inativo: mesesInativo }), r => ({
+    const args: Record<string, unknown> = { p_mes_ref: mesRef, p_meses: meses, p_meses_inativo: mesesInativo }
+    if (corretora) args.p_corretora = corretora   // só com a corretora: antes da S56 a função não tem o parâmetro
+    return linhas(await rpc(db, 'funil_resultado', args), r => ({
       mes_ref: String(r.mes_ref), ganhos: num(r.ganhos), perdidos: num(r.perdidos),
       contas_novas: num(r.contas_novas), novos_operaram: num(r.novos_operaram), ativados: num(r.ativados), reativados: num(r.reativados), carteira_operou: num(r.carteira_operou),
       receita_total: num(r.receita_total), receita_novos: num(r.receita_novos), receita_ativados: num(r.receita_ativados), receita_reativados: num(r.receita_reativados), receita_carteira: num(r.receita_carteira),
@@ -760,6 +763,14 @@ export async function funilResultado(mesRef: string | null, meses = 12, mesesIna
     if (e instanceof Error && funcaoAusente({ message: e.message })) return []
     throw e
   }
+}
+
+// Resultado do mês separado por corretora (S56): uma linha por corretora que o usuário vê, na ordem pedida.
+// null antes da S56 (a função ainda não aceita a corretora): a tela mostra só o total.
+export async function funilResultadoPorCorretora(mesRef: string | null, corretoras: Corretora[], mesesInativo = 4): Promise<FunilResultadoCorretora[] | null> {
+  const porCorretora = await Promise.all(corretoras.map(c => funilResultado(mesRef, 1, mesesInativo, c)))
+  if (corretoras.length === 0 || porCorretora.some(l => l.length === 0)) return null
+  return corretoras.map((corretora, i) => ({ corretora, r: porCorretora[i][0] }))
 }
 
 // Campanha de ativação por atendente no mês (S52). null = a função ainda não existe no banco (S52 não

@@ -456,6 +456,8 @@ export type FunilResultadoRow = {
   receita_total: number; receita_novos: number; receita_ativados: number; receita_reativados: number; receita_carteira: number
   lotes_total: number; lotes_novos: number; lotes_ativados: number; lotes_reativados: number; lotes_carteira: number
 }
+// O mesmo resultado só com as contas de uma corretora (S56); ganhos e perdidos repetem o total do escritório
+export type FunilResultadoCorretora = { corretora: Corretora; r: FunilResultadoRow }
 export type FunilSafraPorRow = FunilSafraBase & { grupo: string }
 
 // Resumo dos leads para o Início e o Funil (leads_resumo): contagens + leads abertos com alerta

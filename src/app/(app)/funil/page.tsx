@@ -1,9 +1,11 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import { Fragment } from 'react'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
-import { contatosParaResumo, funilAtivacoesPorAtendente, funilMensal, funilResultado, funilSafra, funilSafraPor, leadsDiario, leadsGanhosDoMes, leadsResumo } from '@/lib/gestao/consultas'
+import { CORRETORA_LABEL, corretorasDoPerfil } from '@/lib/corretoras'
+import { contatosParaResumo, funilAtivacoesPorAtendente, funilMensal, funilResultado, funilResultadoPorCorretora, funilSafra, funilSafraPor, leadsDiario, leadsGanhosDoMes, leadsResumo } from '@/lib/gestao/consultas'
 import { diasDoMes, fmtMedia, resumoContatosPorAtendente, somaAtivacoes, type ResumoAtendente } from '@/lib/gestao/contatos'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes, somarMeses } from '@/lib/gestao/meses'
@@ -40,9 +42,10 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const periodo: 'mes' | '12m' = sp.periodo === '12m' ? '12m' : 'mes'
   const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
-  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos, resultado, ativacoes, ganhosMes] = await Promise.all([
+  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos, resultado, ativacoes, ganhosMes, porCorretora] = await Promise.all([
     funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40), leadsDiario(366),
     contatosParaResumo(), funilResultado(mesRef, 12, MESES_INATIVO), funilAtivacoesPorAtendente(mesRef, MESES_INATIVO), leadsGanhosDoMes(mesRef),
+    funilResultadoPorCorretora(mesRef, corretorasDoPerfil(profile), MESES_INATIVO),
   ])
   const hoje = fmtDate(hojeBrasil())
   const rotuloPeriodo = soMes ? mesLongo(mesRef) : `${mesCurto(meses[0])} a ${mesCurto(mesRef)}`
@@ -53,13 +56,21 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const resultadoDesc = [...resultado].reverse()
   const chavesR = (Object.keys(RESULTADO_VAZIO) as (keyof FunilResultadoRow)[]).filter(k => k !== 'mes_ref')
   const totR = Object.fromEntries(chavesR.map(k => [k, resultado.reduce((acc, x) => acc + (x[k] as number), 0)])) as Omit<FunilResultadoRow, 'mes_ref'>
-  const tiposReceita = [
-    { nome: 'Clientes novos', nota: 'conta aberta no mês', contas: r.novos_operaram, lotes: r.lotes_novos, receita: r.receita_novos },
-    { nome: 'Ativados', nota: '1ª operação no mês', contas: r.ativados, lotes: r.lotes_ativados, receita: r.receita_ativados },
-    { nome: 'Reativados', nota: `voltaram após ${MESES_INATIVO} meses parados`, contas: r.reativados, lotes: r.lotes_reativados, receita: r.receita_reativados },
-    { nome: 'Carteira', nota: 'demais clientes que operaram', contas: r.carteira_operou, lotes: r.lotes_carteira, receita: r.receita_carteira },
+  // Receita por tipo: cada corretora com movimento no mês (S56) e o total do escritório; antes da S56 só o total
+  const operaram = (x: FunilResultadoRow) => x.novos_operaram + x.ativados + x.reativados + x.carteira_operou
+  const tipos = [
+    { chave: 'novos', nome: 'Clientes novos', nota: 'conta aberta no mês, sem giro antes', de: (x: FunilResultadoRow) => ({ contas: x.novos_operaram, lotes: x.lotes_novos, receita: x.receita_novos }) },
+    { chave: 'ativados', nome: 'Ativados', nota: '1ª operação no mês', de: (x: FunilResultadoRow) => ({ contas: x.ativados, lotes: x.lotes_ativados, receita: x.receita_ativados }) },
+    { chave: 'reativados', nome: 'Reativados', nota: `voltaram após ${MESES_INATIVO} meses parados`, de: (x: FunilResultadoRow) => ({ contas: x.reativados, lotes: x.lotes_reativados, receita: x.receita_reativados }) },
+    { chave: 'carteira', nome: 'Carteira', nota: 'demais clientes que operaram', de: (x: FunilResultadoRow) => ({ contas: x.carteira_operou, lotes: x.lotes_carteira, receita: x.receita_carteira }) },
   ]
-  const contasOperaram = r.novos_operaram + r.ativados + r.reativados + r.carteira_operou
+  const grupos = [
+    ...(porCorretora ?? []).filter(x => x.r.contas_novas > 0 || x.r.lotes_total > 0).map(x => ({ chave: x.corretora as string, label: CORRETORA_LABEL[x.corretora], r: x.r })),
+    { chave: 'total', label: 'Total', r },
+  ]
+  // "Genial 28 · BTG 59" no subtexto dos KPIs: só as corretoras com valor
+  const porCorretoraTexto = (k: 'contas_novas' | 'ativados' | 'reativados') =>
+    (porCorretora ?? []).filter(x => x.r[k] > 0).map(x => `${CORRETORA_LABEL[x.corretora]} ${fmtNum(x.r[k])}`).join(' · ')
 
   // 2 · Ritmo: ganhos por dia do mês e contatos realizados no período
   const ganhosDias = diasDoMes(diario12m, mesRef, hoje)
@@ -135,43 +146,60 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
         {/* 1 · Resultado do mês */}
         <section className="space-y-6">
           <Secao numero={1} titulo={`Resultado de ${mesLongo(mesRef)}`}
-            descricao={`Pela data do evento no mês. Ganhos e perdidos = leads fechados; contas novas = migradas na corretora; ativados = primeira operação da conta (aberta antes do mês); reativados = voltaram a operar depois de ${MESES_INATIVO} meses parados, como na comissão. Receita bruta = corretagem, zeragem e avulsas de quem operou no mês, cada conta em um tipo só.`} />
+            descricao={`Pela data do evento no mês, cada corretora separada e o total. Ganhos e perdidos = leads fechados (do escritório, sem corretora); contas novas = migradas na corretora; cliente novo = conta aberta no mês sem giro antes; ativados = primeira operação da conta (aberta antes do mês); reativados = voltaram a operar depois de ${MESES_INATIVO} meses parados, como na comissão. Receita bruta = corretagem, zeragem e avulsas de quem operou no mês, cada conta em um tipo só.`} />
           {semS51 && <Alert tone="warn" title="Resultado do mês ainda não ativado no banco">Rode a S51 no Supabase para ver ganhos, perdidos, contas novas, ativados, reativados e a receita por tipo.</Alert>}
           <KpiRow cols={6}>
             <KpiCard label="Ganhos" value={fmtNum(r.ganhos)} sub="leads fechados como Ganho" tone={r.ganhos ? 'gain' : 'neutral'} />
             <KpiCard label="Perdidos" value={fmtNum(r.perdidos)} sub="leads fechados como Perdido" tone={r.perdidos ? 'loss' : 'neutral'} />
-            <KpiCard label="Contas novas" value={fmtNum(r.contas_novas)} sub={`abertas no mês · ${fmtNum(r.novos_operaram)} já operaram`} />
-            <KpiCard label="Ativados" value={fmtNum(r.ativados)} sub="1ª operação no mês, conta aberta antes" />
-            <KpiCard label="Reativados" value={fmtNum(r.reativados)} sub={`voltaram a operar após ${MESES_INATIVO} meses`} />
+            <KpiCard label="Contas novas" value={fmtNum(r.contas_novas)} sub={`${porCorretoraTexto('contas_novas') || 'abertas no mês'} · ${fmtNum(r.novos_operaram)} já operaram`} />
+            <KpiCard label="Ativados" value={fmtNum(r.ativados)} sub={porCorretoraTexto('ativados') || '1ª operação no mês, conta aberta antes'} />
+            <KpiCard label="Reativados" value={fmtNum(r.reativados)} sub={porCorretoraTexto('reativados') || `voltaram a operar após ${MESES_INATIVO} meses`} />
             <KpiCard destaque label="Receita bruta do mês" value={rCurto(r.receita_total)} sub={`novos ${rCurto(r.receita_novos)} · ativados ${rCurto(r.receita_ativados)} · reativados ${rCurto(r.receita_reativados)}`} />
           </KpiRow>
-          <div className="grid gap-8 xl:grid-cols-3">
-            <Panel title={`Receita de ${mesCurto(mesRef)} por tipo de cliente`} subtitle="Cada conta que operou no mês entra em um tipo só; a soma dos quatro é a receita bruta do mês.">
+          <Panel title={`Receita de ${mesCurto(mesRef)} por tipo de cliente e corretora`} subtitle="Cada conta que operou no mês entra em um tipo só; a soma dos quatro é a receita bruta do mês. Cada corretora separada e, no fim, o total do escritório.">
+            {porCorretora === null && !semS51 && <Alert tone="warn" className="mb-3">Rode a S56 no Supabase para ver cada corretora separada; por enquanto só o total.</Alert>}
+            <div className="tbl-wrap">
               <table className="tbl tbl-dense">
-                <thead><tr><th>Tipo</th><th className="num">Contas</th><th className="num col-p3">Lotes</th><th className="num">Receita</th><th className="num">%</th></tr></thead>
+                <thead>
+                  {grupos.length > 1 && (
+                    <tr>
+                      <th></th>
+                      {grupos.map(g => <th key={g.chave} colSpan={3} className="text-center">{g.label}</th>)}
+                      <th className="col-p3"></th>
+                    </tr>
+                  )}
+                  <tr>
+                    <th>Tipo</th>
+                    {grupos.map(g => <Fragment key={g.chave}><th className="num">Contas</th><th className="num col-p2">Lotes</th><th className="num">Receita</th></Fragment>)}
+                    <th className="num col-p3">% da receita</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {tiposReceita.map(x => (
-                    <tr key={x.nome}>
-                      <td className="font-medium">{x.nome}<span className="ml-2 text-micro font-normal text-fg-subtle">{x.nota}</span></td>
-                      <td className={cn('num', !x.contas && 'subtle')}>{n0(x.contas)}</td>
-                      <td className={cn('num col-p3', !x.lotes && 'subtle')}>{n0(x.lotes)}</td>
-                      <td className={cn('num font-semibold', !x.receita && 'subtle')}>{r0(x.receita)}</td>
-                      <td className={cn('num', !x.receita && 'subtle')}>{r.receita_total ? fmtPct(pct(x.receita, r.receita_total) ?? 0, 0) : TRACO}</td>
+                  {tipos.map(t => (
+                    <tr key={t.chave}>
+                      <td className="whitespace-nowrap font-medium">{t.nome}<span className="ml-2 text-micro font-normal text-fg-subtle">{t.nota}</span></td>
+                      {grupos.map(g => { const v = t.de(g.r); return (
+                        <Fragment key={g.chave}>
+                          <td className={cn('num', !v.contas && 'subtle')}>{n0(v.contas)}</td>
+                          <td className={cn('num col-p2', !v.lotes && 'subtle')}>{n0(v.lotes)}</td>
+                          <td className={cn('num', g.chave === 'total' && 'font-semibold', !v.receita && 'subtle')}>{r0(v.receita)}</td>
+                        </Fragment>
+                      ) })}
+                      <td className={cn('num col-p3', !t.de(r).receita && 'subtle')}>{r.receita_total ? fmtPct(pct(t.de(r).receita, r.receita_total) ?? 0, 0) : TRACO}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="total">
                     <td>Receita do mês</td>
-                    <td className="num">{n0(contasOperaram)}</td>
-                    <td className="num col-p3">{n0(r.lotes_total)}</td>
-                    <td className="num">{r0(r.receita_total)}</td>
-                    <td className="num">{r.receita_total ? '100%' : TRACO}</td>
+                    {grupos.map(g => <Fragment key={g.chave}><td className="num">{n0(operaram(g.r))}</td><td className="num col-p2">{n0(g.r.lotes_total)}</td><td className="num">{r0(g.r.receita_total)}</td></Fragment>)}
+                    <td className="num col-p3">{r.receita_total ? '100%' : TRACO}</td>
                   </tr>
                 </tfoot>
               </table>
-            </Panel>
-            <Panel className="xl:col-span-2" title="Resultado mês a mês" subtitle="Últimos 12 meses, pelas mesmas definições; o mês escolhido fica em destaque. Clique no mês para levar o Funil para ele.">
+            </div>
+          </Panel>
+          <Panel title="Resultado mês a mês" subtitle="Últimos 12 meses, pelas mesmas definições, todas as corretoras juntas; o mês escolhido fica em destaque. Clique no mês para levar o Funil para ele.">
               <div className="tbl-wrap">
                 <table className="tbl tbl-dense">
                   <thead>
@@ -218,7 +246,6 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
                 </table>
               </div>
             </Panel>
-          </div>
         </section>
 
         {/* 2 · Ritmo do mês */}

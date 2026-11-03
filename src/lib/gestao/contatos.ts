@@ -2,6 +2,7 @@
 // e o cálculo de reserva antes da S47. Sem dependência de React nem de servidor.
 import type { AtivacaoAtendenteRow, GanhoDia, LeadDiaRow, LeadRow } from './tipos'
 import { diaBrasil } from '@/lib/periodo'
+import { normTexto } from '@/lib/texto'
 import { somarDias } from './meses'
 
 export type MediaContatos = { media: number | null; n: number }
@@ -156,3 +157,44 @@ export function ganhosLeves(leads: Pick<LeadRow, 'id' | 'nome' | 'whatsapp' | 'r
 // Os ganhos de um dia, em ordem alfabética
 export const ganhosDoDia = (ganhos: GanhoDia[], dia: string): GanhoDia[] =>
   ganhos.filter(g => g.dia === dia).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+// ── Contatos com clientes por atendente (Funil) ──────────────────────────────
+// Um contato registrado na ficha do cliente (cliente_contatos), no formato leve que o Funil usa
+export type ContatoClienteLeve = { cliente_id: string; corretora: string; data: string; nota: string | null; criado_por_nome: string | null }
+export type ResumoContatosClientes = { grupo: string; contatos: number; clientes: number; dias: number; por_corretora: Record<string, number> }
+
+const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+
+// Quem fez o contato: a equipe registra pelo login de quem está no computador e anota quem atendeu entre
+// parênteses ("WhatsApp (Milena)"). Esse nome vale quando é alguém da equipe; senão, o primeiro nome do login,
+// no nome oficial da equipe quando existir ("LUCAS GOMES NOLETO LOPES" → "Lucas").
+export function atendenteDoContato(c: Pick<ContatoClienteLeve, 'nota' | 'criado_por_nome'>, equipe: string[] = []): string {
+  const oficial = (nome: string) => equipe.find(e => normTexto(e) === normTexto(nome)) ?? equipe.find(e => normTexto(e).split(' ')[0] === normTexto(nome).split(' ')[0])
+  const daNota = /\(([^)]+)\)/.exec(c.nota ?? '')?.[1].trim()
+  if (daNota) { const e = oficial(daNota); if (e) return e }
+  const primeiro = (c.criado_por_nome ?? '').trim().split(/\s+/)[0]
+  if (!primeiro) return 'Sem atendente'
+  return oficial(primeiro) ?? capitalizar(primeiro)
+}
+
+// Contatos com clientes feitos em [inicio, fimExclusivo) ('YYYY-MM-DD'), agrupados por quem atendeu, mais a
+// linha de total (clientes e dias distintos no conjunto todo, não a soma das linhas)
+export function resumoContatosClientesPorAtendente(contatos: ContatoClienteLeve[], equipe: string[], inicio: string, fimExclusivo: string): { linhas: ResumoContatosClientes[]; total: ResumoContatosClientes } {
+  type Acc = { grupo: string; contatos: number; clientes: Set<string>; dias: Set<string>; por_corretora: Record<string, number> }
+  const novo = (grupo: string): Acc => ({ grupo, contatos: 0, clientes: new Set(), dias: new Set(), por_corretora: {} })
+  const grupos = new Map<string, Acc>()
+  const total = novo('Total')
+  const soma = (a: Acc, c: ContatoClienteLeve) => {
+    a.contatos++; a.clientes.add(`${c.corretora}:${c.cliente_id}`); a.dias.add(c.data)
+    a.por_corretora[c.corretora] = (a.por_corretora[c.corretora] ?? 0) + 1
+  }
+  for (const c of contatos) {
+    if (c.data < inicio || c.data >= fimExclusivo) continue
+    const g = atendenteDoContato(c, equipe)
+    let a = grupos.get(g)
+    if (!a) { a = novo(g); grupos.set(g, a) }
+    soma(a, c); soma(total, c)
+  }
+  const fechar = (a: Acc): ResumoContatosClientes => ({ grupo: a.grupo, contatos: a.contatos, clientes: a.clientes.size, dias: a.dias.size, por_corretora: a.por_corretora })
+  return { linhas: [...grupos.values()].map(fechar).sort((a, b) => b.contatos - a.contatos || a.grupo.localeCompare(b.grupo)), total: fechar(total) }
+}

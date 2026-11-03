@@ -5,8 +5,8 @@ import { Fragment } from 'react'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { CORRETORA_LABEL, corretorasDoPerfil } from '@/lib/corretoras'
-import { contatosParaResumo, funilAtivacoesPorAtendente, funilMensal, funilResultado, funilResultadoPorCorretora, funilSafra, funilSafraPor, leadsDiario, leadsGanhosDoMes, leadsResumo } from '@/lib/gestao/consultas'
-import { diasDoMes, fmtMedia, resumoContatosPorAtendente, somaAtivacoes, type ResumoAtendente } from '@/lib/gestao/contatos'
+import { contatosClientesParaResumo, contatosParaResumo, funilAtivacoesPorAtendente, funilMensal, funilResultado, funilResultadoPorCorretora, funilSafra, funilSafraPor, leadsDiario, leadsGanhosDoMes, leadsResumo, responsaveisAtivos } from '@/lib/gestao/consultas'
+import { diasDoMes, fmtMedia, resumoContatosClientesPorAtendente, resumoContatosPorAtendente, somaAtivacoes, type ResumoAtendente, type ResumoContatosClientes } from '@/lib/gestao/contatos'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { janelaMeses, mesAtual, mesCurto, mesInput, mesLongo, parseMes, somarMeses } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
@@ -42,9 +42,9 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const periodo: 'mes' | '12m' = sp.periodo === '12m' ? '12m' : 'mes'
   const soMes = periodo === 'mes'
   const meses = janelaMeses(mesRef, 12)
-  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos, resultado, ativacoes, ganhosMes, porCorretora] = await Promise.all([
+  const [mensal, safra, porResp, porOrigem, leads, diario12m, dadosContatos, resultado, ativacoes, ganhosMes, contatosCli, equipe, porCorretora] = await Promise.all([
     funilMensal(mesRef, 12), funilSafra(mesRef, 12), funilSafraPor('responsavel', mesRef, soMes ? 1 : 12), funilSafraPor('origem', mesRef, soMes ? 1 : 12), leadsResumo(40), leadsDiario(366),
-    contatosParaResumo(), funilResultado(mesRef, 12, MESES_INATIVO), funilAtivacoesPorAtendente(mesRef, MESES_INATIVO), leadsGanhosDoMes(mesRef),
+    contatosParaResumo(), funilResultado(mesRef, 12, MESES_INATIVO), funilAtivacoesPorAtendente(mesRef, MESES_INATIVO), leadsGanhosDoMes(mesRef), contatosClientesParaResumo(), responsaveisAtivos(),
     funilResultadoPorCorretora(mesRef, corretorasDoPerfil(profile), MESES_INATIVO),
   ])
   const hoje = fmtDate(hojeBrasil())
@@ -75,6 +75,8 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   // 2 · Ritmo: ganhos por dia do mês e contatos realizados no período
   const ganhosDias = diasDoMes(diario12m, mesRef, hoje)
   const contatosAt = resumoContatosPorAtendente(dadosContatos.contatos, dadosContatos.leads, soMes ? mesRef : meses[0], somarMeses(mesRef, 1))
+  // contatos com clientes (ficha do cliente, campanha de ativação): por quem atendeu, não pelo responsável da conta
+  const contatosCliAt = resumoContatosClientesPorAtendente(contatosCli, equipe.map(r => r.nome), soMes ? mesRef : meses[0], somarMeses(mesRef, 1))
 
   // 3 · Safra: do que entrou no período, o que aconteceu até hoje
   const m = new Map(mensal.map(x => [x.mes_ref, x]))
@@ -270,6 +272,20 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
               </table>
             </div>
           </Panel>
+          <Panel title="Contatos com clientes" subtitle={`Contatos registrados na ficha do cliente em ${rotuloPeriodo} (campanha de ativação e reativação), pela data do contato. Quem atendeu: o nome entre parênteses na nota, como “WhatsApp (Milena)”, ou o login de quem registrou. Por cliente = contatos ÷ clientes contatados; por dia = contatos ÷ dias com contato.`}>
+            <div className="tbl-wrap">
+              <table className="tbl tbl-dense">
+                <thead>
+                  <tr><th>Atendente</th><th className="num">Contatos</th><th className="num">Clientes contatados</th><th className="num">Por cliente</th><th className="num col-p2">Dias com contato</th><th className="num col-p2">Por dia</th><th className="col-p2">Por corretora</th></tr>
+                </thead>
+                <tbody>
+                  {contatosCliAt.linhas.length === 0 && <LinhaVazia colunas={7}>Nenhum contato com cliente registrado em {rotuloPeriodo}. Registre pelo telefone na ficha do cliente.</LinhaVazia>}
+                  {contatosCliAt.linhas.map(a => <LinhaContatoCliente key={a.grupo} a={a} />)}
+                </tbody>
+                {contatosCliAt.linhas.length > 1 && <tfoot><LinhaContatoCliente a={contatosCliAt.total} total /></tfoot>}
+              </table>
+            </div>
+          </Panel>
           <Panel title={`Ativações e reativações por atendente · ${mesLongo(mesRef)}`}
             subtitle={`Campanha de ativação: as contas atribuídas a cada atendente hoje (lista de Clientes › Atribuir à campanha, ou o campo Ativação da ficha) e, no mês, os contatos registrados com elas, quantas operaram, quantas fizeram a 1ª operação e quantas voltaram a operar depois de ${MESES_INATIVO} meses paradas (a regra da comissão). Lotes e receita bruta são das contas com 1ª operação ou reativação no mês. Não mexe no responsável nem na comissão.`}>
             {ativacoes === null ? (
@@ -393,6 +409,23 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
         </section>
       </PageBody>
     </>
+  )
+}
+
+// Uma linha de "Contatos com clientes": médias com uma casa, corretoras como texto ("BTG 168 · Genial 1")
+function LinhaContatoCliente({ a, total }: { a: ResumoContatosClientes; total?: boolean }) {
+  const media = (x: number, n: number) => (n ? fmtMedia(x / n) : TRACO)
+  const corretoras = Object.entries(a.por_corretora).sort((x, y) => y[1] - x[1]).map(([c, n]) => `${c === 'GENIAL' ? 'Genial' : c} ${fmtNum(n)}`).join(' · ')
+  return (
+    <tr className={cn(total && 'total')}>
+      <td className="font-medium">{a.grupo}</td>
+      <td className="num font-semibold">{n0(a.contatos)}</td>
+      <td className="num">{n0(a.clientes)}</td>
+      <td className="num">{media(a.contatos, a.clientes)}</td>
+      <td className="num col-p2">{n0(a.dias)}</td>
+      <td className="num col-p2">{media(a.contatos, a.dias)}</td>
+      <td className="muted col-p2">{corretoras || TRACO}</td>
+    </tr>
   )
 }
 

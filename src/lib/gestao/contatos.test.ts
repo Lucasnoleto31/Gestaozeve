@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diarioPelaLista, diasDoMes, fmtMedia, ganhosDoDia, ganhosLeves, ganhosPorMes, mediaContatos, resumoContatosPorAtendente, rotuloDia, somaAtivacoes, somaUltimos, ultimosDias } from './contatos'
+import { atendenteDoContato, diarioPelaLista, diasDoMes, fmtMedia, ganhosDoDia, ganhosLeves, ganhosPorMes, mediaContatos, resumoContatosClientesPorAtendente, resumoContatosPorAtendente, rotuloDia, somaAtivacoes, somaUltimos, ultimosDias } from './contatos'
 import type { LeadDiaRow } from './tipos'
 
 describe('mediaContatos', () => {
@@ -130,5 +130,41 @@ describe('ganhosLeves / ganhosDoDia', () => {
     expect(ganhosDoDia(g, '2026-10-19').map(x => x.nome)).toEqual(['Ana', 'Carla'])
     expect(ganhosDoDia(g, '2026-09-30').map(x => x.nome)).toEqual(['Dora'])
     expect(ganhosDoDia(g, '2026-10-18')).toEqual([])
+  })
+})
+
+describe('atendenteDoContato', () => {
+  const equipe = ['Lucas', 'Artur', 'Aikon', 'Milena']
+  it('o nome entre parênteses na nota vale quando é alguém da equipe', () => {
+    expect(atendenteDoContato({ nota: 'WhatsApp (Milena)', criado_por_nome: 'LUCAS GOMES NOLETO LOPES' }, equipe)).toBe('Milena')
+    expect(atendenteDoContato({ nota: 'ligação (artur)', criado_por_nome: 'Milena Leonel' }, equipe)).toBe('Artur')
+  })
+  it('sem nome da equipe na nota, usa o primeiro nome do login, no nome oficial', () => {
+    expect(atendenteDoContato({ nota: 'retorno (segunda-feira)', criado_por_nome: 'LUCAS GOMES NOLETO LOPES' }, equipe)).toBe('Lucas')
+    expect(atendenteDoContato({ nota: null, criado_por_nome: 'Aikon Bueno' }, equipe)).toBe('Aikon')
+    expect(atendenteDoContato({ nota: null, criado_por_nome: 'KAREN SILVA' }, equipe)).toBe('Karen')
+    expect(atendenteDoContato({ nota: null, criado_por_nome: null }, equipe)).toBe('Sem atendente')
+  })
+})
+
+describe('resumoContatosClientesPorAtendente', () => {
+  const equipe = ['Lucas', 'Milena']
+  const contatos = [
+    { cliente_id: 'a', corretora: 'BTG', data: '2026-10-19', nota: 'WhatsApp (Milena)', criado_por_nome: 'LUCAS GOMES NOLETO LOPES' },
+    { cliente_id: 'a', corretora: 'BTG', data: '2026-10-20', nota: null, criado_por_nome: 'Milena Leonel' },
+    { cliente_id: 'b', corretora: 'BTG', data: '2026-10-20', nota: null, criado_por_nome: 'Milena Leonel' },
+    { cliente_id: 'c', corretora: 'GENIAL', data: '2026-10-21', nota: null, criado_por_nome: 'LUCAS GOMES NOLETO LOPES' },
+    { cliente_id: 'd', corretora: 'BTG', data: '2026-11-02', nota: null, criado_por_nome: 'Milena Leonel' },
+  ]
+  it('agrupa por quem atendeu, no período, com clientes e dias distintos e contagem por corretora', () => {
+    const r = resumoContatosClientesPorAtendente(contatos, equipe, '2026-10-01', '2026-11-01')
+    expect(r.linhas).toEqual([
+      { grupo: 'Milena', contatos: 3, clientes: 2, dias: 2, por_corretora: { BTG: 3 } },
+      { grupo: 'Lucas', contatos: 1, clientes: 1, dias: 1, por_corretora: { GENIAL: 1 } },
+    ])
+    expect(r.total).toEqual({ grupo: 'Total', contatos: 4, clientes: 3, dias: 3, por_corretora: { BTG: 3, GENIAL: 1 } })
+  })
+  it('fora do período não entra', () => {
+    expect(resumoContatosClientesPorAtendente(contatos, equipe, '2026-11-01', '2026-12-01').total.contatos).toBe(1)
   })
 })

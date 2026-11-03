@@ -3,7 +3,7 @@
 import type { Corretora } from '@/lib/corretoras'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { mesAtual, somarMeses } from './meses'
-import { diarioPelaLista, type ContatoLeve, type LeadLeve } from './contatos'
+import { diarioPelaLista, type ContatoClienteLeve, type ContatoLeve, type LeadLeve } from './contatos'
 import { equipe, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import { grupoCorretagem, nivel as nivelDe, nivelPelaMedia, risco as riscoDe } from './tipos'
@@ -934,4 +934,13 @@ export async function leadsGanhosDoMes(mes: string): Promise<GanhoDia[]> {
     .eq('status', 'Ganho').gte('data_fechamento', mes).lt('data_fechamento', somarMeses(mes, 1)).order('nome').range(0, PAGINA - 1)
   if (error) falha(error, 'leads')
   return linhas(data, r => ({ id: String(r.id), dia: String(r.data_fechamento).slice(0, 10), nome: String(r.nome ?? ''), whatsapp: str(r.whatsapp), responsavel: str(r.responsavel) }))
+}
+
+// Contatos com clientes (cliente_contatos, S52) no formato leve do Funil: data, corretora, nota e login de
+// quem registrou, para agrupar por quem atendeu. Antes da S52 (tabela ausente) volta vazio.
+export async function contatosClientesParaResumo(): Promise<ContatoClienteLeve[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('cliente_contatos').select('cliente_id, corretora, data, nota, criado_por_nome').range(0, PAGINA - 1)
+  if (error) { if (tabelaAusente(error)) return []; falha(error, 'cliente_contatos') }
+  return linhas(data, r => ({ cliente_id: String(r.cliente_id), corretora: String(r.corretora), data: String(r.data).slice(0, 10), nota: str(r.nota), criado_por_nome: str(r.criado_por_nome) }))
 }

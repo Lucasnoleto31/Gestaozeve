@@ -58,7 +58,8 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const listaPropria = temListaPropria(corretora)
   type Mes = typeof mensal[number]
   const receitaTotal = (m: Mes) => m.receita + (atp ? 0 : m.incentivo)
-  const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg)
+  // no mês com percentual registrado (fechamento já recebido) a comissão usa esse percentual; nos outros, as faixas
+  const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg, m.mes_ref)
 
   // Fechamento previsto do mês corrente (perfil intra-mês de todo o histórico) e variações
   const proj = projetarMes(giro, mesRef, ultima, hoje, { maxMeses: MESES_PROJECAO })
@@ -87,13 +88,13 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const semGiro = painel.sem_giro
   const totalClientesGiro = porCliente[0]?.total_clientes ?? 0
   const mesAtual = mensal.find(m => m.mes_ref === mesRef)
-  const repasseMes = calcularRepasse(mesAtual?.receita ?? 0, cfg)
+  const repasseMes = calcularRepasse(mesAtual?.receita ?? 0, cfg, mesRef)
   // A receita da tabela mensal (todos os lançamentos, inclusive contas ainda não vinculadas) é a base
   // do card "Receita no mês" e da cadeia de repasse do BTG; a projeção dela escala pela mesma
   // proporção prevista para o giro dos clientes cadastrados
   const escalaR = (v: number) => (proj.receita.realizado > 0 ? ((mesAtual?.receita ?? 0) * v) / proj.receita.realizado : v)
   const receitaMensalProj = { projetado: escalaR(proj.receita.projetado), baixo: escalaR(proj.receita.baixo), alto: escalaR(proj.receita.alto), linear: escalaR(proj.receita.linear) }
-  const repasseProj = comRepasse && proj.parcial ? calcularRepasse(receitaMensalProj.projetado, cfg) : null
+  const repasseProj = comRepasse && proj.parcial ? calcularRepasse(receitaMensalProj.projetado, cfg, mesRef) : null
   const naoCadLinhas = naoCad.reduce((s, l) => s + l.linhas, 0)
   const naoCadLotes = naoCad.reduce((s, l) => s + l.lotes, 0)
   const mixTotal = mix.reduce((s, m) => s + m.lotes, 0)
@@ -244,8 +245,8 @@ export default async function PainelPage({ params, searchParams }: { params: Par
                       <td>Comissão líquida<span className="ml-1.5 text-micro font-normal text-fg-subtle">comissão {ctx.label} {fmtPct(repasseProj.pctEfetivo)} sobre a líquida prevista</span></td>
                       <td className="num col-p2">{rCurto(repasseMes.liquido)}</td>
                       <td className="num font-semibold">{rCurto(repasseProj.liquido)}</td>
-                      <td className="num col-p2 text-fg-muted">{proj.metodo === 'historico' ? `${rCurto(calcularRepasse(receitaMensalProj.baixo, cfg).liquido)} – ${rCurto(calcularRepasse(receitaMensalProj.alto, cfg).liquido)}` : TRACO}</td>
-                      <td className="num col-p3 text-fg-muted">{rCurto(calcularRepasse(receitaMensalProj.linear, cfg).liquido)}</td>
+                      <td className="num col-p2 text-fg-muted">{proj.metodo === 'historico' ? `${rCurto(calcularRepasse(receitaMensalProj.baixo, cfg, mesRef).liquido)} – ${rCurto(calcularRepasse(receitaMensalProj.alto, cfg, mesRef).liquido)}` : TRACO}</td>
+                      <td className="num col-p3 text-fg-muted">{rCurto(calcularRepasse(receitaMensalProj.linear, cfg, mesRef).liquido)}</td>
                       <td className="num">{rCurto(repasseAnt?.liquido)}</td>
                       <td className="num col-p2"><DeltaText pct={repasseAnt?.liquido ? ((repasseProj.liquido - repasseAnt.liquido) / repasseAnt.liquido) * 100 : null} /></td>
                     </tr>

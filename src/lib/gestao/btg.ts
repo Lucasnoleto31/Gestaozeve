@@ -3,7 +3,8 @@ import { somarDias } from './meses'
 //   receita (lotes × tarifa + zeragem)
 //   → receita bruta BTG: o preço cobrado do cliente embute 9,65 % de impostos (÷ (1 − 9,65 %))
 //   → (–) impostos que o BTG desconta (6,65 %) = receita líquida BTG
-//   → comissão BTG: faixas progressivas (75 % até 100 mil…) sobre a líquida
+//   → comissão BTG: faixas progressivas (75 % até 100 mil…) sobre a líquida; no mês já fechado vale o
+//     percentual que o BTG pagou (repasse_pct_mes), que depende do volume do escritório inteiro
 //   → (–) Delta 30 % = comissão do escritório
 //   → (–) imposto do escritório 16,5 % = comissão líquida → divisão entre os sócios
 // Metas do programa ATP Turbo Receita sobre a base escolhida (atp_base).
@@ -24,6 +25,7 @@ export const BASES_ATP: { base: BaseAtp; label: string }[] = [
 export type ConfigBtg = {
   modelo: 'PONTOS' | 'ATP'
   faixas: FaixaRepasse[]
+  pctMes: Record<string, number> // comissão que o BTG pagou em cada mês fechado ('AAAA-MM' → %); vale no lugar das faixas
   impostosEmbutidosPct: number   // impostos embutidos no preço cobrado do cliente (9,65 %)
   impostoBtgPct: number          // o que o BTG desconta da receita bruta (6,65 %)
   deltaPct: number               // Delta, sobre a comissão
@@ -57,6 +59,23 @@ export function lerFaixas(s: string | null | undefined): FaixaRepasse[] {
     out.push({ de: d, pct: p })
   }
   return out.sort((a, b) => a.de - b.de)
+}
+
+// '2026-09:75;2026-10:80' → { '2026-09': 75, '2026-10': 80 }; aceita também 'MM/AAAA:%' (vazio quando é inválido)
+export function lerPctMes(s: string | null | undefined): Record<string, number> {
+  if (!s || !s.trim()) return {}
+  const out: Record<string, number> = {}
+  for (const parte of s.split(';')) {
+    if (!parte.trim()) continue
+    const i = parte.lastIndexOf(':')
+    if (i <= 0) return {}
+    const mesTxt = parte.slice(0, i).trim(), pct = numeroParam(parte.slice(i + 1))
+    const iso = /^(\d{4})-(\d{2})$/.exec(mesTxt), br = /^(\d{2})\/(\d{4})$/.exec(mesTxt)
+    const [ano, mes] = iso ? [iso[1], iso[2]] : br ? [br[2], br[1]] : ['', '']
+    if (!ano || Number(mes) < 1 || Number(mes) > 12 || pct == null || pct < 0 || pct > 100) return {}
+    out[`${ano}-${mes}`] = pct
+  }
+  return out
 }
 
 // 'Lucas:50;Artur:50' → participações
@@ -95,6 +114,7 @@ export function configBtg(parametros: Parametro[]): ConfigBtg {
   return {
     modelo: v('modelo_incentivo').toUpperCase() === 'ATP' ? 'ATP' : 'PONTOS',
     faixas: lerFaixas(v('repasse_faixas')),
+    pctMes: lerPctMes(v('repasse_pct_mes')),
     impostosEmbutidosPct: numeroParam(v('impostos_embutidos_pct')) ?? 0,
     impostoBtgPct: numeroParam(v('imposto_btg_pct')) ?? 0,
     deltaPct: numeroParam(v('delta_pct')) ?? 0,
@@ -134,14 +154,17 @@ export type Repasse = {
   partes: { nome: string; valor: number }[]
 }
 
-export type ConfigRepasse = Pick<ConfigBtg, 'faixas' | 'impostosEmbutidosPct' | 'impostoBtgPct' | 'deltaPct' | 'impostoPct' | 'participacoes'>
+export type ConfigRepasse = Pick<ConfigBtg, 'faixas' | 'impostosEmbutidosPct' | 'impostoBtgPct' | 'deltaPct' | 'impostoPct' | 'participacoes'> & Partial<Pick<ConfigBtg, 'pctMes'>>
 
-// Receita → bruta BTG → (–) impostos BTG → líquida → comissão (faixas) → (–) Delta → (–) imposto → líquida → sócios
-export function calcularRepasse(receita: number, cfg: ConfigRepasse): Repasse {
+// Receita → bruta BTG → (–) impostos BTG → líquida → comissão (faixas) → (–) Delta → (–) imposto → líquida → sócios.
+// Com o mês informado ('AAAA-MM-01') e um percentual registrado para ele (o do fechamento), a comissão é esse
+// percentual sobre a líquida; sem isso, valem as faixas.
+export function calcularRepasse(receita: number, cfg: ConfigRepasse, mes?: string | null): Repasse {
   const bruta = cfg.impostosEmbutidosPct > 0 && cfg.impostosEmbutidosPct < 100 ? receita / (1 - cfg.impostosEmbutidosPct / 100) : receita
   const impostoBtg = (bruta * cfg.impostoBtgPct) / 100
   const liquida = bruta - impostoBtg
-  const { valor: comissao, pctEfetivo } = repasseProgressivo(liquida, cfg.faixas)
+  const fixo = mes ? cfg.pctMes?.[mes.slice(0, 7)] : undefined
+  const { valor: comissao, pctEfetivo } = fixo != null ? { valor: (liquida * fixo) / 100, pctEfetivo: fixo } : repasseProgressivo(liquida, cfg.faixas)
   const delta = (comissao * cfg.deltaPct) / 100
   const comissaoEscritorio = comissao - delta
   const imposto = (comissaoEscritorio * cfg.impostoPct) / 100
@@ -153,9 +176,9 @@ export function calcularRepasse(receita: number, cfg: ConfigRepasse): Repasse {
 }
 
 // Valor de um mês na base que as metas do ATP usam
-export function baseAtp(receita: number, cfg: ConfigRepasse & Pick<ConfigBtg, 'atpBase'>): number {
+export function baseAtp(receita: number, cfg: ConfigRepasse & Pick<ConfigBtg, 'atpBase'>, mes?: string | null): number {
   if (cfg.atpBase === 'receita') return receita
-  const r = calcularRepasse(receita, cfg)
+  const r = calcularRepasse(receita, cfg, mes)
   return cfg.atpBase === 'bruta' ? r.bruta : cfg.atpBase === 'liquida' ? r.liquida : r.comissao
 }
 

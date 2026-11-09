@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { avaliarMetas, baseAtp, calcularRepasse, configBtg, diasUteis, lerFaixas, lerMetas, lerParticipacoes, numeroParam, preverMeta, repasseProgressivo, ritmosReceita, somarMesesData } from './btg'
+import { avaliarMetas, baseAtp, calcularRepasse, configBtg, diasUteis, lerFaixas, lerMetas, lerParticipacoes, lerPctMes, numeroParam, preverMeta, repasseProgressivo, ritmosReceita, somarMesesData } from './btg'
 
 const FAIXAS = lerFaixas('0:75;100000:80;250000:85')
 
@@ -40,6 +40,8 @@ describe('parâmetros do BTG', () => {
     expect(cfg.atpBase).toBe('comissao')
     expect(cfg.atpAssinatura).toBe('2026-09-01')
     expect(cfg.atpMetas).toHaveLength(1)
+    expect(cfg.pctMes).toEqual({})
+    expect(configBtg([{ chave: 'repasse_pct_mes', valor: '2026-09:75;2026-10:80', descricao: null }]).pctMes).toEqual({ '2026-09': 75, '2026-10': 80 })
     expect(configBtg([]).modelo).toBe('PONTOS')
     expect(configBtg([{ chave: 'atp_assinatura', valor: '01/09/2026', descricao: null }]).atpAssinatura).toBeNull()
   })
@@ -75,6 +77,25 @@ describe('repasse do BTG', () => {
     expect(baseAtp(883.75, { ...CFG, atpBase: 'bruta' })).toBeCloseTo(978.14, 1)
     expect(baseAtp(883.75, { ...CFG, atpBase: 'liquida' })).toBeCloseTo(913.09, 1)
     expect(baseAtp(883.75, { ...CFG, atpBase: 'comissao' })).toBeCloseTo(684.82, 1)
+  })
+  it('lê o percentual de comissão de cada mês fechado', () => {
+    expect(lerPctMes('2026-09:75;2026-10:80')).toEqual({ '2026-09': 75, '2026-10': 80 })
+    expect(lerPctMes('10/2026: 80')).toEqual({ '2026-10': 80 })
+    expect(lerPctMes('')).toEqual({})
+    expect(lerPctMes('2026-13:80')).toEqual({})
+    expect(lerPctMes('2026-10:180')).toEqual({})
+    expect(lerPctMes('outubro:80')).toEqual({})
+  })
+  // Fechamento do BTG de out/26: o BTG pagou 80 % sobre a líquida, embora as faixas dessem 75 % para esse volume
+  it('usa o percentual do fechamento no mês que tem um registrado', () => {
+    const cfg = { ...CFG, pctMes: lerPctMes('2026-10:80') }
+    const out = calcularRepasse(22561.99, cfg, '2026-10-01')
+    expect(out.pctEfetivo).toBe(80)
+    expect(out.comissao).toBeCloseTo(out.liquida * 0.8, 6)
+    expect(out.liquido).toBeCloseTo(out.liquida * 0.8 * 0.7 * 0.835, 6)
+    expect(calcularRepasse(22561.99, cfg, '2026-11-01').pctEfetivo).toBeCloseTo(75, 6)
+    expect(calcularRepasse(22561.99, cfg).pctEfetivo).toBeCloseTo(75, 6)
+    expect(baseAtp(22561.99, { ...cfg, atpBase: 'comissao' }, '2026-10-01')).toBeCloseTo(out.comissao, 6)
   })
 })
 

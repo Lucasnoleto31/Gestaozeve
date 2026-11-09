@@ -117,6 +117,7 @@ function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; labe
     { chave: 'impostos_embutidos_pct', label: 'Impostos embutidos no preço cobrado do cliente (%) — receita bruta do BTG = lotes × tarifa ÷ (1 − isso)', tipo: 'numero' },
     { chave: 'imposto_btg_pct', label: 'Impostos que o BTG desconta da receita bruta (%) — sobra a receita líquida', tipo: 'numero' },
     { chave: 'repasse_faixas', label: 'Comissão do BTG sobre a receita líquida — faixas progressivas "a partir de R$:%" separadas por ;', tipo: 'texto' },
+    { chave: 'repasse_pct_mes', label: 'Comissão que o BTG pagou em cada mês já fechado — "AAAA-MM:%" separados por ; (nesses meses vale no lugar das faixas)', tipo: 'texto' },
     { chave: 'delta_pct', label: 'Delta sobre a comissão (%)', tipo: 'numero' },
     { chave: 'imposto_pct', label: 'Imposto do escritório sobre a comissão depois da Delta (%)', tipo: 'numero' },
     { chave: 'participacoes', label: 'Divisão da comissão líquida — "nome:%" separados por ;', tipo: 'texto' },

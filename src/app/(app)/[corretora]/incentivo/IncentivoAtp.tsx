@@ -46,7 +46,7 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
   const assinatura = cfg.atpAssinatura ?? primeiroMes ?? `${hoje.slice(0, 7)}-01`
   // cada mês entra na base que as metas usam (atp_base): receita, bruta/líquida do BTG ou comissão
   const rotuloBase = BASES_ATP.find(b => b.base === cfg.atpBase)?.label ?? 'receita'
-  const desde = serie.filter(m => m.mes_ref >= `${assinatura.slice(0, 7)}-01`).map(m => ({ ...m, receita: baseAtp(m.receita, cfg) }))
+  const desde = serie.filter(m => m.mes_ref >= `${assinatura.slice(0, 7)}-01`).map(m => ({ ...m, receita: baseAtp(m.receita, cfg, m.mes_ref) }))
   const metas = avaliarMetas(cfg.atpMetas, assinatura, desde, hoje)
   const acumulado = desde.reduce((s, m) => s + m.receita, 0)
   const corretagem = desde.reduce((s, m) => s + m.receita_corretagem, 0)

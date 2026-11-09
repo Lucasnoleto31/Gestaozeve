@@ -7,6 +7,7 @@ import { PerfilForm } from './PerfilForm'
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
   vendedor: 'Assessor',
+  atendente: 'Atendente',
   influenciador: 'Influenciador',
 }
 

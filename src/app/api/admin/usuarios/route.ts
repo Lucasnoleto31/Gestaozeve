@@ -4,7 +4,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import type { Role } from '@/types'
 import { CORRETORAS, isCorretora } from '@/lib/corretoras'
 
-const ROLES: Role[] = ['admin', 'vendedor', 'influenciador']
+const ROLES: Role[] = ['admin', 'vendedor', 'atendente', 'influenciador']
 const isRole = (v: unknown): v is Role => typeof v === 'string' && (ROLES as string[]).includes(v)
 
 // Corretoras que o usuário vê: lista de GENIAL/XP/BTG; todas as três (ou nada informado) = NULL (sem restrição)

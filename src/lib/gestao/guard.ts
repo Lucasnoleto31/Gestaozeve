@@ -4,6 +4,7 @@ import { getProfile } from '@/lib/auth/getProfile'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isCorretora, podeVerCorretora, type Corretora } from '@/lib/corretoras'
 import type { Profile } from '@/types'
+import { mesmaPessoa } from '@/lib/texto'
 
 export type Admin = ReturnType<typeof createAdminClient>
 
@@ -36,3 +37,30 @@ export const num = (v: unknown) => (v == null ? 0 : Number(v))
 export const str = (v: unknown) => (v == null ? null : String(v))
 export const linhas = <T,>(data: unknown, map: (r: Record<string, unknown>) => T): T[] =>
   ((data ?? []) as Record<string, unknown>[]).map(map)
+
+// ── Atendente (papel restrito) ───────────────────────────────────────────────
+// A tela de Leads também abre para o atendente, que só enxerga e mexe nos leads em que é o responsável.
+// Tudo o mais (clientes, funil, comissões, parâmetros) continua em equipe() / somenteAdmin(), que o barram.
+export async function equipeLeads(): Promise<{ profile: Profile; db: Admin; restrito: boolean }> {
+  const profile = await getProfile()
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor' && profile.role !== 'atendente')) throw new Error('Não autorizado')
+  return { profile, db: createAdminClient(), restrito: profile.role === 'atendente' }
+}
+
+// Guarda de uma ação sobre um lead: para o atendente, o lead tem de ser dele (responsável = o próprio usuário)
+export async function equipeDoLead(leadId: string): Promise<{ profile: Profile; db: Admin; restrito: boolean }> {
+  const ctx = await equipeLeads()
+  if (ctx.restrito) {
+    const { data, error } = await ctx.db.from('leads').select('responsavel').eq('id', leadId).maybeSingle()
+    if (error) falha(error, 'leads')
+    if (!data || !mesmaPessoa((data as { responsavel: string | null }).responsavel, ctx.profile.nome)) throw new Error('Este lead não está com você')
+  }
+  return ctx
+}
+
+// Nome oficial do responsável (tabela responsaveis) que corresponde ao usuário logado; sem cadastro, o primeiro nome
+export async function responsavelDoUsuario(db: Admin, nomeUsuario: string): Promise<string> {
+  const { data } = await db.from('responsaveis').select('nome').eq('ativo', true)
+  const achado = ((data ?? []) as { nome: string }[]).find(r => mesmaPessoa(r.nome, nomeUsuario))
+  return achado?.nome ?? nomeUsuario.trim().split(/\s+/)[0]
+}

@@ -4,11 +4,11 @@ import type { Corretora } from '@/lib/corretoras'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { mesAtual, somarMeses } from './meses'
 import { diarioPelaLista, type ContatoClienteLeve, type ContatoLeve, type LeadLeve } from './contatos'
-import { equipe, falha, linhas, num, str, type Admin } from './guard'
+import { equipe, equipeLeads, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import { grupoCorretagem, nivel as nivelDe, nivelPelaMedia, risco as riscoDe } from './tipos'
 import { casaBusca, contaCasa, digitosTelefone, indexarBusca, lerBusca, regexDoTexto } from '@/lib/busca'
-import { normTexto } from '@/lib/texto'
+import { mesmaPessoa, normTexto } from '@/lib/texto'
 import type { ClienteEncontrado, GanhoDia } from './tipos'
 import type {
   OperacaoDia, ClienteRiscoRow, GiroDiaRow, AtivacaoAtendenteRow, ClienteContato,
@@ -408,8 +408,10 @@ export const mapLead = (r: Row): LeadRow => ({
 })
 
 export async function leadsLista(): Promise<LeadRow[]> {
-  const { db } = await equipe()
-  return linhas(await rpc(db, 'leads_lista', { p_corretora_opera: null }), mapLead)
+  const { db, profile, restrito } = await equipeLeads()
+  const todos = linhas(await rpc(db, 'leads_lista', { p_corretora_opera: null }), mapLead)
+  // Atendente: só os leads em que ele é o responsável; os demais nem saem do servidor
+  return restrito ? todos.filter(l => mesmaPessoa(l.responsavel, profile.nome)) : todos
 }
 
 // Erro da API quando a tabela ainda não existe no banco (script SQL não aplicado)
@@ -418,7 +420,7 @@ const tabelaAusente = (e: { code?: string; message: string } | null) =>
 
 // Histórico de contatos de um lead (S47), do mais recente para o mais antigo
 export async function leadContatos(leadId: string): Promise<LeadContato[]> {
-  const { db } = await equipe()
+  const { db } = await equipeLeads()   // a ação que chama confere se o lead é do atendente (equipeDoLead)
   const { data, error } = await db.from('lead_contatos').select('id, lead_id, data, nota, criado_por_nome, created_at')
     .eq('lead_id', leadId).order('data', { ascending: false }).order('created_at', { ascending: false })
   if (error) { if (tabelaAusente(error)) return []; falha(error, 'lead_contatos') }
@@ -474,7 +476,9 @@ export async function contatosParaResumo(): Promise<{ contatos: ContatoLeve[]; l
 // Série diária dos leads (S47): quantos entraram, contatos feitos, ganhos, perdidos e contas abertas
 // nos últimos N dias. Antes da S47 (função ausente) calcula da lista, sem contatos nem contas.
 export async function leadsDiario(dias = 30): Promise<LeadDiaRow[]> {
-  const { db } = await equipe()
+  const { db, restrito } = await equipeLeads()
+  // Atendente: a série sai só dos leads dele (sem os contatos e as contas da equipe)
+  if (restrito) return diarioPelaLista(await leadsLista(), fmtDate(hojeBrasil()), dias)
   const { data, error } = await db.rpc('leads_diario', { p_dias: dias })
   if (error) {
     if (!funcaoAusente(error)) falha(error, 'leads_diario')
@@ -586,21 +590,21 @@ export async function parametrosDaCorretora(corretora: Corretora) {
 }
 
 export async function responsaveisAtivos(): Promise<Responsavel[]> {
-  const { db } = await equipe()
+  const { db } = await equipeLeads()
   const { data, error } = await db.from('responsaveis').select('*').eq('ativo', true).order('nome')
   if (error) falha(error, 'responsaveis')
   return ((data ?? []) as Row[]).map(r => ({ nome: String(r.nome), atende_clientes: r.atende_clientes !== false, atende_leads: r.atende_leads !== false, ativo: true, comissionado: r.comissionado === true }))
 }
 
 export async function statusLeadLista(): Promise<StatusLead[]> {
-  const { db } = await equipe()
+  const { db } = await equipeLeads()
   const { data, error } = await db.from('status_lead').select('*').order('ordem')
   if (error) falha(error, 'status_lead')
   return ((data ?? []) as Row[]).map(r => ({ status: String(r.status), tipo: String(r.tipo) as StatusLead['tipo'], ordem: num(r.ordem) }))
 }
 
 export async function parametroGeral(chave: string, padrao: string): Promise<string> {
-  const { db } = await equipe()
+  const { db } = await equipeLeads()
   const { data } = await db.from('parametros').select('valor').eq('corretora', 'GERAL').eq('chave', chave).maybeSingle()
   return data ? String((data as Row).valor) : padrao
 }
@@ -706,7 +710,7 @@ export async function clienteContexto(corretora: Corretora, clienteId: string, m
 
 // Assessores ativos de cada corretora (selects de cadastro de cliente e do lead ganho)
 export async function assessoresPorCorretora(): Promise<AssessoresPorCorretora> {
-  const { db } = await equipe()
+  const { db } = await equipeLeads()
   const { data, error } = await db.from('assessores').select('corretora, nome').eq('ativo', true).order('nome')
   if (error) falha(error, 'assessores')
   const out: AssessoresPorCorretora = { GENIAL: [], XP: [], BTG: [] }

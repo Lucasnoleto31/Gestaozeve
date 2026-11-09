@@ -16,6 +16,7 @@ import { DeletarUsuarioButton } from './DeletarUsuarioButton'
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Administrador',
   vendedor: 'Assessor',
+  atendente: 'Atendente',
   influenciador: 'Influenciador',
 }
 

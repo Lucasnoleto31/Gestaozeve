@@ -45,6 +45,7 @@ function Secao({ label }: { label: string }) {
 const ROLE_LABELS: Record<Role, string> = {
   admin: 'Administrador',
   vendedor: 'Assessor',
+  atendente: 'Atendente',
   influenciador: 'Influenciador',
 }
 
@@ -66,6 +67,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
   const sections: NavSection[] = [
     { label: 'Visão geral', roles: TODOS, items: [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }] },
     { label: 'Leads', roles: EQUIPE, items: [{ label: 'Leads', href: '/leads', icon: Filter }, { label: 'Funil', href: '/funil', icon: LineChart }, { label: 'Comissões', href: '/comissoes', icon: Coins }] },
+    { label: 'Leads', roles: ['atendente'], items: [{ label: 'Meus leads', href: '/leads', icon: Filter }] },
     { label: 'Sistema', roles: ['admin'], items: [{ label: 'Usuários', href: '/admin/usuarios', icon: KeyRound }] },
   ].filter(s => s.roles.includes(role)) as NavSection[]
 

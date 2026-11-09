@@ -1,4 +1,5 @@
-export type Role = 'admin' | 'vendedor' | 'influenciador'
+// atendente = só a tela de Leads, com os leads em que ele é o responsável (sem comissões, funil nem clientes)
+export type Role = 'admin' | 'vendedor' | 'atendente' | 'influenciador'
 
 export interface Profile {
   id: string

@@ -30,6 +30,7 @@ function getSaudacao() {
 export default async function DashboardPage() {
   const profile = await getProfile()
   if (!profile) redirect('/login')
+  if (profile.role === 'atendente') redirect('/leads')   // atendente só usa a tela de Leads
   const equipe = profile.role === 'admin' || profile.role === 'vendedor'
   const firstName = profile.nome.split(' ')[0]
   const visiveis = corretorasDoPerfil(profile)

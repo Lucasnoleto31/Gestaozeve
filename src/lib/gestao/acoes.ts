@@ -3,7 +3,7 @@
 // Escritas do controle (server actions chamadas pelos componentes de cliente).
 // Importações vão em blocos (o Vercel limita o corpo da requisição a 4,5 MB).
 import { revalidatePath } from 'next/cache'
-import { corretoraValida, equipe, falha, num, somenteAdmin, type Admin } from './guard'
+import { corretoraValida, equipe, equipeDoLead, equipeLeads, falha, num, responsavelDoUsuario, somenteAdmin, type Admin } from './guard'
 import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './planilhas'
 import { lerFaixas, lerMetas, lerParticipacoes, numeroParam } from './btg'
 import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from '@/lib/corretoras'
@@ -337,7 +337,7 @@ export async function criarCliente(corretoraIn: string, campos: NovoClienteCampo
 export async function converterLeadEmCliente(leadId: string, corretoraIn: string, campos: NovoClienteCampos) {
   return tentar(async () => {
     const corretora = await corretoraValida(corretoraIn)
-    const { db } = await equipe()
+    const { db } = await equipeDoLead(leadId)
     const { data: lead, error: e0 } = await db.from('leads').select('id, data_fechamento').eq('id', leadId).maybeSingle()
     if (e0) falha(e0, 'leads')
     if (!lead) throw new Error('Lead não encontrado')
@@ -359,7 +359,7 @@ export async function converterLeadEmCliente(leadId: string, corretoraIn: string
 // Lead perdido: fecha hoje com o motivo
 export async function marcarLeadPerdido(leadId: string, motivo: string | null) {
   return tentar(async () => {
-    const { db } = await equipe()
+    const { db } = await equipeDoLead(leadId)
     const { data: lead, error: e0 } = await db.from('leads').select('id, data_fechamento').eq('id', leadId).maybeSingle()
     if (e0) falha(e0, 'leads')
     if (!lead) throw new Error('Lead não encontrado')
@@ -593,9 +593,11 @@ async function leadDaMesmaPessoa(db: Db, cpfDigits: string | null, whatsappDigit
 
 export async function salvarLead(leadId: string | null, campos: LeadCampos) {
   return tentar(async () => {
-    const { db, profile } = await equipe()
+    const { db, profile, restrito } = leadId ? await equipeDoLead(leadId) : await equipeLeads()
     if (!campos.nome.trim()) throw new Error('Informe o nome do lead')
     const registro = leadRegistro(campos)
+    // Atendente: o lead é sempre dele (não repassa para outra pessoa nem cria em nome de outra)
+    if (restrito) registro.responsavel = await responsavelDoUsuario(db, profile.nome)
     // Ganho só pelo troféu da lista (cadastra o cliente e liga ao lead), a não ser que o cliente já exista
     if (registro.status === 'Ganho') {
       let ligado = false
@@ -649,7 +651,7 @@ export async function excluirLead(leadId: string) {
 // Antes da S47 (função ausente) só grava a data do último contato.
 export async function registrarContatoLead(leadId: string, status?: string, data?: string | null, nota?: string | null) {
   return tentar(async () => {
-    const { db, profile } = await equipe()
+    const { db, profile } = await equipeDoLead(leadId)
     const hoje = hojeIso()
     const dia = data && ehIso(data) ? data : hoje
     if (dia > hoje) throw new Error('A data do contato não pode ser futura')
@@ -671,13 +673,18 @@ export async function registrarContatoLead(leadId: string, status?: string, data
 
 // Histórico de contatos de um lead (ficha)
 export async function listarContatosLead(leadId: string) {
-  return tentar(() => leadContatos(leadId))
+  return tentar(async () => { await equipeDoLead(leadId); return leadContatos(leadId) })
 }
 
 // Apaga um contato registrado por engano; o último contato do lead volta a ser o mais recente que sobrou
 export async function excluirContatoLead(id: string) {
   return tentar(async () => {
-    const { db } = await equipe()
+    const { db, restrito } = await equipeLeads()
+    if (restrito) {   // atendente só apaga contato de lead que é dele
+      const { data: c } = await db.from('lead_contatos').select('lead_id').eq('id', id).maybeSingle()
+      if (!c) throw new Error('Contato não encontrado')
+      await equipeDoLead(String((c as Row).lead_id))
+    }
     const { data: n, error } = await db.rpc('excluir_contato_lead', { p_id: id })
     if (error) falha(error, 'excluir_contato_lead')
     revalidatePath('/leads', 'layout')

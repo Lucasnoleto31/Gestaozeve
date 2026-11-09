@@ -30,7 +30,9 @@ export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadr
         { label: 'Clientes', href: `/${slug}/clientes`, icon: Users },
         { label: 'Leads', href: '/leads', icon: Filter },
       ]
-    : [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }]
+    : role === 'atendente'
+      ? [{ label: 'Meus leads', href: '/leads', icon: Filter }]
+      : [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }]
 
   return (
     <nav

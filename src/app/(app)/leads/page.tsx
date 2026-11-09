@@ -19,16 +19,22 @@ import { TabelaLeads } from './TabelaLeads'
 import { compactar } from '@/lib/compacto'
 import { CAMPOS_LEAD } from '@/lib/gestao/tipos'
 import { AcoesLeads } from './AcoesLeads'
+import { mesmaPessoa } from '@/lib/texto'
 import { GanhosPorDia } from './GanhosPorDia'
 
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const profile = await getProfile()
-  if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor')) redirect('/dashboard')
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor' && profile.role !== 'atendente')) redirect('/dashboard')
   const sp = await searchParams
   const [leads, responsaveis, status, diasAlerta, assessores, diario] = await Promise.all([
     leadsLista(), responsaveisAtivos(), statusLeadLista(), parametroGeral('dias_alerta_lead', '7'), assessoresPorCorretora(), leadsDiario(14),
   ])
   const hoje = fmtDate(hojeBrasil())
+  // Atendente: só os próprios leads (o filtro é no servidor, em leadsLista) e só o próprio nome nas listas de responsável
+  const restrito = profile.role === 'atendente'
+  const meuNome = restrito ? responsaveis.filter(r => mesmaPessoa(r.nome, profile.nome)).map(r => r.nome) : null
+  const nomesLeads = meuNome ?? responsaveis.filter(r => r.atende_leads).map(r => r.nome)
+  const nomesClientes = meuNome ?? responsaveis.filter(r => r.atende_clientes).map(r => r.nome)
 
   const mes = mesAtual().slice(0, 7)
   const nesteMes = leads.filter(l => mesBrasil(l.data_hora) === mes).length
@@ -60,12 +66,12 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <PageHeader
         eyebrow="Leads · todas as corretoras"
         title="Leads"
-        description={<>Um lead por linha do formulário; o acompanhamento (origem, responsável, status, contatos) é editado aqui. Sem contato há mais de {diasAlerta} dias vira alerta. Veja o <Link href="/funil" className="link">funil</Link>.</>}
-        actions={<AcoesLeads responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)} status={status} admin={profile.role === 'admin'} />}
+        description={restrito ? <>Aqui ficam só os leads que você atende. Sem contato há mais de {diasAlerta} dias vira alerta.</> : <>Um lead por linha do formulário; o acompanhamento (origem, responsável, status, contatos) é editado aqui. Sem contato há mais de {diasAlerta} dias vira alerta. Veja o <Link href="/funil" className="link">funil</Link>.</>}
+        actions={<AcoesLeads responsaveis={nomesLeads} status={status} admin={profile.role === 'admin'} />}
       />
       <PageBody>
         <KpiRow cols={7}>
-          <KpiCard label="Total de leads" value={fmtNum(leads.length)} sub={`${fmtNum(nesteMes)} neste mês`} />
+          <KpiCard label={restrito ? 'Meus leads' : 'Total de leads'} value={fmtNum(leads.length)} sub={`${fmtNum(nesteMes)} neste mês`} />
           <KpiCard label="Em aberto" value={fmtNum(abertos.length)} sub={`${fmtNum(comAlerta)} com alerta de contato`} tone={comAlerta ? 'warn' : 'neutral'} />
           <KpiCard label="Ganhos" value={fmtNum(ganhos.length)} sub={fechados ? `${fmtPct((ganhos.length / fechados) * 100, 0)} dos fechados` : 'nenhum fechado ainda'} />
           <KpiCard label="Perdidos" value={fmtNum(perdidos.length)} sub={motivoComum ? `motivo mais comum: ${motivoComum[0]}` : TRACO} />
@@ -83,8 +89,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         <GanhosPorDia serie={diario} hoje={hoje} ganhos={ganhosLeves(leads, diario[0]?.dia ?? hoje)} />
         <TabelaLeads
           leads={compactar(leads, CAMPOS_LEAD)}
-          responsaveis={responsaveis.filter(r => r.atende_leads).map(r => r.nome)}
-          responsaveisClientes={responsaveis.filter(r => r.atende_clientes).map(r => r.nome)}
+          responsaveis={nomesLeads}
+          responsaveisClientes={nomesClientes}
           status={status}
           admin={profile.role === 'admin'}
           corretoras={corretorasDoPerfil(profile)}

@@ -46,7 +46,7 @@ export function Header({ role, nome, corretoraPadrao, corretoras, dataHoje }: {
   const paginas = PAGINAS.filter(p => p.roles.includes(role))
   const rotulo = (id: string, label: string) => (id === 'assessores' ? termos.assessores : label)
 
-  const capsula: Item[] = [
+  const capsula: Item[] = role === 'atendente' ? [{ label: 'Meus leads', href: '/leads', icon: Filter }] : [
     { label: 'Início', href: '/dashboard', icon: Home, exact: true },
     ...paginas.filter(p => NA_CAPSULA.includes(p.id)).map(p => ({ label: rotulo(p.id, p.label), href: `/${slug}/${p.id}`, icon: p.icon })),
     ...(equipe ? [{ label: 'Leads', href: '/leads', icon: Filter }] : []),

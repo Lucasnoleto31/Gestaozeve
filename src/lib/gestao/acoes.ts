@@ -5,7 +5,7 @@
 import { revalidatePath } from 'next/cache'
 import { corretoraValida, equipe, equipeDoLead, equipeLeads, falha, num, responsavelDoUsuario, somenteAdmin, type Admin } from './guard'
 import { dataBR, type ClienteImport, type LeadImport, type LoteImport } from './planilhas'
-import { lerFaixas, lerMetas, lerParticipacoes, lerPctMes, numeroParam } from './btg'
+import { lerFaixas, lerMetas, lerParceirosRepasse, lerParticipacoes, lerPctMes, numeroParam } from './btg'
 import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from '@/lib/corretoras'
 import { mesmaPessoa, normTexto } from '@/lib/texto'
 import { buscarClientes, clienteContatos, funcaoAusente, leadContatos, lotesNoPeriodo, todasAsLinhas } from './consultas'
@@ -795,6 +795,9 @@ function validarParametro(chave: string, valor: string): string {
       if (v && Object.keys(meses).length === 0) throw new Error('Meses no formato "AAAA-MM:%; …", ex.: 2026-09:75;2026-10:80')
       return Object.entries(meses).sort(([a], [b]) => a.localeCompare(b)).map(([m, p]) => `${m}:${p}`).join(';')
     }
+    case 'repasse_parceiros':
+      if (v && lerParceirosRepasse(v).length === 0) throw new Error('Parceiros no formato "nome:% do parceiro:% do escritório; …", ex.: Atual Capital:50:70')
+      return v
     case 'zeragem_faixas':
       // mesmo formato "a partir de:valor; …" das faixas de repasse (contratos operados no mês:R$ por contrato zerado)
       if (v && lerFaixas(v).length === 0) throw new Error('Faixas no formato "contratos no mês:R$; …", ex.: 1:24,50;20:23,25;500:22;1000:20,75;5000:19,50')

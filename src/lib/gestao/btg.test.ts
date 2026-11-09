@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { avaliarMetas, baseAtp, calcularRepasse, configBtg, diasUteis, lerFaixas, lerMetas, lerParticipacoes, lerPctMes, numeroParam, preverMeta, repasseProgressivo, ritmosReceita, somarMesesData } from './btg'
+import { avaliarMetas, baseAtp, calcularRepasse, configBtg, diasUteis, lerFaixas, lerMetas, lerParceirosRepasse, lerParticipacoes, lerPctMes, numeroParam, preverMeta, repasseProgressivo, ritmosReceita, somarMesesData } from './btg'
 
 const FAIXAS = lerFaixas('0:75;100000:80;250000:85')
 
@@ -96,6 +96,41 @@ describe('repasse do BTG', () => {
     expect(calcularRepasse(22561.99, cfg, '2026-11-01').pctEfetivo).toBeCloseTo(75, 6)
     expect(calcularRepasse(22561.99, cfg).pctEfetivo).toBeCloseTo(75, 6)
     expect(baseAtp(22561.99, { ...cfg, atpBase: 'comissao' }, '2026-10-01')).toBeCloseTo(out.comissao, 6)
+  })
+  it('lê os parceiros com participação na comissão', () => {
+    expect(lerParceirosRepasse('Atual Capital:50:70')).toEqual([{ nome: 'Atual Capital', pctParceiro: 50, pctEscritorio: 70 }])
+    expect(lerParceirosRepasse('Atual Capital:50:70; TF Robos:40:100')).toHaveLength(2)
+    expect(lerParceirosRepasse('')).toEqual([])
+    expect(lerParceirosRepasse('Atual Capital:50')).toEqual([])
+    expect(lerParceirosRepasse('Atual Capital:150:70')).toEqual([])
+    expect(configBtg([{ chave: 'repasse_parceiros', valor: 'Atual Capital:50:70', descricao: null }]).parceiros).toHaveLength(1)
+    expect(configBtg([]).parceiros).toEqual([])
+  })
+  // Fechamento do BTG de out/26, aba "Zeve" (clientes do parceiro Atual Capital): comissão 915,43 → imposto 16,5 % →
+  // 764,39 → parceiro 50 % = 382,19 · Artur 70 % da outra metade = 267,54 · Delta e Nathan = 114,66
+  it('separa os clientes do parceiro com participação na comissão', () => {
+    const cfg = { ...CFG, pctMes: lerPctMes('2026-10:80'), parceiros: lerParceirosRepasse('Atual Capital:50:70') }
+    const receitaParceiro = (915.43 / 0.8 / 0.9335) * 0.9035
+    const r = calcularRepasse(22561.99, cfg, '2026-10-01', { 'Atual Capital': receitaParceiro })
+    const p = r.parceiros[0]
+    expect(p.comissao).toBeCloseTo(915.43, 2)
+    expect(p.liquido).toBeCloseTo(764.39, 1)
+    expect(p.parceiro).toBeCloseTo(382.19, 1)
+    expect(p.escritorio).toBeCloseTo(267.54, 1)
+    expect(p.terceiros).toBeCloseTo(114.66, 1)
+    expect(r.repasseParceiros).toBeCloseTo(382.19, 1)
+    // os diretos seguem a cadeia de sempre sobre o que sobra da comissão
+    expect(r.comissaoDireta).toBeCloseTo(r.comissao - 915.43, 2)
+    expect(r.liquidoDireto).toBeCloseTo(r.comissaoDireta * 0.7 * 0.835, 6)
+    expect(r.liquido).toBeCloseTo(r.liquidoDireto + p.escritorio, 6)
+    expect(r.partes[0].valor).toBeCloseTo(r.liquido / 2, 6)
+    // sem receita de parceiro, nada muda
+    const s = calcularRepasse(22561.99, cfg, '2026-10-01')
+    expect(s.parceiros).toEqual([])
+    expect(s.comissaoDireta).toBe(s.comissao)
+    expect(s.liquido).toBeCloseTo(s.comissao * 0.7 * 0.835, 6)
+    // a receita do parceiro nunca passa da receita do mês
+    expect(calcularRepasse(100, cfg, '2026-10-01', { 'Atual Capital': 500 }).comissaoDireta).toBeCloseTo(0, 6)
   })
 })
 

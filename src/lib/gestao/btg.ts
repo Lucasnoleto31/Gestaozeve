@@ -13,6 +13,9 @@ import type { Parametro } from './tipos'
 
 export type FaixaRepasse = { de: number; pct: number }        // a partir de R$ `de`, repasse de `pct` %
 export type Participacao = { nome: string; pct: number }
+// Parceiro com participação na comissão dos clientes dele: leva pctParceiro % da comissão líquida de imposto e o
+// escritório fica com pctEscritorio % do restante (o que sobra é da Delta e de terceiros)
+export type ParceiroRepasse = { nome: string; pctParceiro: number; pctEscritorio: number }
 export type MetaAtp = { prazoMeses: number; comissao: number; premio: number; observacao: string }
 
 export type BaseAtp = 'receita' | 'bruta' | 'liquida' | 'comissao'
@@ -26,6 +29,7 @@ export type ConfigBtg = {
   modelo: 'PONTOS' | 'ATP'
   faixas: FaixaRepasse[]
   pctMes: Record<string, number> // comissão que o BTG pagou em cada mês fechado ('AAAA-MM' → %); vale no lugar das faixas
+  parceiros: ParceiroRepasse[]   // parceiros com participação na comissão (aba própria no fechamento)
   impostosEmbutidosPct: number   // impostos embutidos no preço cobrado do cliente (9,65 %)
   impostoBtgPct: number          // o que o BTG desconta da receita bruta (6,65 %)
   deltaPct: number               // Delta, sobre a comissão
@@ -93,6 +97,21 @@ export function lerParticipacoes(s: string | null | undefined): Participacao[] {
   return out
 }
 
+// 'Atual Capital:50:70' → parceiros com participação: nome, % do parceiro, % do escritório sobre o restante
+export function lerParceirosRepasse(s: string | null | undefined): ParceiroRepasse[] {
+  if (!s || !s.trim()) return []
+  const out: ParceiroRepasse[] = []
+  for (const parte of s.split(';')) {
+    if (!parte.trim()) continue
+    const campos = parte.split(':')
+    if (campos.length < 3) return []
+    const pctEscritorio = numeroParam(campos.pop()), pctParceiro = numeroParam(campos.pop()), nome = campos.join(':').trim()
+    if (!nome || pctParceiro == null || pctEscritorio == null || pctParceiro < 0 || pctParceiro > 100 || pctEscritorio < 0 || pctEscritorio > 100) return []
+    out.push({ nome, pctParceiro, pctEscritorio })
+  }
+  return out
+}
+
 // '18:50000:50000:Upfront com devolução;9:110000:50000;…' → metas (prazo em meses, comissão, prêmio[, observação])
 export function lerMetas(s: string | null | undefined): MetaAtp[] {
   if (!s || !s.trim()) return []
@@ -115,6 +134,7 @@ export function configBtg(parametros: Parametro[]): ConfigBtg {
     modelo: v('modelo_incentivo').toUpperCase() === 'ATP' ? 'ATP' : 'PONTOS',
     faixas: lerFaixas(v('repasse_faixas')),
     pctMes: lerPctMes(v('repasse_pct_mes')),
+    parceiros: lerParceirosRepasse(v('repasse_parceiros')),
     impostosEmbutidosPct: numeroParam(v('impostos_embutidos_pct')) ?? 0,
     impostoBtgPct: numeroParam(v('imposto_btg_pct')) ?? 0,
     deltaPct: numeroParam(v('delta_pct')) ?? 0,
@@ -147,31 +167,65 @@ export type Repasse = {
   pctEfetivo: number          // % de comissão efetivo sobre a líquida
   comissao: number            // comissão paga pelo BTG (repasse)
   retencao: number            // o que o BTG retém da líquida
-  delta: number               // parte da Delta
-  comissaoEscritorio: number  // comissão depois da Delta
-  imposto: number             // imposto do escritório
-  liquido: number             // comissão líquida
+  delta: number               // parte da Delta (sobre a comissão dos clientes diretos)
+  comissaoEscritorio: number  // comissão dos clientes diretos depois da Delta
+  imposto: number             // imposto do escritório sobre ela
+  liquido: number             // comissão líquida do escritório (diretos + a parte dele nos clientes de parceiros)
   partes: { nome: string; valor: number }[]
+  comissaoDireta: number      // comissão dos clientes diretos (a total menos a dos clientes de parceiros)
+  liquidoDireto: number       // comissão líquida dos clientes diretos
+  parceiros: RepasseParceiro[] // clientes de parceiros com participação na comissão
+  repasseParceiros: number    // soma das partes dos parceiros (a repassar)
 }
 
-export type ConfigRepasse = Pick<ConfigBtg, 'faixas' | 'impostosEmbutidosPct' | 'impostoBtgPct' | 'deltaPct' | 'impostoPct' | 'participacoes'> & Partial<Pick<ConfigBtg, 'pctMes'>>
+export type RepasseParceiro = {
+  nome: string
+  receita: number      // receita dos clientes do parceiro (lotes × tarifa + zeragem)
+  comissao: number     // comissão do BTG sobre esses clientes
+  imposto: number      // imposto do escritório sobre ela
+  liquido: number      // comissão líquida de imposto
+  parceiro: number     // parte do parceiro (a repassar)
+  escritorio: number   // parte do escritório
+  terceiros: number    // o que sobra: Delta e terceiros
+}
+
+export type ConfigRepasse = Pick<ConfigBtg, 'faixas' | 'impostosEmbutidosPct' | 'impostoBtgPct' | 'deltaPct' | 'impostoPct' | 'participacoes'> & Partial<Pick<ConfigBtg, 'pctMes' | 'parceiros'>>
 
 // Receita → bruta BTG → (–) impostos BTG → líquida → comissão (faixas) → (–) Delta → (–) imposto → líquida → sócios.
 // Com o mês informado ('AAAA-MM-01') e um percentual registrado para ele (o do fechamento), a comissão é esse
 // percentual sobre a líquida; sem isso, valem as faixas.
-export function calcularRepasse(receita: number, cfg: ConfigRepasse, mes?: string | null): Repasse {
+// Clientes de parceiros com participação (receitaParceiros: nome → receita deles no mês) formam um livro à parte,
+// como a aba própria do fechamento: a comissão deles (proporcional à receita) paga o imposto, o parceiro leva a
+// parte dele e o escritório fica com a sua parte do restante. Os diretos seguem a cadeia de sempre.
+export function calcularRepasse(receita: number, cfg: ConfigRepasse, mes?: string | null, receitaParceiros?: Record<string, number> | null): Repasse {
   const bruta = cfg.impostosEmbutidosPct > 0 && cfg.impostosEmbutidosPct < 100 ? receita / (1 - cfg.impostosEmbutidosPct / 100) : receita
   const impostoBtg = (bruta * cfg.impostoBtgPct) / 100
   const liquida = bruta - impostoBtg
   const fixo = mes ? cfg.pctMes?.[mes.slice(0, 7)] : undefined
   const { valor: comissao, pctEfetivo } = fixo != null ? { valor: (liquida * fixo) / 100, pctEfetivo: fixo } : repasseProgressivo(liquida, cfg.faixas)
-  const delta = (comissao * cfg.deltaPct) / 100
-  const comissaoEscritorio = comissao - delta
+  let restante = Math.max(0, receita)
+  const parceiros: RepasseParceiro[] = []
+  for (const p of cfg.parceiros ?? []) {
+    const rec = Math.min(restante, Math.max(0, receitaParceiros?.[p.nome] ?? 0))
+    if (rec <= 0) continue
+    restante -= rec
+    const com = (comissao * rec) / receita
+    const imp = (com * cfg.impostoPct) / 100
+    const liq = com - imp
+    const parte = (liq * p.pctParceiro) / 100
+    const escritorio = ((liq - parte) * p.pctEscritorio) / 100
+    parceiros.push({ nome: p.nome, receita: rec, comissao: com, imposto: imp, liquido: liq, parceiro: parte, escritorio, terceiros: liq - parte - escritorio })
+  }
+  const comissaoDireta = comissao - parceiros.reduce((s, p) => s + p.comissao, 0)
+  const delta = (comissaoDireta * cfg.deltaPct) / 100
+  const comissaoEscritorio = comissaoDireta - delta
   const imposto = (comissaoEscritorio * cfg.impostoPct) / 100
-  const liquido = comissaoEscritorio - imposto
+  const liquidoDireto = comissaoEscritorio - imposto
+  const liquido = liquidoDireto + parceiros.reduce((s, p) => s + p.escritorio, 0)
   return {
     receita, bruta, impostoBtg, liquida, pctEfetivo, comissao, retencao: liquida - comissao, delta, comissaoEscritorio, imposto, liquido,
     partes: cfg.participacoes.map(p => ({ nome: p.nome, valor: (liquido * p.pct) / 100 })),
+    comissaoDireta, liquidoDireto, parceiros, repasseParceiros: parceiros.reduce((s, p) => s + p.parceiro, 0),
   }
 }
 

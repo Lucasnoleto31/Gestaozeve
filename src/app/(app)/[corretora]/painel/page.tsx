@@ -35,19 +35,24 @@ export default async function PainelPage({ params, searchParams }: { params: Par
 
   // Tudo em paralelo; os agregados da base de clientes vêm prontos do banco (painel_resumo).
   // O giro por dia (até 24 meses) alimenta a projeção e a comparação com o mesmo ponto do mês anterior.
-  const [painel, mensal, porCliente, naoCad, mix, funil, par, comissoes, giro, ultima, incentivo] = await Promise.all([
+  // Parceiros com participação na comissão (BTG): a receita mensal da carteira de cada um vem da mesma consulta
+  // das Comissões e começa assim que os parâmetros chegam, em paralelo com o resto
+  const parP = parametrosDaCorretora(corretora)
+  const livrosP = parP.then(p => Promise.all(configBtg(p.parametros).parceiros.map(async x => ({ nome: x.nome, meses: await comissaoMensal(mesRef, 12, x.nome, corretora) }))))
+  const [painel, mensal, porCliente, naoCad, mix, funil, par, comissoes, giro, ultima, incentivo, livros] = await Promise.all([
     painelResumo(corretora, mesRef),
     painelMensal(corretora, mesRef, 12),
     painelClientesMensal(corretora, mesRef, 12, TOP_HEATMAP),
     lotesNaoCadastrados(corretora),
     mixPlataforma(corretora, lim.inicio, lim.fim),
     funilMensal(mesRef, 12),
-    parametrosDaCorretora(corretora),
+    parP,
     comissaoMensal(mesRef, 12, null, corretora),
     giroDiario(corretora, somarMeses(mesRef, -MESES_PROJECAO), lim.fim),
     ultimaData(corretora),
     // pontos por cliente só servem à projeção do incentivo no mês corrente
     mesCorrente ? incentivoMes(corretora, mesRef) : Promise.resolve([]),
+    livrosP,
   ])
 
   // Economia da corretora: no BTG a receita não tem incentivo por pontos e passa pelo
@@ -59,7 +64,10 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   type Mes = typeof mensal[number]
   const receitaTotal = (m: Mes) => m.receita + (atp ? 0 : m.incentivo)
   // no mês com percentual registrado (fechamento já recebido) a comissão usa esse percentual; nos outros, as faixas
-  const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg, m.mes_ref)
+  // receita mensal dos clientes de cada parceiro com participação na comissão (um livro à parte na cadeia)
+  const receitaParceiros = (mes: string): Record<string, number> => Object.fromEntries(livros.map(l => [l.nome, l.meses.find(x => x.mes_ref === mes)?.receita_carteira ?? 0]))
+  const temLivros = livros.some(l => l.meses.some(x => x.receita_carteira > 0))
+  const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg, m.mes_ref, receitaParceiros(m.mes_ref))
 
   // Fechamento previsto do mês corrente (perfil intra-mês de todo o histórico) e variações
   const proj = projetarMes(giro, mesRef, ultima, hoje, { maxMeses: MESES_PROJECAO })
@@ -88,13 +96,18 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   const semGiro = painel.sem_giro
   const totalClientesGiro = porCliente[0]?.total_clientes ?? 0
   const mesAtual = mensal.find(m => m.mes_ref === mesRef)
-  const repasseMes = calcularRepasse(mesAtual?.receita ?? 0, cfg, mesRef)
+  const repasseMes = calcularRepasse(mesAtual?.receita ?? 0, cfg, mesRef, receitaParceiros(mesRef))
   // A receita da tabela mensal (todos os lançamentos, inclusive contas ainda não vinculadas) é a base
   // do card "Receita no mês" e da cadeia de repasse do BTG; a projeção dela escala pela mesma
   // proporção prevista para o giro dos clientes cadastrados
   const escalaR = (v: number) => (proj.receita.realizado > 0 ? ((mesAtual?.receita ?? 0) * v) / proj.receita.realizado : v)
   const receitaMensalProj = { projetado: escalaR(proj.receita.projetado), baixo: escalaR(proj.receita.baixo), alto: escalaR(proj.receita.alto), linear: escalaR(proj.receita.linear) }
-  const repasseProj = comRepasse && proj.parcial ? calcularRepasse(receitaMensalProj.projetado, cfg, mesRef) : null
+  // na projeção, os clientes de parceiros crescem na mesma proporção da receita do mês
+  const parceirosProj = (v: number): Record<string, number> => {
+    const atual = mesAtual?.receita ?? 0, rp = receitaParceiros(mesRef)
+    return atual > 0 ? Object.fromEntries(Object.entries(rp).map(([k, x]) => [k, (x * v) / atual])) : rp
+  }
+  const repasseProj = comRepasse && proj.parcial ? calcularRepasse(receitaMensalProj.projetado, cfg, mesRef, parceirosProj(receitaMensalProj.projetado)) : null
   const naoCadLinhas = naoCad.reduce((s, l) => s + l.linhas, 0)
   const naoCadLotes = naoCad.reduce((s, l) => s + l.lotes, 0)
   const mixTotal = mix.reduce((s, m) => s + m.lotes, 0)
@@ -124,10 +137,25 @@ export default async function PainelPage({ params, searchParams }: { params: Par
     { label: `Receita líquida ${ctx.label}`, valores: col(m => (m ? repasseDe(m).liquida : null)), fmt: rr, total: true },
     { label: `Comissão ${ctx.label} (% efetivo)`, valores: col(m => (m && m.receita ? repasseDe(m).pctEfetivo : null)), fmt: pp, destaque: 'sub' },
     { label: `Comissão ${ctx.label}`, valores: col(m => (m ? repasseDe(m).comissao : null)), fmt: rr, destaque: 'bold', total: true },
-    { label: `(–) Delta ${fmtPct(cfg.deltaPct, 0)}`, valores: col(m => (m ? repasseDe(m).delta : null)), fmt: rr, destaque: 'sub', total: true },
-    { label: 'Comissão do escritório', valores: col(m => (m ? repasseDe(m).comissaoEscritorio : null)), fmt: rr, total: true },
+    ...(temLivros ? [{ label: 'Clientes diretos: comissão', valores: col(m => (m ? repasseDe(m).comissaoDireta : null)), fmt: rr, total: true } as Linha] : []),
+    { label: `(–) Delta ${fmtPct(cfg.deltaPct, 0)}${temLivros ? ' sobre a comissão dos diretos' : ''}`, valores: col(m => (m ? repasseDe(m).delta : null)), fmt: rr, destaque: 'sub', total: true },
+    { label: temLivros ? 'Comissão do escritório nos clientes diretos' : 'Comissão do escritório', valores: col(m => (m ? repasseDe(m).comissaoEscritorio : null)), fmt: rr, total: true },
     { label: `(–) Imposto ${fmtPct(cfg.impostoPct, 1)}`, valores: col(m => (m ? repasseDe(m).imposto : null)), fmt: rr, destaque: 'sub', total: true },
-    { label: 'Comissão líquida', valores: col(m => (m ? repasseDe(m).liquido : null)), fmt: rr, destaque: 'total', total: true },
+    // clientes de parceiros com participação: imposto, parte do parceiro (a repassar) e o que fica para o escritório
+    ...(temLivros ? [
+      { label: 'Comissão líquida dos clientes diretos', valores: col(m => (m ? repasseDe(m).liquidoDireto : null)), fmt: rr, total: true } as Linha,
+      ...cfg.parceiros.flatMap((p): Linha[] => {
+        const de = (m: Mes) => repasseDe(m).parceiros.find(x => x.nome === p.nome)
+        return [
+          { label: `Clientes do parceiro ${p.nome}: comissão`, valores: col(m => (m ? de(m)?.comissao ?? 0 : null)), fmt: rr, total: true },
+          { label: `(–) Imposto ${fmtPct(cfg.impostoPct, 1)} · ${p.nome}`, valores: col(m => (m ? de(m)?.imposto ?? 0 : null)), fmt: rr, destaque: 'sub', total: true },
+          { label: `(–) Parte do parceiro ${p.nome} (${fmtPct(p.pctParceiro, 0)}), a repassar`, valores: col(m => (m ? de(m)?.parceiro ?? 0 : null)), fmt: rr, destaque: 'bold', total: true },
+          { label: `(–) Delta e terceiros (${fmtPct(100 - p.pctEscritorio, 0)} do restante) · ${p.nome}`, valores: col(m => (m ? de(m)?.terceiros ?? 0 : null)), fmt: rr, destaque: 'sub', total: true },
+          { label: `Comissão líquida do escritório nos clientes de ${p.nome}`, valores: col(m => (m ? de(m)?.escritorio ?? 0 : null)), fmt: rr, total: true },
+        ]
+      }),
+    ] : []),
+    { label: temLivros ? 'Comissão líquida do escritório' : 'Comissão líquida', valores: col(m => (m ? repasseDe(m).liquido : null)), fmt: rr, destaque: 'total', total: true },
     ...cfg.participacoes.map((p): Linha => ({ label: `${p.nome} (${fmtPct(p.pct, 0)})`, valores: col(m => (m ? repasseDe(m).partes.find(x => x.nome === p.nome)?.valor ?? null : null)), fmt: rr, destaque: 'sub', total: true })),
     { label: 'Comissão líquida / receita', valores: col(m => (m && m.receita ? (repasseDe(m).liquido / m.receita) * 100 : null)), fmt: pp, destaque: 'sub' },
   ] : []
@@ -245,8 +273,8 @@ export default async function PainelPage({ params, searchParams }: { params: Par
                       <td>Comissão líquida<span className="ml-1.5 text-micro font-normal text-fg-subtle">comissão {ctx.label} {fmtPct(repasseProj.pctEfetivo)} sobre a líquida prevista</span></td>
                       <td className="num col-p2">{rCurto(repasseMes.liquido)}</td>
                       <td className="num font-semibold">{rCurto(repasseProj.liquido)}</td>
-                      <td className="num col-p2 text-fg-muted">{proj.metodo === 'historico' ? `${rCurto(calcularRepasse(receitaMensalProj.baixo, cfg, mesRef).liquido)} – ${rCurto(calcularRepasse(receitaMensalProj.alto, cfg, mesRef).liquido)}` : TRACO}</td>
-                      <td className="num col-p3 text-fg-muted">{rCurto(calcularRepasse(receitaMensalProj.linear, cfg, mesRef).liquido)}</td>
+                      <td className="num col-p2 text-fg-muted">{proj.metodo === 'historico' ? `${rCurto(calcularRepasse(receitaMensalProj.baixo, cfg, mesRef, parceirosProj(receitaMensalProj.baixo)).liquido)} – ${rCurto(calcularRepasse(receitaMensalProj.alto, cfg, mesRef, parceirosProj(receitaMensalProj.alto)).liquido)}` : TRACO}</td>
+                      <td className="num col-p3 text-fg-muted">{rCurto(calcularRepasse(receitaMensalProj.linear, cfg, mesRef, parceirosProj(receitaMensalProj.linear)).liquido)}</td>
                       <td className="num">{rCurto(repasseAnt?.liquido)}</td>
                       <td className="num col-p2"><DeltaText pct={repasseAnt?.liquido ? ((repasseProj.liquido - repasseAnt.liquido) / repasseAnt.liquido) * 100 : null} /></td>
                     </tr>
@@ -276,7 +304,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
           />
         </Panel>
 
-        <Panel title="Indicadores mensais" subtitle={comRepasse ? `O último mês pode estar parcial · a cadeia de impostos, comissão e Delta segue o fechamento mensal do ${ctx.label} (Parâmetros). A receita bruta do ${ctx.label} é maior que a receita total porque o preço cobrado do cliente embute ${fmtPct(cfg.impostosEmbutidosPct, 2)} de impostos e a tarifa cadastrada (R$/lote) é o valor sem eles.` : 'O último mês pode estar parcial.'}>
+        <Panel title="Indicadores mensais" subtitle={comRepasse ? `O último mês pode estar parcial · a cadeia de impostos, comissão e Delta segue o fechamento mensal do ${ctx.label} (Parâmetros). A receita bruta do ${ctx.label} é maior que a receita total porque o preço cobrado do cliente embute ${fmtPct(cfg.impostosEmbutidosPct, 2)} de impostos e a tarifa cadastrada (R$/lote) é o valor sem eles.${temLivros ? ' Os clientes de parceiros com participação na comissão seguem a divisão combinada com cada parceiro (Parâmetros): imposto, parte do parceiro e o que fica para o escritório.' : ''}` : 'O último mês pode estar parcial.'}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>

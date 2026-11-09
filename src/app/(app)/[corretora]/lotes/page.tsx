@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { contexto, periodoDaUrl, type Params, type SearchParams } from '@/lib/gestao/pagina'
-import { diario, ultimaData } from '@/lib/gestao/consultas'
+import { diario, subidasDeLotes, ultimaData } from '@/lib/gestao/consultas'
+import { giroPorHorario } from '@/lib/gestao/horario'
 import { diasEntre, inicioSemana, somarDias } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct, fmtDelta } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -12,9 +13,8 @@ import { Panel } from '@/components/ui/Panel'
 import { PeriodoPicker } from '@/components/gestao/Filtros'
 import { BarraCelula, LinhaVazia, TRACO, Variacao, dataCurta, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
+import { GiroPorHorario, diaSemana } from './GiroPorHorario'
 
-const DIAS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
-const diaSemana = (iso: string) => DIAS[new Date(iso + 'T12:00:00').getDay()]
 const MEDIA_MOVEL = 7
 
 // Inclinação da reta de mínimos quadrados (lotes/dia por dia com giro)
@@ -35,7 +35,8 @@ export default async function GiroDiarioPage({ params, searchParams }: { params:
   const duracao = diasEntre(inicio, fim) + 1
   const antFim = somarDias(inicio, -1), antIni = somarDias(antFim, -(duracao - 1))
 
-  const [dias, anterior, ultima] = await Promise.all([diario(corretora, inicio, fim), diario(corretora, antIni, antFim), ultimaData(corretora)])
+  const [dias, anterior, ultima, subidas] = await Promise.all([diario(corretora, inicio, fim), diario(corretora, antIni, antFim), ultimaData(corretora), subidasDeLotes(corretora, inicio, fim)])
+  const horario = giroPorHorario(subidas)
   // Situação atual (último dia lançado, semana e mês dele)
   const mesIni = ultima ? ultima.slice(0, 7) + '-01' : null
   const atual = ultima && mesIni ? (mesIni >= inicio && ultima <= fim ? dias.filter(d => d.dia >= mesIni && d.dia <= ultima) : await diario(corretora, mesIni, ultima)) : []
@@ -104,6 +105,8 @@ export default async function GiroDiarioPage({ params, searchParams }: { params:
             altura={300}
           />
         </Panel>
+
+        <GiroPorHorario giro={horario} base={ctx.base} diasComGiro={dias.length} />
 
         <div className="grid gap-8 xl:grid-cols-2">
           <Panel title="Situação atual" subtitle={ultima ? `Última data lançada: ${dataCurta(ultima)}` : 'Nenhum lote lançado ainda.'}>

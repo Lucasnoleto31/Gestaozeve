@@ -4,6 +4,7 @@ import type { Corretora } from '@/lib/corretoras'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { mesAtual, somarMeses } from './meses'
 import { diarioPelaLista, type ContatoClienteLeve, type ContatoLeve, type LeadLeve } from './contatos'
+import type { SubidaLotes } from './horario'
 import { equipe, equipeLeads, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import { grupoCorretagem, nivel as nivelDe, nivelPelaMedia, risco as riscoDe } from './tipos'
@@ -631,6 +632,22 @@ export async function lotesNoPeriodo(corretora: Corretora, inicio: string, fim: 
   const { data } = await db.from('importacoes').select('nome_arquivo, created_at').eq('corretora', corretora).eq('tipo', 'lotes')
     .lte('data_min', fim).gte('data_max', inicio).order('created_at', { ascending: false }).limit(5)
   return { linhas: count ?? 0, importacoes: ((data ?? []) as Row[]).map(r => `${r.nome_arquivo} (${String(r.created_at).slice(0, 10)})`) }
+}
+
+// Subidas da planilha de lotes no período (S58, giro por horário): uma por importação de arquivo de um
+// dia só, com o total de lotes operados que o arquivo trazia. Ajustes protegidos não são subidas.
+export async function subidasDeLotes(corretora: Corretora, inicio: string, fim: string): Promise<SubidaLotes[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('importacoes').select('nome_arquivo, created_at, data_min, data_max, detalhes, protegida')
+    .eq('corretora', corretora).eq('tipo', 'lotes').gte('data_min', inicio).lte('data_max', fim).order('created_at').range(0, PAGINA - 1)
+  if (error) falha(error, 'importacoes')
+  const out: SubidaLotes[] = []
+  for (const r of (data ?? []) as Row[]) {
+    const det = (r.detalhes ?? {}) as Row
+    if (r.protegida || !r.data_min || r.data_min !== r.data_max || typeof det.operados !== 'number') continue
+    out.push({ dia: String(r.data_min), nome_arquivo: String(r.nome_arquivo ?? ''), created_at: String(r.created_at), operados: num(det.operados) })
+  }
+  return out
 }
 
 // ── Painel: agregados calculados no banco (S24) ─────────────────────────────

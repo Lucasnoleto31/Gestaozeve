@@ -15,7 +15,7 @@ const fone = (t: string | null) => {
   return d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : t
 }
 
-export function BuscaCliente({ corretora, base, autoFocus, className }: { corretora: Corretora; base: string; autoFocus?: boolean; className?: string }) {
+export function BuscaCliente({ corretora, base, autoFocus, className, placeholder = 'Nome, telefone, CPF, e-mail ou conta…' }: { corretora: Corretora; base: string; autoFocus?: boolean; className?: string; placeholder?: string }) {
   const router = useRouter()
   const [termo, setTermo] = useState('')
   const [itens, setItens] = useState<Item[]>([])
@@ -51,7 +51,8 @@ export function BuscaCliente({ corretora, base, autoFocus, className }: { corret
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
       <input
         className="field-sm w-64 pl-8 pr-8"
-        placeholder="Nome, telefone, CPF, e-mail ou conta…"
+        placeholder={placeholder}
+        aria-label="Buscar cliente e abrir a ficha"
         value={termo}
         autoFocus={autoFocus}
         onChange={e => setTermo(e.target.value)}

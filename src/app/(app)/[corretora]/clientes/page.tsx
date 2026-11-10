@@ -12,6 +12,7 @@ import { temListaPropria } from '@/lib/corretoras'
 import { getProfile } from '@/lib/auth/getProfile'
 import { compactar } from '@/lib/compacto'
 import { CAMPOS_CLIENTE_LINHA } from '@/lib/gestao/tipos'
+import { COOKIE_VISAO_CLIENTES, visaoClientes } from '@/lib/gestao/listaClientes'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { MesPicker } from '@/components/gestao/Filtros'
@@ -23,7 +24,10 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base, q } = ctx
   // filtros da tabela: os do endereço; sem nenhum no endereço (seta da ficha, menu), os últimos usados
-  const fi = filtrosIniciais(q, (await cookies()).get(cookieFiltrosClientes(corretora))?.value, CHAVES_FILTRO_CLIENTES)
+  const guardados = await cookies()
+  const fi = filtrosIniciais(q, guardados.get(cookieFiltrosClientes(corretora))?.value, CHAVES_FILTRO_CLIENTES)
+  // colunas à mostra: a visão que a pessoa escolheu da última vez
+  const visao = visaoClientes(guardados.get(COOKIE_VISAO_CLIENTES)?.value)
   const listaPropria = temListaPropria(corretora)
   const [lista, responsaveis, assessores, profile, contatos] = await Promise.all([
     clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(), contatosClientesResumo(corretora),
@@ -37,7 +41,6 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   const migrados7d = clientes.filter(c => c.status === 'Migrado' && c.data_migracao && c.data_migracao >= d7).length
   const entraram30d = clientes.filter(c => c.data_entrada && c.data_entrada >= d30).length
   const emRisco = clientes.filter(c => c.risco).length
-  const porNivel = { alto: clientes.filter(c => c.nivel === 'Alto').length, medio: clientes.filter(c => c.nivel === 'Médio').length, baixo: clientes.filter(c => c.nivel === 'Baixo').length }
   const altoEmRisco = clientes.filter(c => c.nivel === 'Alto' && c.risco).length
 
   return (
@@ -50,25 +53,28 @@ export default async function ClientesPage({ params, searchParams }: { params: P
           : `Um cliente por CPF/CNPJ, com as contas agrupadas · giro e situação em ${mesLongo(mesRef)}.`}
         actions={<>
           <NovoClienteButton corretora={corretora} base={base} responsaveis={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)} assessores={assessores[corretora]} hoje={hoje} />
-          <BuscaCliente corretora={corretora} base={base} />
+          <BuscaCliente corretora={corretora} base={base} placeholder="Abrir a ficha: nome, CPF, conta…" />
           <MesPicker valor={mesRef} />
         </>}
       />
       <PageBody>
-        <KpiRow cols={7}>
+        {/* A base em seis números: quem gira no mês (o destaque), o tamanho da base e o caminho até o giro.
+            As contagens por situação, "em risco" e "com alertas" ficam nos botões da lista, que filtram. */}
+        <KpiRow cols={6}>
+          <KpiCard destaque label={`Ativos em ${mesCurto(mesRef)}`} value={fmtNum(r.ativosSit)} sub={`${fmtPct(r.migrados ? (r.ativosSit / r.migrados) * 100 : 0)} dos migrados · ${fmtNum(r.inativos)} inativos`} />
           <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(entraram30d)} entraram em 30 dias`} />
           <KpiCard label="Migrados" value={fmtNum(r.migrados)} sub={`${fmtPct(r.taxaMigracao)} da base · ${fmtNum(migrados7d)} nos últimos 7 dias`} />
-          <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)} sub={r.mediaDiasMigrar != null ? `média de ${Math.round(r.mediaDiasMigrar)} dias até migrar` : 'sem data de entrada para medir'} />
-          <KpiCard label="Recusaram" value={fmtNum(r.recusaram)} sub={`${fmtPct(r.levados ? (r.recusaram / r.levados) * 100 : 0)} da base`} />
-          <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub={`${fmtNum(r.ativosSit)} ativos · ${fmtNum(r.inativos)} inativos em ${mesCurto(mesRef)}${emRisco ? ` · ${fmtNum(emRisco)} em risco` : ''}`} />
-          <KpiCard label="Nível alto" value={fmtNum(porNivel.alto)} sub={`${fmtNum(porNivel.medio)} médio · ${fmtNum(porNivel.baixo)} baixo · média de lotes 3 m${altoEmRisco ? ` · ${fmtNum(altoEmRisco)} alto em risco` : ''}`} tone={altoEmRisco ? 'warn' : 'neutral'} />
-          <KpiCard label="Com alertas" value={fmtNum(r.comAlertas)} sub="algo a completar no cadastro" tone={r.comAlertas ? 'warn' : 'neutral'} />
+          <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)}
+            sub={`${r.mediaDiasMigrar != null ? `média de ${Math.round(r.mediaDiasMigrar)} dias até migrar` : 'sem data de entrada para medir'} · ${fmtNum(r.recusaram)} recusaram (${fmtPct(r.levados ? (r.recusaram / r.levados) * 100 : 0)})`} />
+          <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub="migraram e ainda não operaram" />
+          <KpiCard label="Em risco" value={fmtNum(emRisco)} tone={emRisco ? 'warn' : 'neutral'}
+            sub={emRisco ? `giravam e pararam ou caíram · ${fmtNum(altoEmRisco)} de nível alto` : 'ninguém parou ou caiu'} />
         </KpiRow>
         <TabelaClientes
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
           atendentes={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)}
-          filtrosSalvos={fi} mesParam={ctx.mesEscolhido ? mesRef.slice(0, 7) : null}
+          filtrosSalvos={fi} visaoInicial={visao} mesParam={ctx.mesEscolhido ? mesRef.slice(0, 7) : null}
         />
       </PageBody>
     </>

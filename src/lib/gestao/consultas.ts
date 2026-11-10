@@ -121,7 +121,7 @@ export async function clienteFicha(corretora: Corretora, clienteId: string, mesR
   return {
     resumo: lista.length ? mapCliente(lista[0]) : null,
     cadastro,
-    manual: { status: str(manualRow?.status), responsavel: str(manualRow?.responsavel), assessor: str(manualRow?.assessor), data_migracao: str(manualRow?.data_migracao), ativador: str(manualRow?.ativador) },
+    manual: { status: str(manualRow?.status), responsavel: str(manualRow?.responsavel), assessor: str(manualRow?.assessor), data_migracao: str(manualRow?.data_migracao), ativador: str(manualRow?.ativador), proximo_contato: str(manualRow?.proximo_contato) },
     contas: linhas<ContaRow>(contas, r => ({
       conta_id: String(r.conta_id), conta: String(r.conta ?? ''), conta_digito: str(r.conta_digito), situacao_conta: str(r.situacao_conta),
       status: (str(r.status) ?? 'Em processamento') as ContaRow['status'], assessor_nome: str(r.assessor_nome), filial: str(r.filial),

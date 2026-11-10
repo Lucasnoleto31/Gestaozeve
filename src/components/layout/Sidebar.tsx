@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect } from 'react'
 import {
-  BarChart3, ChevronRight, Coins, Filter, Gift, Home, KeyRound, LayoutDashboard, LineChart, ListChecks, SlidersHorizontal, Upload, Users, UserSearch, Wallet, X,
+  BarChart3, ChevronRight, Coins, Filter, Gift, Home, KeyRound, LayoutDashboard, LineChart, ListChecks, SlidersHorizontal, Target, Upload, Users, UserSearch, Wallet, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Marca } from '@/components/ui/Marca'
@@ -22,6 +22,7 @@ const EQUIPE: Role[] = ['admin', 'vendedor']
 export const PAGINAS: { id: string; label: string; icon: React.ElementType; roles: Role[] }[] = [
   { id: 'painel', label: 'Painel', icon: LayoutDashboard, roles: EQUIPE },
   { id: 'clientes', label: 'Clientes', icon: Users, roles: EQUIPE },
+  { id: 'oportunidades', label: 'Oportunidades', icon: Target, roles: EQUIPE },
   { id: 'lotes', label: 'Giro diário', icon: BarChart3, roles: EQUIPE },
   { id: 'assessores', label: 'Assessores', icon: UserSearch, roles: EQUIPE },
   { id: 'receita', label: 'Receita', icon: Wallet, roles: EQUIPE },

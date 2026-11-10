@@ -28,6 +28,7 @@ const linkDe = (i: ItemFila) =>
   i.tipo === 'lead' ? `/leads?busca=${encodeURIComponent(i.nome)}` : isCorretora(i.corretora) ? `/${CORRETORA_SLUG[i.corretora]}/clientes/${i.id}` : '/leads'
 
 type Aberto = { chave: string; modo: 'contato' | 'agendar' }
+const PASSO = 30
 
 export function MinhaFila({ leads, clientes, restrito, usuario, responsaveis, diasAlerta, hoje, semS59 }: DadosFila) {
   const router = useRouter()
@@ -43,6 +44,9 @@ export function MinhaFila({ leads, clientes, restrito, usuario, responsaveis, di
   const [form, setForm] = useState({ data: hoje, nota: '', proximo: '' })
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  // quantas linhas cada seção mostra (a de leads novos passa de mil em "toda a equipe")
+  const [limites, setLimites] = useState<Record<string, number>>({})
+  const limiteDe = (chave: string) => limites[chave] ?? PASSO
 
   const secoes = useMemo<SecaoFila[]>(
     () => montarFila(leads, clientes, { hoje, diasAlerta, quem: quem || null }).map(s => ({ ...s, itens: s.itens.filter(i => !feitos.has(i.chave)) })),
@@ -128,7 +132,7 @@ export function MinhaFila({ leads, clientes, restrito, usuario, responsaveis, di
                 </tr>
               </thead>
               <tbody>
-                {s.itens.map(item => {
+                {s.itens.slice(0, limiteDe(s.chave)).map(item => {
                   const wa = linkTelefone(item.telefone)
                   const abertoAqui = aberto?.chave === item.chave ? aberto.modo : null
                   return (
@@ -182,6 +186,13 @@ export function MinhaFila({ leads, clientes, restrito, usuario, responsaveis, di
               </tbody>
             </table>
           </div>
+          {s.itens.length > limiteDe(s.chave) && (
+            <div className="mt-3 text-center">
+              <button type="button" className="link text-dense" onClick={() => setLimites(l => ({ ...l, [s.chave]: limiteDe(s.chave) + PASSO }))}>
+                mostrar mais ({fmtNum(s.itens.length - limiteDe(s.chave))} restantes)
+              </button>
+            </div>
+          )}
         </Panel>
       ))}
     </>

@@ -4,9 +4,9 @@
 import { corretorasDoPerfil, type Corretora } from '@/lib/corretoras'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { mesmaPessoa } from '@/lib/texto'
-import { clientesLista, parametroGeral, responsaveisAtivos, statusLeadLista } from './consultas'
+import { clientesLista, contatosClientesResumo, parametroGeral, responsaveisAtivos, statusLeadLista } from './consultas'
 import { equipeLeads, falha, str } from './guard'
-import type { ClienteFila, LeadFila } from './fila'
+import { comContatos, type ClienteFila, type LeadFila } from './fila'
 
 type Row = Record<string, unknown>
 type Erro = { code?: string; message: string } | null
@@ -73,7 +73,11 @@ export async function dadosDaFila(): Promise<DadosFila> {
       if (error) { if (colunaAusente(error)) semS59 = true; else falha(error, 'cliente_corretora') }
       for (const p of (data ?? []) as Row[]) proximos.set(`${p.corretora}:${p.cliente_id}`, String(p.proximo_contato))
     }
-    const listas = await Promise.all(corretoras.map(c => clientesLista(c, null)))
+    // a lista do banco vem sem os contatos com o cliente: junta o resumo de cliente_contatos de cada corretora
+    const listas = await Promise.all(corretoras.map(async c => {
+      const [lista, contatos] = await Promise.all([clientesLista(c, null), contatosClientesResumo(c)])
+      return comContatos(lista, contatos)
+    }))
     clientes = listas.flatMap((lista, i) => lista.map<ClienteFila>(c => ({
       cliente_id: c.cliente_id, corretora: corretoras[i], nome: c.nome, telefone: c.telefone, responsavel: c.responsavel, ativador: c.ativador,
       situacao: c.situacao, risco: c.risco, nivel: c.nivel, dias_sem_giro: c.dias_sem_giro, lotes_media_3m: c.lotes_media_3m,

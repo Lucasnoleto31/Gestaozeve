@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { linkTelefone, montarFila, totalDaFila, type ClienteFila, type LeadFila } from './fila'
+import { comContatos, linkTelefone, montarFila, totalDaFila, type ClienteFila, type LeadFila } from './fila'
 
 const HOJE = '2026-11-10'
 const lead = (p: Partial<LeadFila> & { id: string }): LeadFila => ({
@@ -69,6 +69,17 @@ describe('montarFila', () => {
     const artur = montarFila(leads, clientes, { hoje: HOJE, diasAlerta: 7, quem: 'Artur' })
     expect(secao(artur, 'risco').itens.map(i => i.id)).toEqual(['c2'])
     expect(totalDaFila(artur)).toBe(1)
+  })
+})
+
+describe('comContatos', () => {
+  it('junta os contatos de cliente_contatos na lista que vem do banco zerada', () => {
+    const lista = [cliente({ cliente_id: 'a', ativador: 'Milena' }), cliente({ cliente_id: 'b', ativador: 'Milena' })]
+    const com = comContatos(lista, new Map([['a', { contatos: 3, ultimo_contato: '2026-11-09' }]]))
+    expect(com.map(c => [c.cliente_id, c.contatos, c.ultimo_contato])).toEqual([['a', 3, '2026-11-09'], ['b', 0, null]])
+    // conta já chamada sai da campanha "ainda não chamadas"; a outra fica
+    const s = montarFila([], com, { hoje: HOJE, diasAlerta: 7 })
+    expect(secao(s, 'campanha').itens.map(i => i.id)).toEqual(['b'])
   })
 })
 

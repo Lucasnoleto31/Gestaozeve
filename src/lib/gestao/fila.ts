@@ -66,6 +66,14 @@ const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 export const haDias = (n: number) => (n <= 0 ? 'hoje' : n === 1 ? 'ontem' : `há ${n} dias`)
 const porNome = (a: ItemFila, b: ItemFila) => a.nome.localeCompare(b.nome, 'pt-BR')
 
+// A clientes_lista do banco não traz os contatos com o cliente (vêm zerados): quem lê a lista junta aqui
+// o resumo de cliente_contatos (quantos e o último), como a tela Clientes faz.
+export function comContatos<T extends { cliente_id: string; contatos: number; ultimo_contato: string | null }>(
+  clientes: T[], contatos: Map<string, { contatos: number; ultimo_contato: string }>,
+): T[] {
+  return clientes.map(c => { const x = contatos.get(c.cliente_id); return x ? { ...c, contatos: x.contatos, ultimo_contato: x.ultimo_contato } : c })
+}
+
 // Link de WhatsApp a partir do telefone (55 + DDD + número); null quando não dá para ligar
 export function linkTelefone(telefone: string | null | undefined): string | null {
   if (!telefone) return null

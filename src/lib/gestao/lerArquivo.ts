@@ -4,7 +4,7 @@
 // (ou da aba pedida). O xlsx é carregado sob demanda (é pesado).
 export type Aba = { nome: string; linhas: unknown[][] }
 
-export async function lerArquivo(file: File, aba?: string): Promise<{ abas: string[]; dados: unknown[][] }> {
+async function abrir(file: File) {
   const XLSX = await import('xlsx')
   const nome = file.name.toLowerCase()
   let wb
@@ -16,9 +16,18 @@ export async function lerArquivo(file: File, aba?: string): Promise<{ abas: stri
   } else {
     wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false, raw: true })
   }
-  const abas = wb.SheetNames
+  const matriz = (aba: string) => XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[aba], { header: 1, raw: true, defval: null, blankrows: false })
+  return { abas: wb.SheetNames, matriz }
+}
+
+export async function lerArquivo(file: File, aba?: string): Promise<{ abas: string[]; dados: unknown[][] }> {
+  const { abas, matriz } = await abrir(file)
   const escolhida = aba && abas.includes(aba) ? aba : abas[0]
-  const ws = wb.Sheets[escolhida]
-  const dados = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null, blankrows: false })
-  return { abas, dados }
+  return { abas, dados: matriz(escolhida) }
+}
+
+// Todas as abas (o fechamento do BTG tem uma aba por livro: escritório e parceiros)
+export async function lerAbas(file: File): Promise<Aba[]> {
+  const { abas, matriz } = await abrir(file)
+  return abas.map(nome => ({ nome, linhas: matriz(nome) }))
 }

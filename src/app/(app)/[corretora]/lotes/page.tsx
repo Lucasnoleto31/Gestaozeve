@@ -12,6 +12,7 @@ import { Panel } from '@/components/ui/Panel'
 import { PeriodoPicker } from '@/components/gestao/Filtros'
 import { BarraCelula, LinhaVazia, TRACO, Variacao, dataCurta, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
+import { BotaoWhatsApp } from './BotaoWhatsApp'
 
 const DIAS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
 const diaSemana = (iso: string) => DIAS[new Date(iso + 'T12:00:00').getDay()]
@@ -85,7 +86,7 @@ export default async function GiroDiarioPage({ params, searchParams }: { params:
         eyebrow={ctx.eyebrow}
         title="Giro diário"
         description="Lotes operados por dia com giro, tendência e comparação com o período anterior de mesma duração."
-        actions={<PeriodoPicker inicio={inicio} fim={fim} />}
+        actions={<>{ultima && <BotaoWhatsApp corretora={corretora} dia={ultima} />}<PeriodoPicker inicio={inicio} fim={fim} /></>}
       />
       <PageBody>
         <KpiRow cols={6}>

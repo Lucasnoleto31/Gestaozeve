@@ -10,6 +10,8 @@ import { useToast } from '@/components/ui/Toast'
 import { lerArquivo } from '@/lib/gestao/lerArquivo'
 import { lerClientes, lerLotes, resumoLotes, type ClienteImport, type LoteImport } from '@/lib/gestao/planilhas'
 import { cancelarImportacaoLotes, concluirImportacaoLotes, enviarLotes, importarClientes, iniciarImportacaoLotes, prepararLotes } from '@/lib/gestao/acoes'
+import { resumoGiroDoDia } from '@/lib/gestao/acoesGiro'
+import { ResumoWhatsApp } from '@/components/gestao/ResumoWhatsApp'
 import { dataPt, n0 } from '@/components/gestao/Celulas'
 import type { Corretora } from '@/lib/corretoras'
 import { fmtNum } from '@/lib/format'
@@ -23,7 +25,7 @@ type Estado =
   | { fase: 'clientes'; nome: string; linhas: ClienteImport[]; faltando: string[]; cabecalhos: string[] }
   | { fase: 'lotes'; nome: string; linhas: LoteImport[]; faltando: string[]; cabecalhos: string[]; resumo: ReturnType<typeof resumoLotes>; existentes: { linhas: number; importacoes: string[] } | null }
   | { fase: 'enviando'; progresso: number; total: number; texto: string }
-  | { fase: 'pronto'; texto: string; detalhes: string[] }
+  | { fase: 'pronto'; texto: string; detalhes: string[]; mensagem?: string }   // mensagem = resumo do dia para o WhatsApp (lotes)
 
 const BLOCO = 2500
 
@@ -114,7 +116,9 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
     if (!fim.ok) { setEstado({ fase: 'erro', erro: fim.erro }); return }
     const faltando = fim.dados.diasFaltando
     const diasNovos = [...new Set(envio.map(l => l.data))].sort()
-    setEstado({ fase: 'pronto', texto: `Lotes importados: ${fmtNum(inseridas)} linhas de ${dataPt(parcial.dataMin)} a ${dataPt(parcial.dataMax)}.`, detalhes: [
+    // resumo do último dia do arquivo para o grupo do WhatsApp (lotes, receita, dia anterior e mês)
+    const msg = await resumoGiroDoDia(corretora, resumo.dataMax, nome)
+    setEstado({ fase: 'pronto', mensagem: msg.ok ? msg.dados.texto : undefined, texto: `Lotes importados: ${fmtNum(inseridas)} linhas de ${dataPt(parcial.dataMin)} a ${dataPt(parcial.dataMax)}.`, detalhes: [
       `${fmtNum(parcial.operados)} lotes operados · ${fmtNum(parcial.zerados)} contratos zerados`,
       modo === 'completar'
         ? `${fmtNum(diasNovos.length)} ${diasNovos.length === 1 ? 'dia novo gravado' : 'dias novos gravados'}: ${lista(diasNovos)}`
@@ -151,9 +155,12 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
       {estado.fase === 'lendo' && <Alert tone="neutral">Lendo o arquivo…</Alert>}
       {estado.fase === 'erro' && <Alert tone="loss" title="Não importado">{estado.erro}</Alert>}
       {estado.fase === 'pronto' && (
-        <Alert tone="gain" title={estado.texto}>
-          <ul className="list-disc pl-4">{estado.detalhes.map((d, i) => <li key={i}>{d}</li>)}</ul>
-        </Alert>
+        <div className="space-y-3">
+          <Alert tone="gain" title={estado.texto}>
+            <ul className="list-disc pl-4">{estado.detalhes.map((d, i) => <li key={i}>{d}</li>)}</ul>
+          </Alert>
+          {estado.mensagem && <ResumoWhatsApp texto={estado.mensagem} />}
+        </div>
       )}
       {estado.fase === 'enviando' && (
         <div className="space-y-2" role="status" aria-live="polite">

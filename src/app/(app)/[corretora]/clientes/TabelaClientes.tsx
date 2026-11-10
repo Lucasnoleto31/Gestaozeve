@@ -1,7 +1,7 @@
 'use client'
 
 // A lista de clientes de uma corretora. Em cima, a situação em um toque (com a contagem de cada uma),
-// a busca e os dois atalhos de atenção (em risco, com alertas); os outros filtros ficam recolhidos em
+// a busca e os atalhos de atenção (em risco, com alertas, giram em outra corretora); os outros filtros ficam recolhidos em
 // "Filtros" e viram etiquetas quando estão ligados (filtro ligado nunca fica escondido). As colunas vêm
 // em visões (Giro, Atendimento, Cadastro, Todas) para a tabela caber na tela; a escolha fica guardada.
 import Link from 'next/link'
@@ -20,6 +20,7 @@ import {
   type ColunaCliente, type ColunaDaVisao, type FiltrosClientes, type VisaoClientes,
 } from '@/lib/gestao/listaClientes'
 import { linkTelefone } from '@/lib/gestao/fila'
+import { giraFora, rotuloGiroFora, textoGiroFora, type GiroFora } from '@/lib/gestao/giroFora'
 import { expandir, type Compacto } from '@/lib/compacto'
 import { mesCurto, type MesRef } from '@/lib/gestao/meses'
 import { fmtNum } from '@/lib/format'
@@ -44,7 +45,7 @@ function filtrosDe(v: ValoresFiltro): FiltrosClientes {
     busca: v.busca ?? '', status: opcaoValida(v.status, STATUS_CLIENTE), situacao: opcaoValida(v.situacao, SITUACOES_CLIENTE),
     responsavel: v.responsavel ?? '', ativacao: v.ativacao ?? '', contato: opcaoValida(v.contato, ['sim', 'nao']), assessor: v.assessor ?? '', alerta: v.alerta ?? '',
     grupo: opcaoValida(v.grupo, [...GRUPOS_CORRETAGEM, 'vazio']), risco: opcaoValida(v.risco, ['qualquer', ...RISCOS]),
-    nivel: opcaoValida(v.nivel, [...NIVEIS, 'vazio']),
+    nivel: opcaoValida(v.nivel, [...NIVEIS, 'vazio']), fora: opcaoValida(v.fora, ['sim']),
   }
 }
 
@@ -65,7 +66,7 @@ function guardarVisao(v: VisaoClientes) {
 }
 
 // ── Colunas ────────────────────────────────────────────────────────────────
-type Ctx = { base: string; mesParam?: string | null; nomeCookie: string; mesRef: MesRef }
+type Ctx = { base: string; mesParam?: string | null; nomeCookie: string; mesRef: MesRef; fora: Record<string, GiroFora> }
 type Coluna = {
   campo?: keyof ClienteLinha     // ordena por este campo ao clicar no cabeçalho
   titulo: (x: Ctx) => ReactNode
@@ -137,6 +138,13 @@ const COLUNAS: Record<ColunaCliente, Coluna> = {
   lotes_12m: { campo: 'lotes_12m', titulo: () => 'Lotes 12 m', num: true, td: (c, cls) => <td className={cn('num font-medium', cls, !c.lotes_12m && 'subtle')}>{n0(c.lotes_12m)}</td> },
   receita_12m: { campo: 'receita_12m', titulo: () => 'Receita 12 m', num: true, td: (c, cls) => <td className={cn('num', cls, !c.receita_12m && 'subtle')}>{r0(c.receita_12m)}</td> },
   ultimo_giro: { campo: 'ultimo_giro', titulo: () => 'Último giro', num: true, td: (c, cls) => <td className={cn('num', cls)}>{dataCurta(c.ultimo_giro)}</td> },
+  outra: {
+    titulo: () => 'Outra corretora', dica: 'Giro do cliente em outra corretora do escritório: lotes no mês de lá, ou o último mês com giro',
+    td: (c, cls, x) => {
+      const g = x.fora[c.cliente_id]
+      return <td className={cn('whitespace-nowrap', cls, !g ? 'subtle' : giraFora(g) ? 'font-medium' : 'muted')} title={g ? textoGiroFora(g) : undefined}>{g ? rotuloGiroFora(g) : TRACO}</td>
+    },
+  },
   alertas: {
     titulo: () => 'Alertas',
     td: (c, cls) => (
@@ -149,14 +157,18 @@ const COLUNAS: Record<ColunaCliente, Coluna> = {
   },
 }
 
+// Lista sem ninguém girando em outra corretora (referência estável, para não refazer as contas à toa)
+const SEM_GIRO_FORA: Record<string, GiroFora> = {}
+
 // A contagem ao lado de uma opção
 function Conta({ n }: { n: number }) {
   return <span className="font-normal tabular-nums text-fg-subtle">{fmtNum(n)}</span>
 }
 
-export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, filtrosSalvos, visaoInicial = 'giro', corretora, comAcoes = false, podeExcluir = false, atendentes = [] }: {
+export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, filtrosSalvos, visaoInicial = 'giro', fora = SEM_GIRO_FORA, corretora, comAcoes = false, podeExcluir = false, atendentes = [] }: {
   clientes: Compacto<ClienteLinha>; base: string; mesRef: MesRef; mesParam?: string | null; filtrosSalvos: ValoresFiltro; corretora: Corretora
   visaoInicial?: VisaoClientes   // a visão de colunas que a pessoa escolheu da última vez (cookie lido pela página)
+  fora?: Record<string, GiroFora>   // por cliente, o giro dele em outra corretora do escritório (só quem tem)
   comAcoes?: boolean; podeExcluir?: boolean
   atendentes?: string[]   // quem pode trabalhar contas na campanha de ativação (S52); com a lista vem a seleção em lote
 }) {
@@ -196,13 +208,18 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
   })])), [clientes])
   // a lista filtrada e as contagens das opções à mostra: cada contagem ignora só o próprio filtro
   // (quantos inativos há entre os clientes do responsável escolhido, por exemplo)
-  const { filtrados, porSituacao, total, emRisco, comAlertas } = useMemo(() => {
+  const { filtrados, porSituacao, total, emRisco, comAlertas, giramFora } = useMemo(() => {
     const termo = lerBusca(f.busca)
     const porSituacao = new Map<string, number>()
-    let total = 0, emRisco = 0, comAlertas = 0
+    let total = 0, emRisco = 0, comAlertas = 0, giramFora = 0
     const out: ClienteLinha[] = []
     for (const c of clientes) {
       if (termo) { const ix = indice.get(c.cliente_id); if (!ix || !casaBusca(termo, ix)) continue }
+      // gira em outra corretora no mês de lá (o atalho "Giram em outra")
+      const la = giraFora(fora[c.cliente_id])
+      const foraOk = !f.fora || la
+      if (la && passaFiltros(c, f)) giramFora++
+      if (!foraOk) continue
       if (passaFiltros(c, f, 'situacao')) { total++; porSituacao.set(c.situacao, (porSituacao.get(c.situacao) ?? 0) + 1) }
       if (c.risco && passaFiltros(c, f, 'risco')) emRisco++
       if (c.alertas.length > 0 && passaFiltros(c, f, 'alerta')) comAlertas++
@@ -219,15 +236,15 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
       else cmp = String(va).localeCompare(String(vb), 'pt-BR')
       return dir === 'asc' ? cmp : -cmp
     })
-    return { filtrados: out, porSituacao, total, emRisco, comAlertas }
-  }, [clientes, f, ordem, indice])
+    return { filtrados: out, porSituacao, total, emRisco, comAlertas, giramFora }
+  }, [clientes, f, ordem, indice, fora])
 
   const visiveis = filtrados.slice(0, limite)
   const todosVisiveis = visiveis.length > 0 && visiveis.every(c => selecionados.has(c.cliente_id))
   const marcar = (ids: string[], on: boolean) => setSelecionados(s => { const n = new Set(s); for (const id of ids) { if (on) n.add(id); else n.delete(id) } return n })
 
   const ordenar = (col: keyof ClienteLinha) => setOrdem(o => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: typeof clientes[0]?.[col] === 'number' ? 'desc' : 'asc' }))
-  const x: Ctx = { base, mesParam, nomeCookie, mesRef }
+  const x: Ctx = { base, mesParam, nomeCookie, mesRef, fora }
   const colunasVisao = COLUNAS_DA_VISAO[visao]
   // Cabeçalho de uma coluna, ordenável quando ela tem campo (função, não componente: evita remontar a cada render)
   const cabecalho = ([id, prio]: ColunaDaVisao) => {
@@ -245,8 +262,8 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
   const escolherVisao = (v: VisaoClientes) => { setVisao(v); guardarVisao(v) }
 
   const exportar = () => {
-    const cab = ['Cliente', 'Nível', 'Média de lotes 3 m', 'CPF/CNPJ', 'Conta principal', 'Contas', 'Status', 'Situação', 'Risco', 'Assessor', 'Responsável', 'Ativação', 'Último contato', 'Contatos', 'Tarifa', 'Grupo de corretagem', 'Migração', 'Entrada', 'Parceiro', `Lotes ${mesCurto(mesRef)}`, `Receita ${mesCurto(mesRef)}`, 'Lotes 12m', 'Receita 12m', 'Receita total', 'Último giro', 'Dias sem giro', 'Telefone', 'E-mail', 'Alertas']
-    const linhas = filtrados.map(c => [c.nome, c.nivel ?? '', Math.round(c.lotes_media_3m), c.documento ?? '', c.conta_principal ?? '', c.n_contas, c.status, c.situacao, c.risco ?? '', c.assessor_nome ?? '', c.responsavel ?? '', c.ativador ?? '', c.ultimo_contato ?? '', c.contatos, c.tarifa, c.grupo_corretagem ?? '', c.data_migracao ?? '', c.data_entrada ?? '', c.parceiro ?? '', c.lotes_mes, c.receita_mes, c.lotes_12m, c.receita_12m, c.receita_total, c.ultimo_giro ?? '', c.dias_sem_giro ?? '', c.telefone ?? '', c.email ?? '', c.alertas.join('; ')])
+    const cab = ['Cliente', 'Nível', 'Média de lotes 3 m', 'CPF/CNPJ', 'Conta principal', 'Contas', 'Status', 'Situação', 'Risco', 'Assessor', 'Responsável', 'Ativação', 'Último contato', 'Contatos', 'Tarifa', 'Grupo de corretagem', 'Migração', 'Entrada', 'Parceiro', `Lotes ${mesCurto(mesRef)}`, `Receita ${mesCurto(mesRef)}`, 'Lotes 12m', 'Receita 12m', 'Receita total', 'Último giro', 'Dias sem giro', 'Telefone', 'E-mail', 'Alertas', 'Outra corretora']
+    const linhas = filtrados.map(c => [c.nome, c.nivel ?? '', Math.round(c.lotes_media_3m), c.documento ?? '', c.conta_principal ?? '', c.n_contas, c.status, c.situacao, c.risco ?? '', c.assessor_nome ?? '', c.responsavel ?? '', c.ativador ?? '', c.ultimo_contato ?? '', c.contatos, c.tarifa, c.grupo_corretagem ?? '', c.data_migracao ?? '', c.data_entrada ?? '', c.parceiro ?? '', c.lotes_mes, c.receita_mes, c.lotes_12m, c.receita_12m, c.receita_total, c.ultimo_giro ?? '', c.dias_sem_giro ?? '', c.telefone ?? '', c.email ?? '', c.alertas.join('; '), fora[c.cliente_id] ? textoGiroFora(fora[c.cliente_id]) : ''])
     const csv = [cab, ...linhas].map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\r\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
@@ -285,6 +302,10 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
             title="Giravam e pararam, ou estão girando bem menos que nos 3 meses anteriores">Em risco<Conta n={emRisco} /></button>
           <button type="button" className="chip" data-active={f.alerta === 'qualquer'} aria-pressed={f.alerta === 'qualquer'} onClick={() => sel('alerta', f.alerta === 'qualquer' ? '' : 'qualquer')}
             title="Algo a completar no cadastro">Com alertas<Conta n={comAlertas} /></button>
+          {(giramFora > 0 || f.fora) && (
+            <button type="button" className="chip" data-active={f.fora === 'sim'} aria-pressed={f.fora === 'sim'} onClick={() => sel('fora', f.fora === 'sim' ? '' : 'sim')}
+              title="Giram em outra corretora do escritório no mês: quem não gira aqui já opera lá">Giram em outra<Conta n={giramFora} /></button>
+          )}
           <button type="button" className="chip" data-active={filtrosAbertos} aria-expanded={filtrosAbertos} onClick={() => setFiltrosAbertos(a => !a)}>
             <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />Filtros{etiquetas.length > 0 && <Conta n={etiquetas.length} />}
           </button>

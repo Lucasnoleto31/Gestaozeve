@@ -27,7 +27,7 @@ export default async function OportunidadesPage({ params, searchParams }: { para
   const r = o.resumo
   const descricao: Record<TipoOportunidade, string> = {
     reativar: 'Clientes que já giraram e pararam, do que mais rendia para o que menos rendia.',
-    ativar: 'Contas abertas que nunca giraram, das mais quentes para as mais frias.',
+    ativar: 'Contas abertas que nunca giraram, das mais quentes para as mais frias; quem gira em outra corretora vem primeiro.',
     abertura: 'Contas levadas para a corretora que ainda não migraram; as que já giram vêm primeiro.',
   }
 
@@ -44,9 +44,11 @@ export default async function OportunidadesPage({ params, searchParams }: { para
       </PageHeader>
       <PageBody>
         {aba === 'reativar' && (
-          <KpiRow cols={4}>
+          <KpiRow cols={5}>
             <KpiCard destaque label="Rendiam por mês" value={r.reativar.potencialMes ? rCurto(r.reativar.potencialMes) : 'R$ 0'}
               sub={`soma do que os ${fmtNum(r.reativar.contas)} inativos rendiam nos meses em que giraram`} />
+            <KpiCard label="Giram em outra corretora" value={fmtNum(r.reativar.giramFora)}
+              sub={r.reativar.giramFora ? `não estão perdidos: só não giram aqui · rendiam ${rCurto(r.reativar.potencialGiramFora)} por mês` : 'nenhum inativo girando em outra corretora'} />
             <KpiCard label={`Pararam há até ${MESES_RECENTE} meses`} value={fmtNum(r.reativar.recentes)}
               sub={`rendiam ${rCurto(r.reativar.potencialRecentes)} por mês · os mais fáceis de trazer de volta`} />
             <KpiCard label="Fora da campanha" value={fmtNum(r.reativar.foraDaCampanha)} sub="inativos sem atendente trabalhando a conta" tone={r.reativar.foraDaCampanha ? 'warn' : 'neutral'} />
@@ -54,16 +56,18 @@ export default async function OportunidadesPage({ params, searchParams }: { para
           </KpiRow>
         )}
         {aba === 'ativar' && (
-          <KpiRow cols={4}>
-            <KpiCard destaque label="Prioridade alta" value={fmtNum(r.ativar.prioridade)} sub="migraram há pouco, já operam ou declararam patrimônio alto" />
+          <KpiRow cols={5}>
+            <KpiCard destaque label="Prioridade alta" value={fmtNum(r.ativar.prioridade)} sub="giram em outra corretora, migraram há pouco, já operam ou declararam patrimônio alto" />
+            <KpiCard label="Giram em outra corretora" value={fmtNum(r.ativar.giramFora)} sub={r.ativar.giramFora ? 'já operam: falta trazer o giro para cá' : 'ninguém girando em outra corretora'} />
             <KpiCard label="Nunca giraram" value={fmtNum(r.ativar.contas)} sub={`${fmtNum(r.ativar.recentes)} migraram há até 90 dias`} />
             <KpiCard label="Já operam" value={fmtNum(r.ativar.jaOperam)} sub="disseram no formulário que já operam" />
             <KpiCard label="Fora da campanha" value={fmtNum(r.ativar.foraDaCampanha)} sub={`${fmtNum(r.ativar.contatados)} já contatados`} tone={r.ativar.foraDaCampanha ? 'warn' : 'neutral'} />
           </KpiRow>
         )}
         {aba === 'abertura' && (
-          <KpiRow cols={3}>
+          <KpiRow cols={4}>
             <KpiCard destaque label="Já giram" value={fmtNum(r.abertura.jaGiram)} sub={`${fmtNum(r.abertura.lotes12m)} lotes em 12 meses · falta só migrar a conta`} />
+            <KpiCard label="Giram em outra corretora" value={fmtNum(r.abertura.giramFora)} sub={r.abertura.giramFora ? 'operam lá enquanto a conta abre aqui' : 'ninguém girando em outra corretora'} />
             <KpiCard label="Em abertura" value={fmtNum(r.abertura.contas)} sub="contas que ainda não migraram" />
             <KpiCard label="Sem contato registrado" value={fmtNum(r.abertura.semContato)} sub="ninguém anotou conversa com o cliente" />
           </KpiRow>

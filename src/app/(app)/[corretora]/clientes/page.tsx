@@ -13,6 +13,8 @@ import { getProfile } from '@/lib/auth/getProfile'
 import { compactar } from '@/lib/compacto'
 import { CAMPOS_CLIENTE_LINHA } from '@/lib/gestao/tipos'
 import { COOKIE_VISAO_CLIENTES, visaoClientes } from '@/lib/gestao/listaClientes'
+import { giroNasOutrasCorretoras } from '@/lib/gestao/consultasGiroFora'
+import type { GiroFora } from '@/lib/gestao/giroFora'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { MesPicker } from '@/components/gestao/Filtros'
@@ -29,11 +31,14 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   // colunas à mostra: a visão que a pessoa escolheu da última vez
   const visao = visaoClientes(guardados.get(COOKIE_VISAO_CLIENTES)?.value)
   const listaPropria = temListaPropria(corretora)
-  const [lista, responsaveis, assessores, profile, contatos] = await Promise.all([
-    clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(), contatosClientesResumo(corretora),
+  const [lista, responsaveis, assessores, profile, contatos, giroFora] = await Promise.all([
+    clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(), contatosClientesResumo(corretora), giroNasOutrasCorretoras(corretora),
   ])
   // contatos registrados com cada cliente (campanha de ativação, S52): quantos e o último
   const clientes = lista.map(c => { const x = contatos.get(c.cliente_id); return x ? { ...c, contatos: x.contatos, ultimo_contato: x.ultimo_contato } : c })
+  // giro em outra corretora do escritório: só dos clientes desta lista (poucas dezenas)
+  const fora: Record<string, GiroFora> = {}
+  for (const c of clientes) { const g = giroFora.get(c.cliente_id); if (g) fora[c.cliente_id] = g }
   const admin = profile?.role === 'admin'
   const r = resumoClientes(clientes)
   const hoje = fmtDate(hojeBrasil())
@@ -74,7 +79,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
           atendentes={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)}
-          filtrosSalvos={fi} visaoInicial={visao} mesParam={ctx.mesEscolhido ? mesRef.slice(0, 7) : null}
+          filtrosSalvos={fi} visaoInicial={visao} fora={fora} mesParam={ctx.mesEscolhido ? mesRef.slice(0, 7) : null}
         />
       </PageBody>
     </>

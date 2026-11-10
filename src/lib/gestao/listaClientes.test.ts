@@ -63,6 +63,10 @@ describe('passaFiltros', () => {
     expect(passaFiltros(c(), f({ nivel: 'vazio' }))).toBe(false)
   })
 
+  it('o giro em outra corretora não é decidido aqui (a tabela confere com a leitura dela)', () => {
+    expect(passaFiltros(c(), f({ fora: 'sim' }))).toBe(true)
+  })
+
   it('pular deixa um filtro de fora (para contar as opções dele)', () => {
     const filtros = f({ situacao: 'Inativo', responsavel: 'Lucas' })
     expect(passaFiltros(c(), filtros)).toBe(false)
@@ -74,7 +78,7 @@ describe('passaFiltros', () => {
 
 describe('etiquetasDosFiltros', () => {
   it('só os filtros recolhidos viram etiqueta', () => {
-    expect(etiquetasDosFiltros(f({ busca: 'ana', situacao: 'Ativo', risco: 'qualquer', alerta: 'qualquer' }))).toEqual([])
+    expect(etiquetasDosFiltros(f({ busca: 'ana', situacao: 'Ativo', risco: 'qualquer', alerta: 'qualquer', fora: 'sim' }))).toEqual([])
   })
 
   it('cada filtro ligado traz o texto pronto', () => {
@@ -110,7 +114,7 @@ describe('visões de colunas', () => {
       expect(new Set(ids).size).toBe(ids.length)
       for (const id of ids) expect(todas.has(id)).toBe(true)
     }
-    expect(todas.size).toBe(24)
+    expect(todas.size).toBe(25)
   })
 })
 

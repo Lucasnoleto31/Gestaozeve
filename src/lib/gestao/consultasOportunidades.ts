@@ -1,8 +1,9 @@
 // Leituras da página Oportunidades (só servidor): a base parada de uma corretora — inativos, migrados
 // que nunca giraram e contas em abertura — com os contatos registrados, o patrimônio do cadastro e o que
-// o lead respondeu no formulário (já opera? onde?).
+// o lead respondeu no formulário (já opera? onde?) e o giro de cada um nas outras corretoras do escritório.
 import type { Corretora } from '@/lib/corretoras'
 import { clientesLista, contatosClientesResumo } from './consultas'
+import { giroNasOutrasCorretoras } from './consultasGiroFora'
 import { equipe, falha, num, str } from './guard'
 import { comContatos } from './fila'
 import type { ClienteBase } from './oportunidades'
@@ -12,8 +13,8 @@ const PARADOS = ['Inativo', 'Nunca girou', 'Em processamento']
 
 export async function baseDeOportunidades(corretora: Corretora): Promise<ClienteBase[]> {
   const { db } = await equipe()
-  const [lista, contatos, cad, leads] = await Promise.all([
-    clientesLista(corretora, null), contatosClientesResumo(corretora),
+  const [lista, contatos, fora, cad, leads] = await Promise.all([
+    clientesLista(corretora, null), contatosClientesResumo(corretora), giroNasOutrasCorretoras(corretora),
     db.from('clientes').select('id, patrimonio').not('patrimonio', 'is', null).range(0, 9999),
     db.from('leads').select('cliente_id, ja_opera, corretora, data_hora').not('cliente_id', 'is', null).order('data_hora', { ascending: false }).range(0, 9999),
   ])
@@ -31,5 +32,6 @@ export async function baseDeOportunidades(corretora: Corretora): Promise<Cliente
     data_migracao: c.data_migracao, data_entrada: c.data_entrada, lotes_12m: c.lotes_12m, receita_total: c.receita_total, meses_ativos: c.meses_ativos,
     meses_sem_giro: c.meses_sem_giro, ultimo_giro: c.ultimo_giro, contatos: c.contatos, ultimo_contato: c.ultimo_contato,
     patrimonio: patrimonio.get(c.cliente_id) || null, lead_ja_opera: lead.get(c.cliente_id)?.ja_opera ?? null, lead_corretora: lead.get(c.cliente_id)?.corretora ?? null,
+    fora: fora.get(c.cliente_id) ?? null,
   }))
 }

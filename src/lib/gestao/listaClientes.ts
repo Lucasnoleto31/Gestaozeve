@@ -5,8 +5,9 @@ import type { ClienteLinha } from './tipos'
 export type FiltrosClientes = {
   busca: string; status: string; situacao: string; responsavel: string; ativacao: string; contato: string
   assessor: string; alerta: string; grupo: string; risco: string; nivel: string
+  fora: string           // 'sim' = só quem gira em outra corretora do escritório (a tabela confere; não entra em passaFiltros)
 }
-export const SEM_FILTRO_CLIENTES: FiltrosClientes = { busca: '', status: '', situacao: '', responsavel: '', ativacao: '', contato: '', assessor: '', alerta: '', grupo: '', risco: '', nivel: '' }
+export const SEM_FILTRO_CLIENTES: FiltrosClientes = { busca: '', status: '', situacao: '', responsavel: '', ativacao: '', contato: '', assessor: '', alerta: '', grupo: '', risco: '', nivel: '', fora: '' }
 
 export const SITUACOES_CLIENTE = ['Ativo', 'Inativo', 'Nunca girou', 'Em processamento', 'Recusou'] as const
 export const STATUS_CLIENTE = ['Migrado', 'Em processamento', 'Recusou'] as const
@@ -19,7 +20,8 @@ export const chaveAlerta = (alerta: string) => (VARIAS_CONTAS.test(alerta) ? 'co
 
 type Filtravel = Pick<ClienteLinha, 'status' | 'situacao' | 'responsavel' | 'ativador' | 'contatos' | 'assessor_nome' | 'alertas' | 'grupo_corretagem' | 'risco' | 'nivel'>
 
-// O cliente passa nos filtros de lista (todos menos a busca por texto, que usa o índice da tabela)?
+// O cliente passa nos filtros de lista (todos menos a busca por texto, que usa o índice da tabela, e o
+// giro em outra corretora, que vem de outra leitura)?
 // `pular` deixa um filtro de fora: é como se contam as opções dele sem que ele mesmo zere a conta.
 export function passaFiltros(c: Filtravel, f: FiltrosClientes, pular?: keyof FiltrosClientes): boolean {
   const vale = (k: keyof FiltrosClientes) => k !== pular && f[k] !== ''
@@ -37,7 +39,7 @@ export function passaFiltros(c: Filtravel, f: FiltrosClientes, pular?: keyof Fil
 }
 
 // Os filtros que ficam recolhidos em "Filtros" e estão ligados, com o texto da etiqueta de cada um.
-// Situação, busca, "em risco" e "com alertas" têm controle próprio à mostra e não entram aqui.
+// Situação, busca, "em risco", "com alertas" e "giram em outra" têm controle próprio à mostra e não entram aqui.
 export function etiquetasDosFiltros(f: FiltrosClientes): { chave: keyof FiltrosClientes; texto: string }[] {
   const out: { chave: keyof FiltrosClientes; texto: string }[] = []
   if (f.status) out.push({ chave: 'status', texto: `Status: ${f.status}` })
@@ -53,11 +55,12 @@ export function etiquetasDosFiltros(f: FiltrosClientes): { chave: keyof FiltrosC
 }
 
 // ── Visões de colunas ────────────────────────────────────────────────────────
-// A tabela tem 24 colunas; cada visão mostra as de uma pergunta. Prioridade no estilo da casa:
+// A tabela tem 25 colunas; cada visão mostra as de uma pergunta. Prioridade no estilo da casa:
 // sem marca = sempre; 'p2' = a partir de 768 px; 'p3' = a partir de 1280 px.
 export type ColunaCliente =
   | 'nome' | 'nivel' | 'documento' | 'conta' | 'contas' | 'status' | 'situacao' | 'risco' | 'assessor' | 'responsavel' | 'ativador' | 'contato'
   | 'telefone' | 'tarifa' | 'grupo' | 'migracao' | 'entrada' | 'parceiro' | 'lotes_mes' | 'receita_mes' | 'lotes_12m' | 'receita_12m' | 'ultimo_giro' | 'alertas'
+  | 'outra'   // giro em outra corretora do escritório
 export type ColunaDaVisao = readonly [ColunaCliente, ('p2' | 'p3')?]
 
 export const VISOES_CLIENTES = ['giro', 'atendimento', 'cadastro', 'todas'] as const
@@ -70,13 +73,13 @@ export const visaoClientes = (v: string | null | undefined): VisaoClientes =>
 
 export const COLUNAS_DA_VISAO: Record<VisaoClientes, readonly ColunaDaVisao[]> = {
   // quanto cada cliente gira
-  giro: [['nome'], ['nivel', 'p2'], ['situacao'], ['risco', 'p2'], ['assessor', 'p3'], ['responsavel', 'p3'], ['lotes_mes'], ['receita_mes', 'p2'], ['lotes_12m'], ['receita_12m', 'p2'], ['ultimo_giro', 'p3']],
+  giro: [['nome'], ['nivel', 'p2'], ['situacao'], ['risco', 'p2'], ['outra', 'p3'], ['assessor', 'p3'], ['responsavel', 'p3'], ['lotes_mes'], ['receita_mes', 'p2'], ['lotes_12m'], ['receita_12m', 'p2'], ['ultimo_giro', 'p3']],
   // quem cuida, quem já foi chamado e como falar com o cliente
-  atendimento: [['nome'], ['situacao', 'p2'], ['risco', 'p2'], ['ativador'], ['contato'], ['telefone', 'p2'], ['responsavel', 'p2'], ['assessor', 'p3'], ['parceiro', 'p3'], ['ultimo_giro', 'p3']],
+  atendimento: [['nome'], ['situacao', 'p2'], ['risco', 'p2'], ['outra', 'p2'], ['ativador'], ['contato'], ['telefone', 'p2'], ['responsavel', 'p2'], ['assessor', 'p3'], ['parceiro', 'p3'], ['ultimo_giro', 'p3']],
   // os dados da conta
   cadastro: [['nome'], ['documento', 'p2'], ['conta'], ['contas', 'p3'], ['status'], ['tarifa', 'p2'], ['grupo', 'p2'], ['migracao', 'p2'], ['entrada', 'p3'], ['parceiro', 'p3'], ['alertas', 'p2']],
   todas: [
-    ['nome'], ['nivel', 'p2'], ['documento', 'p2'], ['conta', 'p2'], ['contas', 'p3'], ['status', 'p2'], ['situacao'], ['risco', 'p2'], ['assessor', 'p2'], ['responsavel', 'p3'],
+    ['nome'], ['nivel', 'p2'], ['documento', 'p2'], ['conta', 'p2'], ['contas', 'p3'], ['status', 'p2'], ['situacao'], ['risco', 'p2'], ['outra', 'p3'], ['assessor', 'p2'], ['responsavel', 'p3'],
     ['ativador', 'p2'], ['contato', 'p2'], ['telefone', 'p3'], ['tarifa', 'p3'], ['grupo', 'p2'], ['migracao', 'p3'], ['entrada', 'p3'], ['parceiro', 'p3'],
     ['lotes_mes'], ['receita_mes', 'p2'], ['lotes_12m'], ['receita_12m', 'p2'], ['ultimo_giro', 'p3'], ['alertas', 'p3'],
   ],

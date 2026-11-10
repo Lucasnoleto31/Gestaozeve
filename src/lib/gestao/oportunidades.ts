@@ -2,6 +2,7 @@
 // inativos para reativar (ordenados pelo que rendiam), contas migradas que nunca giraram para ativar
 // (ordenadas por sinais de que o cliente está quente) e contas ainda em abertura.
 // Só funções puras (testes em oportunidades.test.ts); quem lê o banco é consultasOportunidades.ts.
+import { giraFora, textoGiroFora, type GiroFora } from './giroFora'
 import { diasEntre } from './meses'
 
 export type ClienteBase = {
@@ -23,6 +24,7 @@ export type ClienteBase = {
   patrimonio: number | null        // declarado no cadastro
   lead_ja_opera: string | null     // resposta do formulário: "Sim, já opero", "Já operei e parei"…
   lead_corretora: string | null    // onde opera, segundo o formulário
+  fora: GiroFora | null            // giro do cliente em outra corretora do escritório (nos últimos meses)
 }
 
 export type TipoOportunidade = 'reativar' | 'ativar' | 'abertura'
@@ -45,11 +47,13 @@ export type Oportunidade = {
   patrimonio: number | null
   diasEmAbertura: number | null    // abertura: desde a data de entrada
   lotes12m: number                 // abertura: conta em abertura que já gira
+  fora: GiroFora | null            // giro em outra corretora: quem gira lá não está parado, só não gira aqui
 }
 export type ResumoOportunidades = {
-  reativar: { contas: number; potencialMes: number; recentes: number; potencialRecentes: number; foraDaCampanha: number; contatados: number }
-  ativar: { contas: number; recentes: number; jaOperam: number; prioridade: number; foraDaCampanha: number; contatados: number }
-  abertura: { contas: number; jaGiram: number; lotes12m: number; semContato: number }
+  // giramFora = giram em outra corretora no mês; nos inativos, potencialGiramFora = quanto esses rendiam aqui
+  reativar: { contas: number; potencialMes: number; recentes: number; potencialRecentes: number; foraDaCampanha: number; contatados: number; giramFora: number; potencialGiramFora: number }
+  ativar: { contas: number; recentes: number; jaOperam: number; prioridade: number; foraDaCampanha: number; contatados: number; giramFora: number }
+  abertura: { contas: number; jaGiram: number; lotes12m: number; semContato: number; giramFora: number }
 }
 
 export const PATRIMONIO_ALTO = 1_000_000
@@ -65,12 +69,19 @@ function base(c: ClienteBase, tipo: TipoOportunidade): Oportunidade {
   return {
     tipo, cliente_id: c.cliente_id, nome: c.nome, telefone: c.telefone, responsavel: c.responsavel, ativador: c.ativador, contatos: c.contatos, ultimo_contato: c.ultimo_contato,
     pontos: 0, motivos: [], mediaAtiva: 0, receitaTotal: c.receita_total, mesesSemGiro: c.meses_sem_giro, ultimoGiro: c.ultimo_giro,
-    diasMigrado: null, patrimonio: c.patrimonio, diasEmAbertura: null, lotes12m: c.lotes_12m,
+    diasMigrado: null, patrimonio: c.patrimonio, diasEmAbertura: null, lotes12m: c.lotes_12m, fora: c.fora,
   }
 }
 
-// Sinais de que a conta que nunca girou está quente: migração recente, lead que já opera e patrimônio declarado
+// Pontos de quem gira em outra corretora no mês (o sinal mais forte: já opera, falta trazer o giro) e de
+// quem girou lá nos últimos meses
+export const PONTOS_GIRA_FORA = 4
+export const PONTOS_GIROU_FORA = 2
+
+// Sinais de que a conta que nunca girou está quente: giro em outra corretora, migração recente, lead que
+// já opera e patrimônio declarado
 function sinaisDeAtivacao(c: ClienteBase, hoje: string, o: Oportunidade) {
+  if (c.fora) { o.pontos += giraFora(c.fora) ? PONTOS_GIRA_FORA : PONTOS_GIROU_FORA; o.motivos.push(textoGiroFora(c.fora)) }
   if (c.data_migracao) {
     const d = diasEntre(c.data_migracao, hoje)
     o.diasMigrado = d
@@ -104,6 +115,7 @@ export function classificar(clientes: ClienteBase[], hoje: string): { reativar: 
       const o = base(c, 'abertura')
       if (c.data_entrada) o.diasEmAbertura = diasEntre(c.data_entrada, hoje)
       if (c.lotes_12m > 0) { o.pontos = c.lotes_12m; o.motivos.push('já gira: falta migrar a conta') }
+      if (c.fora) o.motivos.push(textoGiroFora(c.fora))
       abertura.push(o)
     }
   }
@@ -111,23 +123,31 @@ export function classificar(clientes: ClienteBase[], hoje: string): { reativar: 
   const nulosNoFim = (a: number | null, b: number | null, dir: 1 | -1) => (a == null ? (b == null ? 0 : 1) : b == null ? -1 : (a - b) * dir)
   reativar.sort((a, b) => b.mediaAtiva - a.mediaAtiva || nulosNoFim(a.mesesSemGiro, b.mesesSemGiro, 1) || nome(a, b))
   ativar.sort((a, b) => b.pontos - a.pontos || nulosNoFim(a.diasMigrado, b.diasMigrado, 1) || (b.patrimonio ?? 0) - (a.patrimonio ?? 0) || nome(a, b))
-  abertura.sort((a, b) => b.lotes12m - a.lotes12m || nulosNoFim(a.diasEmAbertura, b.diasEmAbertura, -1) || nome(a, b))
+  // em abertura: quem já gira aqui, depois quem gira em outra corretora, depois quem espera há mais tempo
+  const lotesFora = (o: Oportunidade) => o.fora?.lotesMes ?? 0
+  abertura.sort((a, b) => b.lotes12m - a.lotes12m || lotesFora(b) - lotesFora(a) || nulosNoFim(a.diasEmAbertura, b.diasEmAbertura, -1) || nome(a, b))
 
   const recentes = reativar.filter(o => o.mesesSemGiro != null && o.mesesSemGiro <= MESES_RECENTE)
   const soma = (xs: Oportunidade[]) => xs.reduce((s, o) => s + o.mediaAtiva, 0)
+  const giram = (xs: Oportunidade[]) => xs.filter(o => giraFora(o.fora))
   return {
     reativar, ativar, abertura,
     resumo: {
       reativar: {
         contas: reativar.length, potencialMes: soma(reativar), recentes: recentes.length, potencialRecentes: soma(recentes),
         foraDaCampanha: reativar.filter(o => !o.ativador).length, contatados: reativar.filter(o => o.contatos > 0).length,
+        giramFora: giram(reativar).length, potencialGiramFora: soma(giram(reativar)),
       },
       ativar: {
         contas: ativar.length, recentes: ativar.filter(o => o.diasMigrado != null && o.diasMigrado <= 90).length,
         jaOperam: ativar.filter(o => o.motivos.some(m => m.startsWith('já opera'))).length, prioridade: ativar.filter(o => o.pontos >= 3).length,
         foraDaCampanha: ativar.filter(o => !o.ativador).length, contatados: ativar.filter(o => o.contatos > 0).length,
+        giramFora: giram(ativar).length,
       },
-      abertura: { contas: abertura.length, jaGiram: abertura.filter(o => o.lotes12m > 0).length, lotes12m: abertura.reduce((s, o) => s + o.lotes12m, 0), semContato: abertura.filter(o => o.contatos === 0).length },
+      abertura: {
+        contas: abertura.length, jaGiram: abertura.filter(o => o.lotes12m > 0).length, lotes12m: abertura.reduce((s, o) => s + o.lotes12m, 0),
+        semContato: abertura.filter(o => o.contatos === 0).length, giramFora: giram(abertura).length,
+      },
     },
   }
 }

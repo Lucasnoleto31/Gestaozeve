@@ -69,6 +69,7 @@ export function RegrasComissao({ parceiro, regras, admin }: { parceiro: string; 
           </div>
         </div>
       )}
+      <div className="tbl-wrap">
       <table className="tbl tbl-dense w-full">
         <thead><tr><th>Corretora</th><th>Vigência</th><th className="num col-p3">Prazo</th><th className="num col-p3">Reativação</th><th>Abertura</th><th>Ativação</th>{admin && <th><span className="sr-only">Ações</span></th>}</tr></thead>
         <tbody>
@@ -86,6 +87,7 @@ export function RegrasComissao({ parceiro, regras, admin }: { parceiro: string; 
           ))}
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }

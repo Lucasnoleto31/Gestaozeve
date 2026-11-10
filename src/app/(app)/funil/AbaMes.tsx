@@ -82,9 +82,9 @@ export async function AbaMes({ mesRef, corretoras }: { mesRef: string; corretora
               const anterior = i > 0 ? etapas[i - 1].valor : null
               return (
                 <li key={e.nome}>
-                  <div className="flex items-baseline justify-between gap-3 text-dense">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-dense">
                     <span className="font-medium">{e.nome}<span className="ml-2 text-micro font-normal text-fg-subtle">{e.nota}</span></span>
-                    <span className="whitespace-nowrap tabular-nums text-fg-muted">
+                    <span className="ml-auto text-right tabular-nums text-fg-muted">
                       <span className="font-semibold text-fg">{fmtNum(e.valor)}</span>
                       {i > 0 && t.recebidos > 0 && <> · {fmtPct(pct(e.valor, t.recebidos) ?? 0, 0)} dos que entraram</>}
                       {i > 1 && anterior != null && anterior >= e.valor && anterior > 0 && <span className="text-fg-subtle"> · {fmtPct(pct(e.valor, anterior) ?? 0, 0)} da etapa anterior</span>}
@@ -100,9 +100,9 @@ export async function AbaMes({ mesRef, corretoras }: { mesRef: string; corretora
           <ol className="space-y-3">
             {destinos.map(d => (
               <li key={d.nome}>
-                <div className="flex items-baseline justify-between gap-3 text-dense">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-dense">
                   <span className="font-medium">{d.nome}<span className="ml-2 text-micro font-normal text-fg-subtle">{d.nota}</span></span>
-                  <span className="whitespace-nowrap tabular-nums text-fg-muted">
+                  <span className="ml-auto whitespace-nowrap text-right tabular-nums text-fg-muted">
                     <span className={cn('font-semibold', d.tom === 'loss' && d.valor ? 'text-loss' : d.tom === 'gain' && d.valor ? 'text-gain' : 'text-fg')}>{fmtNum(d.valor)}</span>
                     {t.recebidos > 0 && <> · {fmtPct(pct(d.valor, t.recebidos) ?? 0, 0)}</>}
                   </span>
@@ -127,13 +127,13 @@ export async function AbaMes({ mesRef, corretoras }: { mesRef: string; corretora
               {grupos.length > 1 && (
                 <tr>
                   <th></th>
-                  {grupos.map(g => <th key={g.chave} colSpan={3} className="text-center">{g.label}</th>)}
+                  {grupos.map(g => <th key={g.chave} colSpan={3} className={cn('text-center', g.chave !== 'total' && 'col-p2')}>{g.label}</th>)}
                   <th className="col-p3"></th>
                 </tr>
               )}
               <tr>
                 <th>Tipo</th>
-                {grupos.map(g => <Fragment key={g.chave}><th className="num">Contas</th><th className="num col-p2">Lotes</th><th className="num">Receita</th></Fragment>)}
+                {grupos.map(g => { const so = g.chave !== 'total' && 'col-p2'; return <Fragment key={g.chave}><th className={cn('num', so)}>Contas</th><th className="num col-p2">Lotes</th><th className={cn('num', so)}>Receita</th></Fragment> })}
                 <th className="num col-p3">% da receita</th>
               </tr>
             </thead>
@@ -141,11 +141,11 @@ export async function AbaMes({ mesRef, corretoras }: { mesRef: string; corretora
               {tipos.map(tp => (
                 <tr key={tp.chave}>
                   <td className="whitespace-nowrap font-medium">{tp.nome}<span className="ml-2 text-micro font-normal text-fg-subtle">{tp.nota}</span></td>
-                  {grupos.map(g => { const v = tp.de(g.r); return (
+                  {grupos.map(g => { const v = tp.de(g.r); const so = g.chave !== 'total' && 'col-p2'; return (
                     <Fragment key={g.chave}>
-                      <td className={cn('num', !v.contas && 'subtle')}>{n0(v.contas)}</td>
+                      <td className={cn('num', so, !v.contas && 'subtle')}>{n0(v.contas)}</td>
                       <td className={cn('num col-p2', !v.lotes && 'subtle')}>{n0(v.lotes)}</td>
-                      <td className={cn('num', g.chave === 'total' && 'font-semibold', !v.receita && 'subtle')}>{r0(v.receita)}</td>
+                      <td className={cn('num', so, g.chave === 'total' && 'font-semibold', !v.receita && 'subtle')}>{r0(v.receita)}</td>
                     </Fragment>
                   ) })}
                   <td className={cn('num col-p3', !tp.de(r).receita && 'subtle')}>{r.receita_total ? fmtPct(pct(tp.de(r).receita, r.receita_total) ?? 0, 0) : TRACO}</td>
@@ -155,7 +155,7 @@ export async function AbaMes({ mesRef, corretoras }: { mesRef: string; corretora
             <tfoot>
               <tr className="total">
                 <td>Receita do mês</td>
-                {grupos.map(g => <Fragment key={g.chave}><td className="num">{n0(operaram(g.r))}</td><td className="num col-p2">{n0(g.r.lotes_total)}</td><td className="num">{r0(g.r.receita_total)}</td></Fragment>)}
+                {grupos.map(g => { const so = g.chave !== 'total' && 'col-p2'; return <Fragment key={g.chave}><td className={cn('num', so)}>{n0(operaram(g.r))}</td><td className="num col-p2">{n0(g.r.lotes_total)}</td><td className={cn('num', so)}>{r0(g.r.receita_total)}</td></Fragment> })}
                 <td className="num col-p3">{r.receita_total ? '100%' : TRACO}</td>
               </tr>
             </tfoot>

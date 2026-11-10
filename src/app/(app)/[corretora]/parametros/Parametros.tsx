@@ -267,6 +267,7 @@ function SecaoStatusConta({ corretora, mapa, naoMapeadas }: { corretora: Correto
           <div className="mt-2 flex flex-wrap gap-1.5">{naoMapeadas.map(s => <button key={s.situacao} type="button" className="chip" onClick={() => setSit(s.situacao)}>{s.situacao} <span className="text-fg-subtle">({fmtNum(s.contas)})</span></button>)}</div>
         </Alert>
       )}
+      <div className="tbl-wrap">
       <table className="tbl tbl-dense w-full">
         <thead><tr><th>Situação (export)</th><th>Status</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
@@ -288,6 +289,7 @@ function SecaoStatusConta({ corretora, mapa, naoMapeadas }: { corretora: Correto
           </tr>
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }
@@ -300,6 +302,7 @@ function SecaoMultiplicadores({ corretora, itens }: { corretora: Corretora; iten
   return (
     <Panel variant="card" title="Multiplicadores do incentivo" subtitle="Pontos por lote operado, pelas 3 primeiras letras do ativo (WINV26 → WIN).">
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
+      <div className="tbl-wrap">
       <table className="tbl tbl-dense w-full">
         <thead><tr><th>Produto</th><th className="num">Pontos por lote</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
@@ -317,6 +320,7 @@ function SecaoMultiplicadores({ corretora, itens }: { corretora: Corretora; iten
           </tr>
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }
@@ -329,6 +333,7 @@ function SecaoFaixas({ corretora, itens }: { corretora: Corretora; itens: Dados[
   return (
     <Panel variant="card" title="Faixas do incentivo" subtitle="O cliente entra na maior faixa cujo mínimo ultrapassou. Pago uma vez por cliente por mês.">
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
+      <div className="tbl-wrap">
       <table className="tbl tbl-dense w-full">
         <thead><tr><th>Mais de (pontos)</th><th className="num">Incentivo</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
@@ -346,6 +351,7 @@ function SecaoFaixas({ corretora, itens }: { corretora: Corretora; itens: Dados[
           </tr>
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }
@@ -382,6 +388,7 @@ function SecaoStatusLead({ itens }: { itens: Dados['statusLead'] }) {
   return (
     <Panel variant="card" title="Status de lead" subtitle="Aberto conta como em andamento; Fechado sai do funil (Ganho / Perdido). Vale para todas.">
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
+      <div className="tbl-wrap">
       <table className="tbl tbl-dense w-full">
         <thead><tr><th>Status</th><th>Tipo</th><th className="num">Ordem</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
@@ -401,6 +408,7 @@ function SecaoStatusLead({ itens }: { itens: Dados['statusLead'] }) {
           </tr>
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }
@@ -412,6 +420,7 @@ function SecaoResponsaveis({ itens }: { itens: Dados['responsaveis'] }) {
   return (
     <Panel variant="card" title="Responsáveis" subtitle="Quem atende clientes (herdado via assessor), quem trabalha leads e quem é comissionado por abertura e ativação de conta (tela Comissões). Vale para todas.">
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
+      <div className="tbl-wrap">
       <table className="tbl tbl-dense w-full">
         <thead><tr><th>Nome</th><th>Clientes</th><th>Leads</th><th>Comissão</th><th>Ativo</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
@@ -431,6 +440,7 @@ function SecaoResponsaveis({ itens }: { itens: Dados['responsaveis'] }) {
           </tr>
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }

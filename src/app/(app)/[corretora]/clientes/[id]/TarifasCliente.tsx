@@ -60,6 +60,7 @@ export function TarifasCliente({ corretora, clienteId, tarifas, admin, tarifaAtu
           </div>
         </div>
       )}
+      <div className="tbl-wrap">
       <table className="tbl tbl-dense w-full">
         <thead><tr><th>Vigência</th><th className="num">R$/lote</th><th>Observação</th>{admin && <th><span className="sr-only">Ações</span></th>}</tr></thead>
         <tbody>
@@ -74,6 +75,7 @@ export function TarifasCliente({ corretora, clienteId, tarifas, admin, tarifaAtu
           ))}
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }

@@ -101,6 +101,7 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
             <p className="label mb-1">Multiplicadores</p>
             <p className="mb-4 text-dense text-fg-muted">{mult || 'nenhum cadastrado'}</p>
             <p className="label mb-1">Faixas (pontos acima do mínimo)</p>
+            <div className="tbl-wrap">
             <table className="tbl tbl-dense w-full">
               <thead><tr><th>Faixa</th><th className="num">Incentivo</th><th className="num">Clientes</th></tr></thead>
               <tbody>
@@ -110,6 +111,7 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
                 {par.faixas.length === 0 && <LinhaVazia colunas={3}>Sem faixas cadastradas.</LinhaVazia>}
               </tbody>
             </table>
+            </div>
             {par.consolidados.length > 0 && <p className="mt-3 text-label text-fg-muted">Consolidados (somam pelo nome): {par.consolidados.map(c => c.nome).join(', ')}</p>}
             {proximo && <p className="mt-3 text-label text-fg-muted">Mais perto de subir de faixa: <span className="text-fg">{proximo.nome}</span> · faltam {fmtNum(proximo.pontos_faltantes ?? 0)} pontos para {fmtNum(proximo.proxima_faixa ?? 0)}</p>}
           </Panel>

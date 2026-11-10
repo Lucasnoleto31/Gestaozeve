@@ -111,8 +111,8 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
 
   const ordenar = (col: keyof ClienteLinha) => setOrdem(o => (o.col === col ? { col, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: typeof clientes[0]?.[col] === 'number' ? 'desc' : 'asc' }))
   // Cabeçalho ordenável (função, não componente: evita remontar a cada render)
-  const th = (col: keyof ClienteLinha, titulo: React.ReactNode, opts: { num?: boolean; prio?: 'p2' | 'p3' } = {}) => (
-    <th key={String(col)} className={cn(opts.num && 'num', opts.prio && `col-${opts.prio}`, 'cursor-pointer select-none hover:text-fg')} onClick={() => ordenar(col)} aria-sort={ordem.col === col ? (ordem.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+  const th = (col: keyof ClienteLinha, titulo: React.ReactNode, opts: { num?: boolean; prio?: 'p2' | 'p3'; nome?: boolean } = {}) => (
+    <th key={String(col)} className={cn(opts.num && 'num', opts.prio && `col-${opts.prio}`, opts.nome && 'col-nome', 'cursor-pointer select-none hover:text-fg')} onClick={() => ordenar(col)} aria-sort={ordem.col === col ? (ordem.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
       <span className="inline-flex items-center gap-1">{titulo}{ordem.col === col && (ordem.dir === 'asc' ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />)}</span>
     </th>
   )
@@ -203,12 +203,12 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
           <thead>
             <tr>
               {comAcoes && (
-                <th className="w-8">
+                <th className="col-p2 w-8">
                   <input type="checkbox" checked={todosVisiveis} disabled={visiveis.length === 0} onChange={e => marcar(visiveis.map(c => c.cliente_id), e.target.checked)}
                     aria-label={todosVisiveis ? 'Desmarcar as linhas à mostra' : 'Marcar as linhas à mostra'} title="Marcar as linhas à mostra para atribuir à campanha" />
                 </th>
               )}
-              {th('nome', 'Cliente')}
+              {th('nome', 'Cliente', { nome: true })}
               {th('lotes_media_3m', 'Nível', { prio: 'p2' })}
               {th('documento', 'CPF/CNPJ', { prio: 'p2' })}
               {th('conta_principal', 'Conta', { prio: 'p2' })}
@@ -239,11 +239,11 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
             {visiveis.map(c => (
               <tr key={c.cliente_id} data-linha={c.cliente_id} className={cn(selecionados.has(c.cliente_id) && 'bg-accent-soft')}>
                 {comAcoes && (
-                  <td>
+                  <td className="col-p2">
                     <input type="checkbox" checked={selecionados.has(c.cliente_id)} onChange={e => marcar([c.cliente_id], e.target.checked)} aria-label={`Marcar ${c.nome}`} />
                   </td>
                 )}
-                <td className="max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}${mesParam ? `?mes=${mesParam}` : ''}`} onClick={() => lembrarAberto(nomeCookie, c.cliente_id)} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link></td>
+                <td className="col-nome max-w-[240px] truncate"><Link href={`${base}/clientes/${c.cliente_id}${mesParam ? `?mes=${mesParam}` : ''}`} onClick={() => lembrarAberto(nomeCookie, c.cliente_id)} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link></td>
                 <td className="col-p2"><NivelMarca nivel={c.nivel} media={c.lotes_media_3m} mostrarMedia /></td>
                 <td className="num muted col-p2">{c.documento ?? TRACO}</td>
                 <td className="num col-p2">{c.conta_principal ?? TRACO}</td>

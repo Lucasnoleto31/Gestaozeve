@@ -17,23 +17,24 @@ export function Panel({ title, subtitle, action, icon: Icon, variant = 'section'
 }) {
   const temHeader = !!(title || action)
   const header = temHeader && (
-    <header className={cn('flex items-start justify-between gap-3', variant === 'card' ? (flush ? 'border-b border-line px-5 py-4' : 'px-5 pb-3 pt-5') : 'mb-3')}>
-      <div className="flex min-w-0 items-start gap-2.5">
+    // no celular a ação (botões, seletor) desce para a linha de baixo em vez de empurrar a página
+    <header className={cn('flex flex-wrap items-start justify-between gap-x-3 gap-y-2', variant === 'card' ? (flush ? 'border-b border-line px-5 py-4' : 'px-5 pb-3 pt-5') : 'mb-3')}>
+      <div className="flex min-w-0 flex-1 basis-56 items-start gap-2.5">
         {Icon && <Icon className="mt-1 h-4 w-4 shrink-0 text-fg-muted" aria-hidden />}
         <div className="min-w-0">
           {title && <h2 className="text-section font-semibold text-fg">{title}</h2>}
           {subtitle && <p className="mt-0.5 text-dense text-fg-muted">{subtitle}</p>}
         </div>
       </div>
-      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+      {action && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{action}</div>}
     </header>
   )
 
   if (variant === 'card') {
     return (
-      <section className={cn('panel', flush && 'overflow-hidden', className)}>
+      <section className={cn('panel min-w-0', flush && 'overflow-hidden', className)}>
         {header}
-        <div className={cn(!flush && 'px-5 pb-5', !flush && !temHeader && 'pt-5', bodyClassName)}>{children}</div>
+        <div className={cn('min-w-0', !flush && 'px-5 pb-5', !flush && !temHeader && 'pt-5', bodyClassName)}>{children}</div>
       </section>
     )
   }

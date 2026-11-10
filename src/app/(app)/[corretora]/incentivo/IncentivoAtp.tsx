@@ -144,7 +144,7 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
             <thead>
               <tr>
                 <th className="num">#</th><th>Prazo</th><th className="num">Comissão acumulada</th><th className="num">Prêmio</th>
-                <th className="num">Progresso</th><th>Status</th><th>Previsão no ritmo atual</th><th className="col-p2">Observação</th>
+                <th className="num col-p2">Progresso</th><th>Status</th><th>Previsão<span className="hidden md:inline"> no ritmo atual</span></th><th className="col-p2">Observação</th>
               </tr>
             </thead>
             <tbody>
@@ -156,14 +156,14 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
                 return (
                   <tr key={m.indice} className={cn(m.status === 'vencida' && 'text-fg-muted')}>
                     <td className="num">{m.indice}</td>
-                    <td><span className="tabular-nums">{fmtNum(m.prazoMeses)} meses</span><span className="ml-1.5 text-micro text-fg-subtle">até {dataPt(m.prazoFim)}</span></td>
+                    <td className="whitespace-nowrap"><span className="tabular-nums">{fmtNum(m.prazoMeses)} meses</span><span className="ml-1.5 hidden text-micro text-fg-subtle md:inline">até {dataPt(m.prazoFim)}</span></td>
                     <td className="num">{r0(m.comissao)}</td>
                     <td className="num font-semibold">{r0(m.premio)}</td>
-                    <td className="num"><BarraCelula valor={Math.min(m.acumulado, m.comissao)} max={m.comissao} tom={m.status === 'atingida' ? 'gain' : m.status === 'vencida' ? 'neutral' : 'accent'} fmt={() => fmtPct(pct, 0)} largura={80} /></td>
+                    <td className="num col-p2"><BarraCelula valor={Math.min(m.acumulado, m.comissao)} max={m.comissao} tom={m.status === 'atingida' ? 'gain' : m.status === 'vencida' ? 'neutral' : 'accent'} fmt={() => fmtPct(pct, 0)} largura={80} /></td>
                     <td>
                       <span className="inline-flex flex-wrap items-center gap-2">
                         <Badge variant={st.variant}>{st.texto}</Badge>
-                        <span className="text-micro text-fg-muted">
+                        <span className="hidden text-micro text-fg-muted md:inline">
                           {m.status === 'atingida' && m.atingidaEm ? `em ${mesCurto(m.atingidaEm)}` : m.status === 'em andamento' ? `faltam ${rCurto(m.faltam)} · precisa de ${rCurto(m.ritmoMensal)}/mês` : `fechou em ${rCurto(m.acumulado)}`}
                         </span>
                       </span>
@@ -176,11 +176,11 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
                       ) : !p?.dataPrevista ? (
                         <span className="text-loss">não atinge sem receita</span>
                       ) : (p.mesesParaAtingir ?? 0) > 120 ? (
-                        <span className="text-loss">mais de 10 anos<span className="ml-1.5 text-micro font-normal text-fg-muted">no ritmo escolhido</span></span>
+                        <span className="whitespace-nowrap text-loss">mais de 10 anos<span className="ml-1.5 hidden text-micro font-normal text-fg-muted md:inline">no ritmo escolhido</span></span>
                       ) : (
-                        <span className={cn('font-semibold', p.alcanca ? 'text-gain' : 'text-loss')}>
+                        <span className={cn('whitespace-nowrap font-semibold', p.alcanca ? 'text-gain' : 'text-loss')}>
                           {mesCurto(`${p.dataPrevista.slice(0, 7)}-01`)}
-                          <span className="ml-1.5 text-micro font-normal text-fg-muted">em {mesesTxt(Math.ceil(p.mesesParaAtingir ?? 0))} · {folgaTxt(p.folgaMeses)}</span>
+                          <span className="ml-1.5 hidden text-micro font-normal text-fg-muted md:inline">em {mesesTxt(Math.ceil(p.mesesParaAtingir ?? 0))} · {folgaTxt(p.folgaMeses)}</span>
                         </span>
                       )}
                     </td>

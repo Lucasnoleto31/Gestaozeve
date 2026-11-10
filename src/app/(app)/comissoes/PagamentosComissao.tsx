@@ -62,6 +62,7 @@ export function PagamentosComissao({ parceiro, pagamentos, admin }: { parceiro: 
           </div>
         </div>
       )}
+      <div className="tbl-wrap">
       <table className="tbl tbl-dense w-full">
         <thead><tr><th>Mês</th><th className="col-p2">Corretora</th><th className="num">Valor</th><th>Pago em</th><th className="col-p3">Observação</th>{admin && <th><span className="sr-only">Ações</span></th>}</tr></thead>
         <tbody>
@@ -78,6 +79,7 @@ export function PagamentosComissao({ parceiro, pagamentos, admin }: { parceiro: 
           ))}
         </tbody>
       </table>
+      </div>
     </Panel>
   )
 }

@@ -484,18 +484,28 @@ select.field-sm {
     background: var(--surface);
   }
 
-  /* Controle segmentado (período, ordenação, tema) */
+  /* Item de grade pode encolher abaixo do conteúdo. Sem isto, uma tabela ou um seletor largo dentro de
+     uma grade de uma coluna (celular) alarga a página inteira; a rolagem fica dentro do .tbl-wrap. */
+  :where(.grid) > * {
+    min-width: 0;
+  }
+
+  /* Controle segmentado (período, ordenação, tema). Quando não cabe (celular), rola dentro dele mesmo. */
   .seg {
     display: inline-flex;
     align-items: center;
     gap: 2px;
+    max-width: 100%;
+    overflow-x: auto;
     padding: 2px;
     border-radius: var(--radius-md);
     background: var(--surface);
+    scrollbar-width: none;
   }
 
   .seg > button {
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     gap: 6px;
     min-height: 30px;
@@ -731,6 +741,49 @@ html {
   .tbl-dense th {
     padding-top: 0.6rem;
     padding-bottom: 0.6rem;
+  }
+}
+
+/* Celular (abaixo de 768 px): tabela larga rola dentro da moldura com a primeira coluna (o nome, o mês)
+   presa à esquerda, para os números rolarem sem perder de quem são. Colunas de seleção (checkbox) e
+   células que atravessam a linha (vazio, total, formulário) ficam como estão; em tabela que começa pela
+   caixa de seleção, a coluna do nome leva a classe col-nome (e a caixa, col-p2: some no celular). */
+@media (max-width: 767.98px) {
+  .tbl-wrap .tbl th:first-child:not(:has(input)),
+  .tbl-wrap .tbl td:first-child:not([colspan]):not(:has(input[type="checkbox"])),
+  .tbl-wrap .tbl th.col-nome,
+  .tbl-wrap .tbl td.col-nome {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    max-width: 46vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: var(--bg);
+    border-right: 1px solid var(--line);
+  }
+
+  .tbl-wrap .tbl th:first-child:not(:has(input)),
+  .tbl-wrap .tbl th.col-nome {
+    z-index: 3;
+  }
+
+  /* dentro de card a tabela está sobre a superfície do card */
+  .panel .tbl-wrap .tbl td:first-child:not([colspan]):not(:has(input[type="checkbox"])),
+  .panel .tbl-wrap .tbl td.col-nome {
+    background: var(--surface);
+  }
+
+  .tbl-wrap .tbl tbody tr:hover td:first-child:not([colspan]),
+  .tbl-wrap .tbl tr.total td:first-child:not([colspan]),
+  .tbl-wrap .tbl tbody tr:hover td.col-nome {
+    background: var(--surface);
+  }
+
+  /* abas e seletores que rolam de lado: sem barra de rolagem aparente */
+  nav[aria-label] {
+    scrollbar-width: none;
   }
 }
 

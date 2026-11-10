@@ -11,9 +11,11 @@ import { Input } from '@/components/ui/Input'
 import { Panel } from '@/components/ui/Panel'
 import { useToast } from '@/components/ui/Toast'
 import { TRACO, dataCurta } from '@/components/gestao/Celulas'
-import { excluirContatoCliente, listarContatosCliente, registrarContatoCliente } from '@/lib/gestao/acoes'
+import { excluirContatoCliente, listarContatosCliente } from '@/lib/gestao/acoes'
+import { registrarContato } from '@/lib/gestao/acoesFila'
 import type { Corretora } from '@/lib/corretoras'
 import type { ClienteContato } from '@/lib/gestao/tipos'
+import { somarDias } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum } from '@/lib/format'
 
@@ -30,6 +32,7 @@ export function ContatosCliente({ corretora, clienteId, nome, ativador, contatos
   const [lista, setLista] = useState<ClienteContato[]>(contatos)
   const [data, setData] = useState(hoje)
   const [nota, setNota] = useState('')
+  const [proximo, setProximo] = useState('')   // retorno combinado (S59); vazio = nenhum
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -41,11 +44,11 @@ export function ContatosCliente({ corretora, clienteId, nome, ativador, contatos
   }
   const registrar = async () => {
     setSalvando(true); setErro(null)
-    const r = await registrarContatoCliente(corretora, clienteId, data, nota)
+    const r = await registrarContato({ tipo: 'cliente', id: clienteId, corretora }, { data, nota, proximo: proximo || null })
     setSalvando(false)
     if (!r.ok) { setErro(r.erro); return }
-    avisar({ titulo: `Contato registrado · ${nome}`, detalhe: `${fmtNum(r.dados.contatos)}º contato com este cliente.`, tom: 'gain' })
-    setNota(''); setData(hoje)
+    avisar({ titulo: `Contato registrado · ${nome}`, detalhe: `${fmtNum(r.dados.contatos)}º contato com este cliente.${r.dados.proximo ? ` Retorno marcado para ${dataCurta(r.dados.proximo)}.` : ''}`, tom: 'gain' })
+    setNota(''); setData(hoje); setProximo('')
     await carregar()
     router.refresh()
   }
@@ -67,6 +70,7 @@ export function ContatosCliente({ corretora, clienteId, nome, ativador, contatos
           <Input label="Nota" value={nota} onChange={e => setNota(e.target.value)} placeholder="Ligou, mandou WhatsApp, pediu retorno…"
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void registrar() } }} />
         </div>
+        <div className="w-40"><Input label="Próximo contato" type="date" value={proximo} min={somarDias(data || hoje, 1)} onChange={e => setProximo(e.target.value)} title="Retorno combinado: entra na Minha fila no dia" /></div>
         <Button variant="secondary" onClick={registrar} loading={salvando}><PhoneCall className="h-4 w-4" aria-hidden />Registrar contato</Button>
       </div>
       <ul className="mt-3 divide-y divide-line text-dense">

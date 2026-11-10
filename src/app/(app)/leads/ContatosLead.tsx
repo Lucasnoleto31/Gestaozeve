@@ -9,8 +9,10 @@ import { Button, IconButton } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { TRACO, dataCurta } from '@/components/gestao/Celulas'
-import { excluirContatoLead, listarContatosLead, registrarContatoLead } from '@/lib/gestao/acoes'
+import { excluirContatoLead, listarContatosLead } from '@/lib/gestao/acoes'
+import { registrarContato } from '@/lib/gestao/acoesFila'
 import type { LeadContato } from '@/lib/gestao/tipos'
+import { somarDias } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum } from '@/lib/format'
 
@@ -28,6 +30,7 @@ export function ContatosLead({ leadId, nome, status, aberto, onRegistrado, onExc
   const [lista, setLista] = useState<LeadContato[] | null>(null)
   const [data, setData] = useState(hoje)
   const [nota, setNota] = useState('')
+  const [proximo, setProximo] = useState('')   // retorno combinado (S59); vazio = nenhum
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -52,12 +55,12 @@ export function ContatosLead({ leadId, nome, status, aberto, onRegistrado, onExc
   const registrar = async () => {
     setSalvando(true); setErro(null)
     const novoStatus = aberto && status === 'Novo' ? 'Em contato' : undefined
-    const r = await registrarContatoLead(leadId, novoStatus, data, nota)
+    const r = await registrarContato({ tipo: 'lead', id: leadId }, { data, nota, proximo: proximo || null, status: novoStatus })
     setSalvando(false)
     if (!r.ok) { setErro(r.erro); return }
-    avisar({ titulo: `Contato registrado · ${nome}`, detalhe: r.dados.contatos != null ? `${fmtNum(r.dados.contatos)}º contato com este lead.` : undefined, tom: 'gain' })
+    avisar({ titulo: `Contato registrado · ${nome}`, detalhe: `${fmtNum(r.dados.contatos)}º contato com este lead.${r.dados.proximo ? ` Retorno marcado para ${dataCurta(r.dados.proximo)}.` : ''}`, tom: 'gain' })
     onRegistrado?.(data, novoStatus)
-    setNota(''); setData(hoje)
+    setNota(''); setData(hoje); setProximo('')
     await carregar()
     router.refresh()
   }
@@ -83,6 +86,7 @@ export function ContatosLead({ leadId, nome, status, aberto, onRegistrado, onExc
           <Input label="Nota" value={nota} onChange={e => setNota(e.target.value)} placeholder="Ligou, mandou WhatsApp, pediu retorno…"
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void registrar() } }} />
         </div>
+        <div className="w-40"><Input label="Próximo contato" type="date" value={proximo} min={somarDias(data || hoje, 1)} onChange={e => setProximo(e.target.value)} title="Retorno combinado: entra na Minha fila no dia" /></div>
         <Button variant="secondary" onClick={registrar} loading={salvando}><PhoneCall className="h-4 w-4" aria-hidden />Registrar contato</Button>
       </div>
       <ul className="mt-3 divide-y divide-line text-dense">

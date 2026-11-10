@@ -5,7 +5,7 @@
 // iPhone fica no CSS (.bottom-nav); o conteúdo ganha o respiro em .com-barra-inferior.
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Filter, Home, LayoutDashboard, Menu, Users } from 'lucide-react'
+import { Filter, Home, LayoutDashboard, ListChecks, Menu, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
@@ -29,9 +29,10 @@ export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadr
         { label: 'Painel', href: `/${slug}/painel`, icon: LayoutDashboard },
         { label: 'Clientes', href: `/${slug}/clientes`, icon: Users },
         { label: 'Leads', href: '/leads', icon: Filter },
+        { label: 'Fila', href: '/fila', icon: ListChecks },
       ]
     : role === 'atendente'
-      ? [{ label: 'Meus leads', href: '/leads', icon: Filter }]
+      ? [{ label: 'Fila', href: '/fila', icon: ListChecks }, { label: 'Meus leads', href: '/leads', icon: Filter }]
       : [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }]
 
   return (

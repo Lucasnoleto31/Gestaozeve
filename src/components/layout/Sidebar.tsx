@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
 import {
   BarChart3, ChevronRight, Coins, Filter, Gift, Home, KeyRound, LayoutDashboard, LineChart, ListChecks, SlidersHorizontal, Target, Upload, Users, UserSearch, Wallet, X,
@@ -10,7 +10,8 @@ import { cn } from '@/lib/utils'
 import { Marca } from '@/components/ui/Marca'
 import type { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
-import { CORRETORA_COLOR, CORRETORA_LABEL, CORRETORA_SLUG, corretoraDoSlug, termosDaCorretora, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_COLOR, CORRETORA_LABEL, CORRETORA_SLUG, termosDaCorretora, type Corretora } from '@/lib/corretoras'
+import { seletorCorretora } from './seletorCorretora'
 
 type NavItem = { label: string; href: string; icon: React.ElementType; exact?: boolean }
 type NavSection = { label: string; roles: Role[]; items: NavItem[] }
@@ -52,18 +53,18 @@ const ROLE_LABELS: Record<Role, string> = {
 
 export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Role; nome: string; corretoraPadrao: Corretora; corretoras: Corretora[] }) {
   const pathname = usePathname()
+  const busca = useSearchParams().toString()
   const { isOpen, close } = useSidebar()
 
-  // Fecha o menu ao navegar (mobile)
-  useEffect(() => { close() }, [pathname, close])
+  // Fecha o menu ao navegar (mobile), também quando só o filtro do endereço muda
+  useEffect(() => { close() }, [pathname, busca, close])
 
-  const segmentos = pathname.split('/').filter(Boolean)
-  const naRota = corretoraDoSlug(segmentos[0])
-  const corretora = naRota ?? corretoraPadrao
+  // Seletor de corretora: numa página de corretora troca a corretora e fica na mesma página (ou vai para o
+  // painel); em Comissões é o filtro da tela, com a opção "Todas"
+  const sel = seletorCorretora(pathname, busca, corretoraPadrao, id => PAGINAS.some(p => p.id === id))
+  const corretora = sel.atual
   const slug = CORRETORA_SLUG[corretora]
   const termos = termosDaCorretora(corretora)
-  // Ao trocar de corretora, fica na mesma página (ou vai pro painel)
-  const paginaAtual = naRota && segmentos[1] && PAGINAS.some(p => p.id === segmentos[1]) ? segmentos[1] : 'painel'
 
   const sections: NavSection[] = [
     { label: 'Visão geral', roles: TODOS, items: [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }] },
@@ -128,15 +129,21 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
         {paginas.length > 0 && (
           <div>
             <Secao label="Corretora" />
-            <div className="mb-2 flex rounded-md bg-surface-3 p-0.5" role="tablist" aria-label="Corretora">
+            <div className="mb-2 flex rounded-md bg-surface-3 p-0.5" role="tablist" aria-label={sel.filtro ? 'Corretora: filtro desta tela' : 'Corretora'}>
+              {sel.filtro && (
+                <Link role="tab" aria-selected={sel.marcada == null} href={sel.href(null)}
+                  className={cn('flex min-h-[30px] flex-1 items-center justify-center rounded-sm text-label font-medium', sel.marcada == null ? 'bg-surface text-fg font-semibold' : 'text-fg-muted hover:text-fg')}>
+                  Todas
+                </Link>
+              )}
               {corretoras.map(c => {
-                const ativa = c === corretora
+                const ativa = c === sel.marcada
                 return (
                   <Link
                     key={c}
                     role="tab"
                     aria-selected={ativa}
-                    href={`/${CORRETORA_SLUG[c]}/${paginaAtual}`}
+                    href={sel.href(c)}
                     className={cn(
                       'flex min-h-[30px] flex-1 items-center justify-center gap-1.5 rounded-sm text-label font-medium',
                       ativa ? 'bg-surface text-fg font-semibold' : 'text-fg-muted hover:text-fg',

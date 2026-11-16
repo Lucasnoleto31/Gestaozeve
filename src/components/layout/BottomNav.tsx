@@ -4,13 +4,14 @@
 // de todo dia e o botão Menu, que abre a gaveta completa. A posição acima do indicador do
 // iPhone fica no CSS (.bottom-nav); o conteúdo ganha o respiro em .com-barra-inferior.
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { Filter, Home, LayoutDashboard, ListChecks, Menu, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
-import { CORRETORA_SLUG, corretoraDoSlug, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_SLUG, type Corretora } from '@/lib/corretoras'
 import { isActivePath } from './Sidebar'
+import { seletorCorretora } from './seletorCorretora'
 
 type Item = { label: string; href: string; icon: React.ElementType; exact?: boolean }
 
@@ -18,9 +19,10 @@ const ITEM = 'flex h-[52px] w-full flex-col items-center justify-center gap-0.5 
 
 export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadrao: Corretora }) {
   const pathname = usePathname()
+  const busca = useSearchParams().toString()
   const { toggle, isOpen } = useSidebar()
-  const seg = pathname.split('/').filter(Boolean)
-  const corretora = corretoraDoSlug(seg[0]) ?? corretoraPadrao
+  // a corretora dos atalhos: a da rota, a filtrada em Comissões ou a última aberta
+  const corretora = seletorCorretora(pathname, busca, corretoraPadrao, () => false).atual
   const slug = CORRETORA_SLUG[corretora]
   const equipe = role === 'admin' || role === 'vendedor'
   const itens: Item[] = equipe

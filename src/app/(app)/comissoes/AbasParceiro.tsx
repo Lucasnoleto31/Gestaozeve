@@ -12,6 +12,7 @@ import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
+import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
 import { LinhaVazia, TRACO, dataCurta, n0, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
@@ -33,6 +34,12 @@ export async function AbaExtrato({ parceiro, corretora, mesRef }: FiltroAba) {
   })()
   return (
     <>
+      {/* filtro de corretora que sobrou de outro parceiro: diz que aqui não há nada e mostra a saída */}
+      {corretora && carteiraMes.length === 0 && (
+        <Alert tone="neutral" title={`${parceiro} não tem contas na ${CORRETORA_LABEL[corretora]}`}>
+          O filtro de corretora está na {CORRETORA_LABEL[corretora]}. <Link href={hrefComissoes({ parceiro, mes: mesRef, aba: 'extrato' })} className="link">Ver todas as corretoras</Link>.
+        </Alert>
+      )}
       <KpiRow cols={4}>
         <KpiCard label="Contas na carteira" value={fmtNum(t.contas)} sub={`de ${parceiro}${filtroCorretora}`} />
         <KpiCard label={`Giraram em ${mesCurto(mesRef)}`} value={fmtNum(t.giraram)} sub={t.contas ? `${fmtNum(Math.round((t.giraram / t.contas) * 100))}% da carteira` : undefined} />

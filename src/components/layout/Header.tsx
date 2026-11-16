@@ -5,7 +5,7 @@
 // direita. As telas que não cabem na cápsula ficam em "Mais". No celular vale a TopBar +
 // a gaveta (Sidebar) + a barra de abas (BottomNav).
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Coins, Filter, Home, KeyRound, LineChart, ListChecks, Loader2, LogOut, MoreHorizontal, UserRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -13,8 +13,9 @@ import type { Role } from '@/types'
 import { Marca } from '@/components/ui/Marca'
 import { ThemeToggle } from '@/lib/theme'
 import { sair } from '@/lib/auth/sair'
-import { CORRETORA_LABEL, CORRETORA_SLUG, corretoraDoSlug, termosDaCorretora, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_LABEL, CORRETORA_SLUG, termosDaCorretora, type Corretora } from '@/lib/corretoras'
 import { PAGINAS, isActivePath } from './Sidebar'
+import { seletorCorretora } from './seletorCorretora'
 
 type Item = { label: string; href: string; icon: React.ElementType; exact?: boolean }
 
@@ -30,18 +31,18 @@ export function Header({ role, nome, corretoraPadrao, corretoras, dataHoje }: {
   dataHoje: string
 }) {
   const pathname = usePathname()
+  const busca = useSearchParams().toString()
   // O "Mais" guarda em que rota foi aberto: navegar fecha sozinho, sem efeito
   const [abertoEm, setAbertoEm] = useState<string | null>(null)
   const maisAberto = abertoEm === pathname
   const setMaisAberto = (v: boolean) => setAbertoEm(v ? pathname : null)
   const [saindo, iniciarSaida] = useTransition()
 
-  const segmentos = pathname.split('/').filter(Boolean)
-  const naRota = corretoraDoSlug(segmentos[0])
-  const corretora = naRota ?? corretoraPadrao
+  // Seletor de corretora: numa página de corretora troca a corretora; em Comissões é o filtro da tela
+  const sel = seletorCorretora(pathname, busca, corretoraPadrao, id => PAGINAS.some(p => p.id === id))
+  const corretora = sel.atual
   const slug = CORRETORA_SLUG[corretora]
   const termos = termosDaCorretora(corretora)
-  const paginaAtual = naRota && segmentos[1] && PAGINAS.some(p => p.id === segmentos[1]) ? segmentos[1] : 'painel'
   const equipe = EQUIPE.includes(role)
   const paginas = PAGINAS.filter(p => p.roles.includes(role))
   const rotulo = (id: string, label: string) => (id === 'assessores' ? termos.assessores : label)
@@ -62,7 +63,7 @@ export function Header({ role, nome, corretoraPadrao, corretoras, dataHoje }: {
   const primeiroNome = (nome ?? '').trim().split(/\s+/)[0] || 'Conta'
 
   return (
-    <header className="safe-top sticky top-0 z-30 hidden h-14 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-line bg-bg/90 px-8 backdrop-blur lg:grid">
+    <header className="safe-top sticky top-0 z-30 hidden h-14 grid-cols-[minmax(max-content,1fr)_auto_minmax(0,1fr)] items-center gap-4 border-b border-line bg-bg/90 px-8 backdrop-blur lg:grid">
       {/* Marca e corretora */}
       <div className="flex min-w-0 items-center gap-4">
         <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5 text-dense font-semibold tracking-tight text-fg" aria-label="Zeve Controle, início">
@@ -70,10 +71,16 @@ export function Header({ role, nome, corretoraPadrao, corretoras, dataHoje }: {
           <span>Zeve Controle</span>
         </Link>
         {paginas.length > 0 && corretoras.length > 1 && (
-          <nav className="seg" aria-label="Corretora">
+          <nav className="seg" aria-label={sel.filtro ? 'Corretora: filtro desta tela' : 'Corretora'}>
+            {sel.filtro && (
+              <Link href={sel.href(null)} aria-current={sel.marcada == null ? 'true' : undefined} title="Mostra todas as corretoras nesta tela"
+                className={cn('inline-flex min-h-[30px] shrink-0 items-center whitespace-nowrap rounded-sm px-2.5 text-label font-medium', sel.marcada == null ? 'bg-bg text-fg font-semibold' : 'text-fg-muted hover:text-fg')}>
+                Todas
+              </Link>
+            )}
             {corretoras.map(c => (
-              <Link key={c} href={`/${CORRETORA_SLUG[c]}/${paginaAtual}`} aria-current={c === corretora ? 'true' : undefined}
-                className={cn('inline-flex min-h-[30px] items-center rounded-sm px-2.5 text-label font-medium', c === corretora ? 'bg-bg text-fg font-semibold' : 'text-fg-muted hover:text-fg')}>
+              <Link key={c} href={sel.href(c)} aria-current={c === sel.marcada ? 'true' : undefined} title={sel.filtro ? `Filtra esta tela: só ${CORRETORA_LABEL[c]}` : undefined}
+                className={cn('inline-flex min-h-[30px] shrink-0 items-center whitespace-nowrap rounded-sm px-2.5 text-label font-medium', c === sel.marcada ? 'bg-bg text-fg font-semibold' : 'text-fg-muted hover:text-fg')}>
                 {CORRETORA_LABEL[c]}
               </Link>
             ))}

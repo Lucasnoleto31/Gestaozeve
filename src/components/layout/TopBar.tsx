@@ -16,6 +16,8 @@ const ROTAS: { prefix: string; section: string; label: string }[] = [
   { prefix: '/dashboard', section: 'Visão geral', label: 'Início' },
   { prefix: '/leads', section: 'Leads', label: 'Leads' },
   { prefix: '/funil', section: 'Leads', label: 'Funil' },
+  { prefix: '/fila', section: 'Leads', label: 'Minha fila' },
+  { prefix: '/comissoes', section: 'Parceiros', label: 'Comissões' },
 ]
 
 function crumbFor(pathname: string) {

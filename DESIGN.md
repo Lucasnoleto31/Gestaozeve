@@ -133,6 +133,22 @@ Fora da escala só por exceção documentada aqui.
   "herói" por página; os demais menores e sem card próprio.
 - Página inteira sem rolagem horizontal; dentro de tabela é permitido só acima de 768 px.
 
+### 4.1 Telas refeitas em nov/26 (pedido do Lucas: "virou tabelão")
+
+Vale para Receita, Responsáveis, Incentivo, Gráficos, Fila e Leads, e para toda tela nova:
+
+- Cada tela responde a uma pergunta. Abre com a resposta em uma frase (`Resumo`, em
+  `components/gestao/Resumo.tsx`) e depois **no máximo 4 cartões**, cada um com um número e uma comparação.
+- Tabela principal com **no máximo 7 colunas**. O resto vai para o detalhe: linha que abre, ficha do cliente
+  ou seção recolhida (`Recolhido`, em `components/ui/Recolhido.tsx`). Nada some sem ter onde ser achado.
+- Fórmula e explicação de conta ficam atrás do "i" (`Dica`, em `components/ui/Dica.tsx`; no `KpiCard`, a
+  propriedade `dica`), não em subtítulo.
+- Série e tabela por mês começam no primeiro mês com dado (`doPrimeiroComDado`): o BTG começou em set/26.
+- Um nome por coisa: "Responsáveis" (menu e título, nas duas corretoras), "lotes" para a quantidade,
+  "operou / com operação" para quem teve lotes. "Giro diário" é só o nome da tela.
+- Barra empilhada por tipo (corretagem, zeragem, incentivo) usa a paleta colorida (`colorido`): em tons de
+  tinta as faixas não se distinguem. A legenda segue a ordem das séries, de baixo para cima.
+
 ## 5. Estados e movimento
 
 - Toda rota tem `loading.tsx` (skeleton na forma da tela) e `error.tsx` (mensagem + tentar de novo).

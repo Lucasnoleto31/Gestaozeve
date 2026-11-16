@@ -93,7 +93,7 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
             return [f(Number(v)), String(nome)]
           }}
         />
-        {legenda && <Legend wrapperStyle={{ fontSize: 11, color: c.text }} iconSize={10} />}
+        {legenda && <Legend wrapperStyle={{ fontSize: 11, color: c.text }} iconSize={10} itemSorter={null} />}
         {series.map((s, i) => {
           const cor = corDe(s.cor, c, i, colorido)
           return s.tipo === 'line'

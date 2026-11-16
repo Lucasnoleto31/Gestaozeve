@@ -1,6 +1,7 @@
 import type { ElementType, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { deltaPct, fmtDelta } from '@/lib/format'
+import { Dica } from './Dica'
 
 // Tom de cor. Só gain/loss/warn pintam; o resto é neutro (DESIGN.md §1).
 // Os nomes antigos continuam aceitos até as telas migrarem.
@@ -72,7 +73,7 @@ export function DeltaText({ pct, menorMelhor }: { pct: number | null; menorMelho
 
 // Uma célula da faixa de KPIs: rótulo, valor grande, subtexto. Sem ícone, sem
 // cor própria — só a variação e, quando pedido, o valor em gain/loss.
-export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, destaque, className, valueClassName }: {
+export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, destaque, className, valueClassName, dica }: {
   icon?: ElementType
   label: string
   value: ReactNode
@@ -83,11 +84,12 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, d
   destaque?: boolean   // o card principal da página, na tinta (um por página)
   className?: string
   valueClassName?: string
+  dica?: string        // como o número é calculado: fica atrás do "i" ao lado do rótulo
 }) {
   const tom = TOM[tone]
   return (
     <div className={cn('kpi min-w-0 px-5 py-4', destaque && 'bg-fg', className)}>
-      <p className={cn('label', destaque && 'text-bg/70')}>{label}</p>
+      <p className={cn('label flex items-center gap-1.5', destaque && 'text-bg/70')}>{label}{dica && <Dica texto={dica} destaque={destaque} />}</p>
       {loading ? (
         <div className="mt-2 space-y-2">
           <div className="skeleton h-7 w-28" />

@@ -33,7 +33,7 @@ export function filtrosClientesDe(v: ValoresFiltro): FiltrosClientes {
 const VARIAS_CONTAS = /^\d+ contas$/
 export const chaveAlerta = (alerta: string) => (VARIAS_CONTAS.test(alerta) ? 'contas' : alerta)
 
-type Filtravel = Pick<ClienteLinha, 'status' | 'situacao' | 'responsavel' | 'ativador' | 'contatos' | 'assessor_nome' | 'alertas' | 'grupo_corretagem' | 'risco' | 'nivel'>
+type Filtravel = Pick<ClienteLinha, 'status' | 'situacao' | 'responsavel' | 'ativador' | 'contatos' | 'assessor_nome' | 'alertas' | 'grupo_corretagem' | 'risco' | 'nivel' | 'lotes_media_3m'>
 
 // O cliente passa nos filtros de lista (todos menos a busca por texto, que usa o índice da tabela, e o
 // giro em outra corretora, que vem de outra leitura)?

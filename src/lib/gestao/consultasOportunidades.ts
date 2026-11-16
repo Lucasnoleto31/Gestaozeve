@@ -1,15 +1,16 @@
-// Leituras da página Oportunidades (só servidor): a base parada de uma corretora — inativos, migrados
-// que nunca giraram e contas em abertura — com os contatos registrados, o patrimônio do cadastro e o que
-// o lead respondeu no formulário (já opera? onde?) e o giro de cada um nas outras corretoras do escritório.
+// Leituras da página Oportunidades (só servidor): a base de uma corretora que pode render mais — em
+// risco, inativos, migrados que nunca operaram e contas em abertura (os grupos da tela Clientes, menos
+// quem está operando normalmente e quem recusou) — com os contatos registrados, o patrimônio do cadastro,
+// o que o lead respondeu no formulário (já opera? onde?) e o giro de cada um nas outras corretoras.
 import type { Corretora } from '@/lib/corretoras'
 import { clientesLista, contatosClientesResumo } from './consultas'
 import { giroNasOutrasCorretoras } from './consultasGiroFora'
 import { equipe, falha, num, str } from './guard'
 import { comContatos } from './fila'
+import { momentoDoCliente } from './momentoCliente'
 import type { ClienteBase } from './oportunidades'
 
 type Row = Record<string, unknown>
-const PARADOS = ['Inativo', 'Nunca girou', 'Em processamento']
 
 export async function baseDeOportunidades(corretora: Corretora): Promise<ClienteBase[]> {
   const { db } = await equipe()
@@ -27,8 +28,10 @@ export async function baseDeOportunidades(corretora: Corretora): Promise<Cliente
     const id = String(l.cliente_id)
     if (!lead.has(id)) lead.set(id, { ja_opera: str(l.ja_opera), corretora: str(l.corretora) })
   }
-  return comContatos(lista, contatos).filter(c => PARADOS.includes(c.situacao)).map(c => ({
+  const temOportunidade = (c: { situacao: string; risco: string | null; lotes_media_3m: number }) => { const g = momentoDoCliente(c); return g !== 'operando' && g !== 'recusou' }
+  return comContatos(lista, contatos).filter(temOportunidade).map(c => ({
     cliente_id: c.cliente_id, nome: c.nome, telefone: c.telefone, responsavel: c.responsavel, ativador: c.ativador, situacao: c.situacao,
+    risco: c.risco, dias_sem_giro: c.dias_sem_giro, lotes_mes: c.lotes_mes, lotes_media_3m: c.lotes_media_3m,
     data_migracao: c.data_migracao, data_entrada: c.data_entrada, lotes_12m: c.lotes_12m, receita_total: c.receita_total, meses_ativos: c.meses_ativos,
     meses_sem_giro: c.meses_sem_giro, ultimo_giro: c.ultimo_giro, contatos: c.contatos, ultimo_contato: c.ultimo_contato,
     patrimonio: patrimonio.get(c.cliente_id) || null, lead_ja_opera: lead.get(c.cliente_id)?.ja_opera ?? null, lead_corretora: lead.get(c.cliente_id)?.corretora ?? null,

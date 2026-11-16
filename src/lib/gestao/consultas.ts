@@ -86,16 +86,16 @@ export async function clientesLista(corretora: Corretora, mesRef: string | null)
 }
 
 // Como a base se divide nos grupos da tela Clientes (Operando, Em risco, Inativos, Nunca operaram, Em
-// abertura, Recusaram). Lê só a situação e o risco de cada cliente (a mesma função da lista, com duas
-// colunas), para o Painel mostrar os mesmos números dos cartões sem carregar a lista inteira.
+// abertura, Recusaram). Lê só a situação, o risco e a média de 3 meses de cada cliente (a mesma função da
+// lista, com três colunas), para o Painel mostrar os mesmos números dos cartões sem carregar a lista inteira.
 export async function gruposDaBase(corretora: Corretora, mesRef: string | null): Promise<ContagemDaBase> {
   const { db } = await equipe()
   const clientes: ClienteDoMomento[] = []
   for (let offset = 0; ; offset += PAGINA) {
-    const { data, error } = await db.rpc('clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef }).select('situacao, risco').range(offset, offset + PAGINA - 1)
+    const { data, error } = await db.rpc('clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef }).select('situacao, risco, lotes_media_3m').range(offset, offset + PAGINA - 1)
     if (error) falha(error, 'clientes_lista')
     const rows = (data ?? []) as Row[]
-    for (const r of rows) clientes.push({ situacao: str(r.situacao) ?? 'Em processamento', risco: riscoDe(r.risco) })
+    for (const r of rows) clientes.push({ situacao: str(r.situacao) ?? 'Em processamento', risco: riscoDe(r.risco), lotes_media_3m: num(r.lotes_media_3m) })
     if (rows.length < PAGINA) break
   }
   return contarPorMomento(clientes)

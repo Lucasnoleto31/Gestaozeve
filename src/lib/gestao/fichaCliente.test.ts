@@ -31,9 +31,14 @@ describe('proximoPasso', () => {
   })
 
   it('inativo sem risco: há quantos meses e quanto rendia', () => {
-    const p = proximoPasso(cli({ situacao: 'Inativo', meses_sem_giro: 5, ultimo_giro: '2026-06-12', receita_total: 9000, meses_ativos: 10 }), at({ contatos: 1, ultimoContato: '2026-11-03' }))
+    const p = proximoPasso(cli({ situacao: 'Inativo', meses_sem_giro: 5, ultimo_giro: '2026-06-12', lotes_mes: 0, lotes_media_3m: 0, receita_total: 9000, meses_ativos: 10 }), at({ contatos: 1, ultimoContato: '2026-11-03' }))
     expect(p).toEqual({ tom: 'warn', titulo: 'Sem giro há 5 meses', texto: 'Rendia R$ 900 por mês nos 10 meses em que girou; o último giro foi em 12/06/26. 1 contato registrado, o último em 03/11/26.' })
-    expect(proximoPasso(cli({ situacao: 'Inativo', meses_sem_giro: 1, ultimo_giro: null, receita_total: 0, meses_ativos: 0 }), at()).texto).toBe('Já girou e parou. Ainda sem contato registrado.')
+    expect(proximoPasso(cli({ situacao: 'Inativo', meses_sem_giro: 4, ultimo_giro: null, lotes_mes: 0, lotes_media_3m: 0, receita_total: 0, meses_ativos: 0 }), at()).texto).toBe('Já girou e parou. Ainda sem contato registrado.')
+  })
+
+  it('começo do mês: ainda sem giro nele, mas girou há pouco e não entrou em risco, segue operando', () => {
+    const p = proximoPasso(cli({ situacao: 'Inativo', meses_sem_giro: 1, dias_sem_giro: 3, ultimo_giro: '2026-10-30', lotes_mes: 0, lotes_media_3m: 3610 }), at())
+    expect(p).toEqual({ tom: 'gain', titulo: 'Operando normalmente', texto: 'Ainda sem giro em nov/26; o último foi em 30/10/26. A média dos 3 meses anteriores foi de 3.610 lotes por mês.' })
   })
 
   it('migrado que nunca girou: há quantos dias migrou', () => {

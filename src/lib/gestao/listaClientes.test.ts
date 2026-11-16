@@ -6,7 +6,7 @@ import {
 
 type Linha = Parameters<typeof passaFiltros>[0]
 const c = (p: Partial<Linha> = {}): Linha => ({
-  status: 'Migrado', situacao: 'Ativo', responsavel: 'Lucas', ativador: null, contatos: 0, assessor_nome: 'Artur', alertas: [], grupo_corretagem: 'Vinculado', risco: null, nivel: 'Alto', ...p,
+  status: 'Migrado', situacao: 'Ativo', responsavel: 'Lucas', ativador: null, contatos: 0, assessor_nome: 'Artur', alertas: [], grupo_corretagem: 'Vinculado', risco: null, nivel: 'Alto', lotes_media_3m: 0, ...p,
 })
 const f = (p: Partial<FiltrosClientes> = {}): FiltrosClientes => ({ ...SEM_FILTRO_CLIENTES, ...p })
 

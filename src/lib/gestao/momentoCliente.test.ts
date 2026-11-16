@@ -15,6 +15,15 @@ describe('momentoDoCliente', () => {
     expect(momentoDoCliente(c({ risco: 'em queda' }))).toBe('risco')
     expect(momentoDoCliente(c({ situacao: 'Inativo', risco: 'parou', dias_sem_giro: 15 }))).toBe('risco')
   })
+  it('começo do mês: quem ainda não girou nele, mas girou nos 3 meses anteriores e não entrou em risco, segue operando', () => {
+    expect(momentoDoCliente(c({ situacao: 'Inativo', meses_sem_giro: 1, lotes_media_3m: 800 }))).toBe('operando')
+    expect(rotuloMomento(c({ situacao: 'Inativo', meses_sem_giro: 1, lotes_media_3m: 800 }))).toBe('Operando')
+    // sem giro nos 3 meses anteriores (ou sem a média informada): inativo de verdade
+    expect(momentoDoCliente(c({ situacao: 'Inativo', meses_sem_giro: 5, lotes_media_3m: 0 }))).toBe('inativo')
+    expect(momentoDoCliente(c({ situacao: 'Inativo', meses_sem_giro: 5 }))).toBe('inativo')
+    // quando passa o prazo, o banco marca "parou" e o risco vem na frente
+    expect(momentoDoCliente(c({ situacao: 'Inativo', risco: 'parou', dias_sem_giro: 12, lotes_media_3m: 800 }))).toBe('risco')
+  })
   it('situação que não existe ainda fica com quem não tem conta migrada', () => {
     expect(momentoDoCliente(c({ situacao: 'Em análise' }))).toBe('abertura')
   })

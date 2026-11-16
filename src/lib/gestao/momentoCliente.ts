@@ -13,6 +13,7 @@ export type ClienteDoMomento = {
   risco: string | null | undefined       // parou · em queda (só cliente migrado que girou nos últimos 3 meses)
   dias_sem_giro?: number | null
   meses_sem_giro?: number | null
+  lotes_media_3m?: number | null         // média de lotes dos 3 meses anteriores: maior que zero = girou neles
 }
 
 // O risco vem na frente: "Em risco" aqui é o mesmo número do Painel e do Início (todo cliente com risco).
@@ -20,7 +21,10 @@ export type ClienteDoMomento = {
 export function momentoDoCliente(c: ClienteDoMomento): Momento {
   if (c.risco) return 'risco'
   if (c.situacao === 'Ativo') return 'operando'
-  if (c.situacao === 'Inativo') return 'inativo'
+  // A situação vira "Inativo" assim que o mês troca e o cliente ainda não girou nele. Quem girou nos 3
+  // meses anteriores e não entrou em risco está só no começo do mês: em poucos dias gira de novo ou vira
+  // "parou". Continua operando; inativo é quem está sem giro há mais de 3 meses.
+  if (c.situacao === 'Inativo') return (c.lotes_media_3m ?? 0) > 0 ? 'operando' : 'inativo'
   if (c.situacao === 'Nunca girou') return 'nunca'
   if (c.situacao === 'Recusou') return 'recusou'
   return 'abertura'
@@ -32,14 +36,14 @@ export const MOMENTO_GRUPO: Record<Momento, string> = {
 }
 // O que é cada grupo em poucas palavras (linha pequena do cartão)
 export const MOMENTO_RESUMO: Record<Momento, string> = {
-  operando: 'giram no ritmo normal', risco: 'caíram ou pararam há pouco', inativo: 'já giraram, parados há mais tempo',
+  operando: 'giram no ritmo normal', risco: 'caíram ou pararam há pouco', inativo: 'sem giro há mais de 3 meses',
   nunca: 'migraram e ainda não giraram', abertura: 'conta ainda não migrou', recusou: 'não quiseram migrar',
 }
 // O que é cada grupo e o que ele pede, em uma frase (subtítulo da lista com o grupo escolhido)
 export const MOMENTO_EXPLICA: Record<Momento, string> = {
-  operando: 'Giraram no mês e estão no ritmo normal.',
+  operando: 'Estão girando no ritmo normal.',
   risco: 'Giraram nos últimos 3 meses e pararam há dias, ou estão girando bem menos que o normal. São os primeiros a chamar.',
-  inativo: 'Já giraram e estão parados há mais tempo.',
+  inativo: 'Já giraram e estão sem giro há mais de 3 meses.',
   nunca: 'A conta migrou e ainda não teve nenhum lote: é a lista da campanha de ativação.',
   abertura: 'A conta ainda não migrou: acompanhar a abertura.',
   recusou: 'Não quiseram migrar.',

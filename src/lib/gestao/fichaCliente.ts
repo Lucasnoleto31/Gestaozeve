@@ -97,6 +97,15 @@ function estadoDoCliente(c: ClienteDoPasso, a: AtendimentoDoPasso, contato: stri
       texto: `${inteiro(c.lotes_mes)} lotes em ${a.mes}${a.mesParcial ? ' até agora,' : ''} contra a média de ${inteiro(c.lotes_media_3m)} por mês nos 3 meses anteriores. ${contato}`,
     }
   }
+  // começo do mês: ainda sem giro nele, mas girou nos 3 meses anteriores e não entrou em risco (o mesmo
+  // critério do selo "Operando" em momentoCliente.ts)
+  if (c.situacao === 'Inativo' && c.lotes_media_3m > 0) {
+    return {
+      tom: 'gain',
+      titulo: 'Operando normalmente',
+      texto: `Ainda sem giro em ${a.mes}${c.ultimo_giro ? `; o último foi em ${dataBr(c.ultimo_giro)}` : ''}. A média dos 3 meses anteriores foi de ${inteiro(c.lotes_media_3m)} lotes por mês.`,
+    }
+  }
   if (c.situacao === 'Inativo') {
     const rendia = c.receita_total / Math.max(1, c.meses_ativos)
     return {

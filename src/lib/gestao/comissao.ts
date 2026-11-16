@@ -1,6 +1,7 @@
 // Comissão de parceiros por abertura e ativação de conta (S39).
 // As faixas vêm do banco como "mínimo no mês:R$ por conta;…" (mesmo formato de comissao_faixa).
-import type { ComissaoItem, ComissaoMensalRow, ComissaoPagamento } from './tipos'
+import { normTexto } from '@/lib/texto'
+import type { ComissaoItem, ComissaoMensalRow, ComissaoPagamento, Parceiro } from './tipos'
 
 export type FaixaComissao = { minimo: number; valor: number }
 
@@ -51,4 +52,22 @@ export function resumirComissao(itens: ComissaoItem[], mensal: ComissaoMensalRow
     abertasMes, ativacoesMes, reativadasMes, ativadasMes, comissaoMes, contasMes, receitaMes, receitaCarteiraMes, liquidoMes,
     abertasTotal, ativadasTotal, reativadasTotal, geradoTotal, pendentes: pendentes.length, previsao, pago, saldo: geradoTotal - pago,
   }
+}
+
+// Quem aparece na tela Comissões: só quem recebe do escritório — os comissionados (Parâmetros ›
+// Responsáveis) e os parceiros com participação na receita (repasse_parceiros). As origens do campo
+// Parceiro da ficha (hero, Instagram, Direto…) não recebem comissão e ficam de fora. Os nomes casam sem
+// acento nem caixa; o parceiro com participação entra mesmo sem nenhuma ficha.
+export type ParceiroComissao = Parceiro & { participacao: boolean }
+export function parceirosDeComissao(todos: Parceiro[], comParticipacao: string[]): ParceiroComissao[] {
+  const faltam = new Map(comParticipacao.filter(n => n.trim()).map(n => [normTexto(n), n.trim()]))
+  const out: ParceiroComissao[] = []
+  for (const x of todos) {
+    const chave = normTexto(x.nome)
+    const participacao = faltam.has(chave)
+    faltam.delete(chave)
+    if (x.comissionado || participacao) out.push({ ...x, participacao })
+  }
+  for (const nome of faltam.values()) out.push({ nome, comissionado: false, clientes: 0, participacao: true })
+  return out.sort((a, b) => Number(b.comissionado) - Number(a.comissionado) || a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }))
 }

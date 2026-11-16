@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/Badge'
 import { LinhaVazia, dataCurta, dataPt, n0, r0, rCurto } from '@/components/gestao/Celulas'
 import { TIPO, corretoraNome, hrefComissoes, linhasPorMes, origemTexto, pagamentosDoFiltro, round2, somaLinhas, type FiltroAba } from './comum'
 
-export async function AbaResumo({ parceiro, corretora, mesRef, comissionado, admin }: FiltroAba & { comissionado: boolean; admin: boolean }) {
+export async function AbaResumo({ parceiro, corretora, mesRef, comissionado, participacao = false, admin }: FiltroAba & { comissionado: boolean; participacao?: boolean; admin: boolean }) {
   const meses = janelaMeses(mesRef, 12)
   const [itens, mensal, eventos, pagamentos, regras] = await Promise.all([
     comissaoItens(parceiro, corretora), comissaoMensal(mesRef, 12, parceiro, corretora), comissaoContasMes(parceiro, corretora, mesRef, 1),
@@ -38,11 +38,15 @@ export async function AbaResumo({ parceiro, corretora, mesRef, comissionado, adm
 
   return (
     <>
-      {!comissionado && (
+      {!comissionado && (participacao ? (
+        <Alert tone="neutral" title={`${parceiro} recebe participação na receita do BTG`}>
+          Não há comissão por conta aberta ou ativada. O valor do mês está na visão geral (Participação na receita · BTG); aqui ficam a carteira e o extrato dos clientes dele.
+        </Alert>
+      ) : (
         <Alert tone="neutral" title={`${parceiro} vem do campo Parceiro na ficha dos clientes`}>
           Carteira e extrato funcionam normalmente. Para calcular comissão, marque {parceiro} em Parâmetros › Responsáveis (coluna Comissão) e cadastre as regras na aba Pagamentos e regras.
         </Alert>
-      )}
+      ))}
       {semValorAbertura.length > 0 && (
         <Alert tone="warn" title={`Abertura sem valor na ${semValorAbertura.map(c => CORRETORA_LABEL[c]).join(' e ')}`}>
           A regra está com R$ 0 por conta aberta. {admin ? 'Preencha as faixas na aba Pagamentos e regras.' : 'Peça ao administrador para preencher as faixas.'}

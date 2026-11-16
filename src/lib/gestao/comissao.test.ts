@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { faixasValidas, lerFaixasComissao, resumirComissao, valorDaFaixa } from './comissao'
+import { faixasValidas, lerFaixasComissao, parceirosDeComissao, resumirComissao, valorDaFaixa } from './comissao'
 import type { ComissaoItem, ComissaoMensalRow } from './tipos'
 
 describe('faixas de comissão', () => {
@@ -62,5 +62,36 @@ describe('resumo da comissao', () => {
     expect(r.pendentes).toBe(1)
     expect(r.previsao).toBe(80)
     expect(r.saldo).toBe(180)
+  })
+})
+
+describe('parceirosDeComissao', () => {
+  const todos = [
+    { nome: 'Aikon', comissionado: true, clientes: 0 }, { nome: 'Karen', comissionado: true, clientes: 3 }, { nome: 'Milena', comissionado: true, clientes: 0 },
+    { nome: 'Atual Capital', comissionado: false, clientes: 37 }, { nome: 'hero', comissionado: false, clientes: 64 }, { nome: 'Instagram', comissionado: false, clientes: 20 },
+    { nome: 'Direto', comissionado: false, clientes: 27 },
+  ]
+
+  it('fica só com os comissionados e com quem tem participação na receita', () => {
+    const r = parceirosDeComissao(todos, ['Atual Capital'])
+    expect(r.map(x => x.nome)).toEqual(['Aikon', 'Karen', 'Milena', 'Atual Capital'])
+    expect(r.find(x => x.nome === 'Atual Capital')).toEqual({ nome: 'Atual Capital', comissionado: false, clientes: 37, participacao: true })
+    expect(r.find(x => x.nome === 'Karen')).toMatchObject({ comissionado: true, participacao: false })
+  })
+
+  it('sem participação cadastrada sobram só os comissionados', () => {
+    expect(parceirosDeComissao(todos, []).map(x => x.nome)).toEqual(['Aikon', 'Karen', 'Milena'])
+  })
+
+  it('casa o nome sem acento nem caixa e aceita parceiro com participação ainda sem ficha', () => {
+    expect(parceirosDeComissao(todos, ['ATUAL CAPITAL ']).map(x => x.nome)).toEqual(['Aikon', 'Karen', 'Milena', 'Atual Capital'])
+    const r = parceirosDeComissao(todos, ['Nova Parceira'])
+    expect(r[r.length - 1]).toEqual({ nome: 'Nova Parceira', comissionado: false, clientes: 0, participacao: true })
+    expect(r.some(x => x.nome === 'Atual Capital')).toBe(false)
+  })
+
+  it('comissionado que também tem participação aparece uma vez só', () => {
+    const r = parceirosDeComissao(todos, ['Aikon'])
+    expect(r.filter(x => x.nome === 'Aikon')).toEqual([{ nome: 'Aikon', comissionado: true, clientes: 0, participacao: true }])
   })
 })

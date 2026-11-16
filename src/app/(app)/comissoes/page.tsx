@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getProfile } from '@/lib/auth/getProfile'
-import { parceirosLista } from '@/lib/gestao/consultas'
+import { parceirosComParticipacao, parceirosLista } from '@/lib/gestao/consultas'
+import { parceirosDeComissao } from '@/lib/gestao/comissao'
 import { normTexto } from '@/lib/texto'
 import { mesAtual, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { CORRETORAS, CORRETORA_LABEL, corretorasDoPerfil, isCorretora } from '@/lib/corretoras'
@@ -29,15 +30,19 @@ const ABAS = [
 // Comissão de parceiros em dois níveis: a visão geral (quanto cada comissionado gerou no mês, o que foi
 // pago e o saldo) e, ao escolher um parceiro, as abas dele — Resumo, Extrato, Pagamentos e regras,
 // Carteira e Retorno. Cada aba carrega só o que mostra. Todo mundo da equipe vê; o admin lança
-// pagamentos e regras (S39–S54).
+// pagamentos e regras (S39–S54). A lista tem só quem recebe do escritório: os comissionados e quem tem
+// participação na receita do BTG; as origens do campo Parceiro da ficha (hero, Instagram…) não entram.
 export default async function ComissoesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const profile = await getProfile()
   if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor')) redirect('/dashboard')
   const admin = profile.role === 'admin'
   const sp = await searchParams
   const q = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : '')
-  // comissionados e parceiros das fichas/assessores; o pedido no endereço casa sem acento nem caixa
-  const parceiros = await parceirosLista()
+  // comissionados e parceiros com participação na receita (só para quem vê o BTG); o pedido no endereço
+  // casa sem acento nem caixa
+  const verBtg = corretorasDoPerfil(profile).includes('BTG')
+  const [todos, comParticipacao] = await Promise.all([parceirosLista(), verBtg ? parceirosComParticipacao() : Promise.resolve<string[]>([])])
+  const parceiros = parceirosDeComissao(todos, comParticipacao)
   const pedido = normTexto(q('parceiro'))
   const parceiroSel = pedido ? parceiros.find(p => normTexto(p.nome) === pedido) ?? null : null
   const corretoraParam = q('corretora')
@@ -47,7 +52,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   const filtros = (
     <>
       <SelectParam param="parceiro" valor={parceiroSel?.nome ?? ''} label="Parceiro" todos="Todos (visão geral)"
-        opcoes={parceiros.map(p => ({ valor: p.nome, label: p.comissionado ? `${p.nome} · comissionado` : `${p.nome} · ${fmtNum(p.clientes)} ${p.clientes === 1 ? 'ficha' : 'fichas'}` }))} />
+        opcoes={parceiros.map(p => ({ valor: p.nome, label: p.comissionado ? `${p.nome} · comissionado` : `${p.nome} · participação na receita` }))} />
       <SelectParam param="corretora" valor={corretora ?? ''} opcoes={CORRETORAS.map(c => ({ valor: c, label: CORRETORA_LABEL[c] }))} label="Corretora" todos="Todas" />
       <MesPicker valor={mesRef} label="Mês" />
     </>
@@ -59,7 +64,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
         <PageHeader eyebrow="Parceiros · todas as corretoras" title="Comissões" description="Abertura, ativação e reativação de contas por mês, por parceiro." />
         <PageBody>
           <Alert tone="neutral" title="Nenhum parceiro ainda">
-            Marque quem é comissionado em Parâmetros › Responsáveis (coluna Comissão) ou preencha o campo Parceiro na ficha dos clientes.
+            Marque quem é comissionado em Parâmetros › Responsáveis (coluna Comissão). Parceiro com participação na receita entra pelo parâmetro de repasse do BTG.
           </Alert>
         </PageBody>
       </>
@@ -72,14 +77,14 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
         <PageHeader eyebrow="Parceiros · todas as corretoras" title="Comissões" actions={filtros}
           description={`Quanto cada parceiro gerou em ${mesLongo(mesRef)}, o que já foi pago e o saldo a pagar.`} />
         <PageBody>
-          <VisaoGeral parceiros={parceiros} corretora={corretora} mesRef={mesRef} verBtg={corretorasDoPerfil(profile).includes('BTG')} />
+          <VisaoGeral parceiros={parceiros} corretora={corretora} mesRef={mesRef} verBtg={verBtg} />
         </PageBody>
       </>
     )
   }
 
   const parceiro = parceiroSel.nome
-  const padrao = parceiroSel.comissionado ? 'resumo' : 'extrato'   // parceiro só da ficha não tem comissão: abre no extrato
+  const padrao = parceiroSel.comissionado ? 'resumo' : 'extrato'   // parceiro com participação não tem comissão por conta: abre no extrato
   const pedida = q('aba')
   const aba = ABAS.some(a => a.valor === pedida) ? pedida : padrao
   const filtro = { parceiro, corretora, mesRef }
@@ -89,12 +94,12 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
       <PageHeader eyebrow="Comissões" title={parceiro} actions={filtros}
         description={parceiroSel.comissionado
           ? `Comissão por abertura, ativação e reativação de conta${corretora ? ` na ${CORRETORA_LABEL[corretora]}` : ''}, em ${mesLongo(mesRef)}.`
-          : `Parceiro do campo da ficha (${fmtNum(parceiroSel.clientes)} ${parceiroSel.clientes === 1 ? 'ficha' : 'fichas'}): carteira e extrato; sem comissão cadastrada.`}>
+          : `Participação na receita do BTG sobre ${fmtNum(parceiroSel.clientes)} ${parceiroSel.clientes === 1 ? 'cliente' : 'clientes'} dele: carteira e extrato; o valor do mês está na visão geral.`}>
         <Link href={hrefComissoes({ corretora, mes: mesRef })} className="link mt-3 inline-flex items-center gap-1 text-label"><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Todos os parceiros</Link>
         <Abas caminho="/comissoes" query={{ parceiro, corretora, mes: mesRef.slice(0, 7) }} valor={aba} opcoes={ABAS} padrao={padrao} rotulo={`Seções de ${parceiro}`} />
       </PageHeader>
       <PageBody>
-        {aba === 'resumo' && <AbaResumo {...filtro} comissionado={parceiroSel.comissionado} admin={admin} />}
+        {aba === 'resumo' && <AbaResumo {...filtro} comissionado={parceiroSel.comissionado} participacao={parceiroSel.participacao} admin={admin} />}
         {aba === 'extrato' && <AbaExtrato {...filtro} />}
         {aba === 'pagamentos' && <AbaPagamentos parceiro={parceiro} admin={admin} />}
         {aba === 'carteira' && <AbaCarteira {...filtro} />}

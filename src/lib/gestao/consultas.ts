@@ -3,6 +3,7 @@
 import type { Corretora } from '@/lib/corretoras'
 import { fmtDate, hojeBrasil, mesBrasil } from '@/lib/periodo'
 import { mesAtual, somarMeses } from './meses'
+import { lerParceirosRepasse } from './btg'
 import { diarioPelaLista, type ContatoClienteLeve, type ContatoLeve, type LeadLeve } from './contatos'
 import { equipe, equipeLeads, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
@@ -816,8 +817,9 @@ export async function parceirosComissionados(): Promise<string[]> {
   return ((data ?? []) as Row[]).map(r => String(r.nome))
 }
 
-// Parceiros da tela Comissões e do extrato: quem é comissionado (Parâmetros › Responsáveis) mais quem
-// aparece no campo Parceiro da ficha dos clientes e nos assessores (S40). Agrupado sem acento nem caixa,
+// Todos os nomes de parceiro: quem é comissionado (Parâmetros › Responsáveis) mais quem aparece no
+// campo Parceiro da ficha dos clientes e nos assessores (S40). O extrato aceita qualquer um deles; a
+// tela Comissões fica só com quem recebe (parceirosDeComissao, em comissao.ts). Agrupado sem acento nem caixa,
 // como o banco casa (norm_texto); a grafia mostrada é a mais usada nas fichas. Comissionados primeiro,
 // depois em ordem alfabética (o campo mistura parceiros e origens, como "Direto" e "Indicação").
 // As fontes que ainda não existem no banco são ignoradas.
@@ -845,6 +847,14 @@ export async function parceirosLista(): Promise<Parceiro[]> {
   return [...porNorm.values()]
     .map(p => ({ nome: p.comissionado ? p.nome : ([...p.grafias.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? p.nome), comissionado: p.comissionado, clientes: p.clientes }))
     .sort((a, b) => Number(b.comissionado) - Number(a.comissionado) || a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }))
+}
+
+// Parceiros com participação na receita (parâmetro repasse_parceiros do BTG, "Atual Capital:50:70"): só os nomes
+export async function parceirosComParticipacao(): Promise<string[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('parametros').select('valor').eq('corretora', 'BTG').eq('chave', 'repasse_parceiros').maybeSingle()
+  if (error) falha(error, 'parametros')
+  return lerParceirosRepasse(data ? String((data as Row).valor ?? '') : '').map(x => x.nome)
 }
 
 export async function comissaoItens(parceiro: string, corretora: Corretora | null): Promise<ComissaoItem[]> {

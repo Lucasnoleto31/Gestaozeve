@@ -1,13 +1,13 @@
 // Visão geral das comissões: uma linha por comissionado com o que gerou no mês, o que já foi pago e o
-// saldo; quem tem participação na receita (aba própria no fechamento do BTG); e os parceiros que vêm
-// só do campo da ficha. É a porta de entrada da tela: "quanto devo a cada um?".
+// saldo, e quem tem participação na receita (aba própria no fechamento do BTG). É a porta de entrada da
+// tela: "quanto devo a cada um?". As origens do campo Parceiro da ficha não aparecem: não recebem.
 import Link from 'next/link'
 import { comissaoItens, comissaoMensal, comissaoPagamentos, painelMensal, parametrosDaCorretora } from '@/lib/gestao/consultas'
 import { resumirComissao } from '@/lib/gestao/comissao'
 import { calcularRepasse, configBtg } from '@/lib/gestao/btg'
 import { mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
 import type { Corretora } from '@/lib/corretoras'
-import type { Parceiro } from '@/lib/gestao/tipos'
+import type { ParceiroComissao } from '@/lib/gestao/comissao'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
@@ -35,9 +35,8 @@ async function participacoesBtg(mesRef: string): Promise<Participacao[]> {
   }
 }
 
-export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg }: { parceiros: Parceiro[]; corretora: Corretora | null; mesRef: string; verBtg: boolean }) {
+export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg }: { parceiros: ParceiroComissao[]; corretora: Corretora | null; mesRef: string; verBtg: boolean }) {
   const comissionados = parceiros.filter(p => p.comissionado)
-  const outros = parceiros.filter(p => !p.comissionado)
   const [linhas, participacoes] = await Promise.all([
     Promise.all(comissionados.map(async p => {
       const [itens, pagamentos, mensal] = await Promise.all([comissaoItens(p.nome, corretora), comissaoPagamentos(p.nome), comissaoMensal(mesRef, 1, p.nome, corretora)])
@@ -124,19 +123,6 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg }: { par
               </tbody>
             </table>
           </div>
-        </Panel>
-      )}
-
-      {outros.length > 0 && (
-        <Panel title="Outros parceiros e origens" subtitle="Vêm do campo Parceiro da ficha dos clientes e não têm comissão cadastrada. Servem para ver a carteira e gerar o extrato do mês.">
-          <ul className="flex flex-wrap gap-x-6 gap-y-2 text-dense">
-            {outros.map(p => (
-              <li key={p.nome}>
-                <Link href={abrir(p.nome, 'extrato')} className="link">{p.nome}</Link>
-                <span className="ml-1.5 text-micro text-fg-subtle">{fmtNum(p.clientes)} {p.clientes === 1 ? 'ficha' : 'fichas'}</span>
-              </li>
-            ))}
-          </ul>
         </Panel>
       )}
     </>

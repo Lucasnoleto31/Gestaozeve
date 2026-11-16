@@ -138,8 +138,8 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
               <Link href={`${base}/clientes?alerta=qualquer`} className="link tabular-nums">{fmtNum(r.com_alertas)}</Link>
             </li>
             <li className="flex items-center justify-between gap-3 py-3">
-              <span>Migrados que nunca giraram</span>
-              <Link href={`${base}/clientes?momento=nunca`} className="link tabular-nums">{fmtNum(r.nunca_giraram)} · {fmtNum(r.inativos)} inativos</Link>
+              <span>Clientes que nunca operaram</span>
+              <Link href={`${base}/clientes?momento=nunca`} className="link tabular-nums">{fmtNum(r.nunca_giraram)}</Link>
             </li>
           </ul>
         </Panel>

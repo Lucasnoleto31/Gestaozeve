@@ -77,6 +77,36 @@ export function dicaDoMomento(c: ClienteDoMomento): string {
     : 'No ritmo atual fecha o mês bem abaixo da média dos 3 meses anteriores.'
 }
 
+// ── A base inteira por grupo ────────────────────────────────────────────────
+// Quantos clientes há em cada grupo; dentro de "Em risco", quantos pararam e quantos estão em queda; e
+// quantos giraram no mês (a situação Ativo, que inclui quem girou e está em risco). É a conta do Painel,
+// para ele mostrar os mesmos números dos cartões da tela Clientes.
+export type ContagemDaBase = { total: number; por: Record<Momento, number>; pararam: number; emQueda: number; giraram: number }
+export function contarPorMomento(rows: ClienteDoMomento[]): ContagemDaBase {
+  const por: Record<Momento, number> = { operando: 0, risco: 0, inativo: 0, nunca: 0, abertura: 0, recusou: 0 }
+  let pararam = 0, emQueda = 0, giraram = 0
+  for (const c of rows) {
+    por[momentoDoCliente(c)]++
+    if (c.risco === 'parou') pararam++
+    else if (c.risco) emQueda++
+    if (c.situacao === 'Ativo') giraram++
+  }
+  return { total: rows.length, por, pararam, emQueda, giraram }
+}
+
+// Clientes, lotes e receita de cada grupo (tela Receita): só os grupos que têm alguém, na ordem da tela
+export type SomaDoGrupo = { momento: Momento; clientes: number; lotes12m: number; receita12m: number; receitaMes: number }
+export function somarPorMomento(rows: (ClienteDoMomento & { lotes_12m: number; receita_12m: number; receita_mes: number })[]): SomaDoGrupo[] {
+  const por = new Map<Momento, SomaDoGrupo>()
+  for (const c of rows) {
+    const m = momentoDoCliente(c)
+    const g = por.get(m) ?? { momento: m, clientes: 0, lotes12m: 0, receita12m: 0, receitaMes: 0 }
+    g.clientes++; g.lotes12m += c.lotes_12m; g.receita12m += c.receita_12m; g.receitaMes += c.receita_mes
+    por.set(m, g)
+  }
+  return MOMENTOS.flatMap(m => { const g = por.get(m); return g ? [g] : [] })
+}
+
 // A situação que vinha nos endereços antigos (?situacao=) e vale por um grupo inteiro. "Ativo" e "Inativo"
 // não entram: incluíam quem está em risco, então não correspondem a um grupo só.
 export const MOMENTO_DA_SITUACAO: Record<string, Momento> = { 'Nunca girou': 'nunca', 'Em processamento': 'abertura', Recusou: 'recusou' }

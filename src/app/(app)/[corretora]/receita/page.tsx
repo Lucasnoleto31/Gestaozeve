@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { clientesLista, giroDiario, painelMensal, ultimaData } from '@/lib/gestao/consultas'
-import { SEM_RESP, mediana, porResponsavel, porSituacao, valorDoCliente, valorPorGrupo, valorPorSafra } from '@/lib/gestao/derivados'
+import { SEM_RESP, mediana, porResponsavel, valorDoCliente, valorPorGrupo, valorPorSafra } from '@/lib/gestao/derivados'
+import { MOMENTO_GRUPO, MOMENTO_RESUMO, somarPorMomento } from '@/lib/gestao/momentoCliente'
 import { projetarMes, variacaoDe } from '@/lib/gestao/projecao'
 import { janelaMeses, limitesDoMes, mesCurto, mesLongo, somarMeses } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
@@ -14,7 +15,7 @@ import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { Alert } from '@/components/ui/Alert'
 import { MesPicker } from '@/components/gestao/Filtros'
-import { BarraCelula, LinhaVazia, SituacaoBadge, TRACO, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
+import { BarraCelula, LinhaVazia, TRACO, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { TabelaReceita } from './TabelaReceita'
 import { compactar } from '@/lib/compacto'
 import { CAMPOS_RECEITA_LINHA } from '@/lib/gestao/tipos'
@@ -52,7 +53,7 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
   const maior = [...clientes].sort((a, b) => b.lotes_12m - a.lotes_12m)[0]
   const ranking = [...clientes].sort((a, b) => b.lotes_12m - a.lotes_12m).slice(0, 25)
   const resp = porResponsavel(migrados)
-  const sit = porSituacao(clientes)
+  const porEstado = somarPorMomento(clientes)
   const mensalMap = new Map(mensal.map(m => [m.mes_ref, m]))
   const totMensal = mensal.reduce((a, m) => ({ lotes: a.lotes + m.lotes, rc: a.rc + m.receita_corretagem, rz: a.rz + m.receita_zeragem, ra: a.ra + m.receita_acoes, inc: a.inc + m.incentivo }), { lotes: 0, rc: 0, rz: 0, ra: 0, inc: 0 })
   const fixaMes = mensalMap.get(mesRef)?.receita_acoes ?? 0
@@ -171,15 +172,17 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
               )}
             </Panel>
 
-            <Panel title="Por situação">
+            {/* os mesmos grupos da tela Clientes: quanto rendeu quem opera, quem está em risco e quem parou */}
+            <Panel title="Por estado do cliente" subtitle="Os grupos da tela Clientes; um clique abre a lista.">
               <div className="tbl-wrap">
                 <table className="tbl tbl-dense">
-                  <thead><tr><th>Situação</th><th className="num">Clientes</th><th className="num">Lotes 12 m</th><th className="num">Receita 12 m</th></tr></thead>
+                  <thead><tr><th>Grupo</th><th className="num">Clientes</th><th className="num col-p2">Lotes 12 m</th><th className="num">Receita 12 m</th></tr></thead>
                   <tbody>
-                    {sit.length === 0 && <LinhaVazia colunas={4} />}
-                    {sit.map(l => (
-                      <tr key={l.situacao}>
-                        <td><SituacaoBadge situacao={l.situacao} /></td><td className="num">{n0(l.clientes)}</td><td className="num">{n0(l.lotes12m)}</td><td className="num">{r0(l.receita12m)}</td>
+                    {porEstado.length === 0 && <LinhaVazia colunas={4} />}
+                    {porEstado.map(l => (
+                      <tr key={l.momento}>
+                        <td className="whitespace-nowrap"><Link href={`${base}/clientes?momento=${l.momento}`} className="link font-medium" title={MOMENTO_RESUMO[l.momento]}>{MOMENTO_GRUPO[l.momento]}</Link></td>
+                        <td className="num">{n0(l.clientes)}</td><td className="num col-p2">{n0(l.lotes12m)}</td><td className="num">{rCurto(l.receita12m)}</td>
                       </tr>
                     ))}
                   </tbody>

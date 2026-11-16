@@ -2,15 +2,16 @@
 // quem; quem está em risco ou migrou e não girou; por onde operam e quem mais gira mês a mês.
 import Link from 'next/link'
 import type { Contexto } from '@/lib/gestao/pagina'
-import { mixPlataforma, painelClientesMensal, painelResumo } from '@/lib/gestao/consultas'
+import { gruposDaBase, mixPlataforma, painelClientesMensal, painelResumo } from '@/lib/gestao/consultas'
 import { temListaPropria, termosDaCorretora } from '@/lib/corretoras'
 import { janelaMeses, limitesDoMes, mesCurto } from '@/lib/gestao/meses'
-import type { Situacao } from '@/lib/gestao/tipos'
+import { MOMENTOS, MOMENTO_GRUPO, MOMENTO_RESUMO } from '@/lib/gestao/momentoCliente'
+import { telefoneCurto } from '@/lib/gestao/listaClientes'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
-import { BarraCelula, LinhaVazia, NivelMarca, RiscoTexto, SituacaoBadge, TRACO, dataCurta, n0, r0 } from '@/components/gestao/Celulas'
+import { BarraCelula, LinhaVazia, MomentoBadge, NivelMarca, TRACO, dataCurta, n0, r0 } from '@/components/gestao/Celulas'
 import { HeatmapClientes } from './HeatmapClientes'
 
 // Mapa de calor: só os maiores clientes da janela (a lista completa fica na tela Clientes)
@@ -22,10 +23,12 @@ export async function AbaClientes({ ctx }: { ctx: Contexto }) {
   const termos = termosDaCorretora(corretora)
   const listaPropria = temListaPropria(corretora)
   // os agregados da base vêm prontos do banco (painel_resumo): uma só passagem pela lista de clientes
-  const [painel, mix, porCliente] = await Promise.all([
+  // e a divisão da base nos grupos da tela Clientes (gruposDaBase: só a situação e o risco de cada cliente)
+  const [painel, mix, porCliente, grupos] = await Promise.all([
     painelResumo(corretora, mesRef),
     mixPlataforma(corretora, lim.inicio, lim.fim),
     painelClientesMensal(corretora, mesRef, 12, TOP_HEATMAP),
+    gruposDaBase(corretora, mesRef),
   ])
 
   const r = painel.resumo
@@ -42,9 +45,6 @@ export async function AbaClientes({ ctx }: { ctx: Contexto }) {
     { status: 'Migrado', total: r.migrados, por: porResponsavel.map(g => g.migrados) },
     { status: 'Em processamento', total: r.em_processamento, por: porResponsavel.map(g => g.em_processamento) },
     { status: 'Recusou', total: r.recusaram, por: porResponsavel.map(g => g.recusaram) },
-  ]
-  const situacoes: { situacao: Situacao; qtde: number }[] = [
-    { situacao: 'Ativo', qtde: r.ativos_sit }, { situacao: 'Inativo', qtde: r.inativos }, { situacao: 'Nunca girou', qtde: r.nunca_giraram },
   ]
   const mixTotal = mix.reduce((s, m) => s + m.lotes, 0)
   const totalClientesGiro = porCliente[0]?.total_clientes ?? 0
@@ -92,19 +92,21 @@ export async function AbaClientes({ ctx }: { ctx: Contexto }) {
           </div>
         </Panel>
 
-        <Panel title="Situação da base migrada" subtitle={`Ativo girou em ${mesCurto(mesRef)}; inativo já girou e parou; nunca girou não tem lote.`}>
+        {/* os mesmos grupos (e os mesmos números) dos cartões da tela Clientes; cada um abre a lista filtrada */}
+        <Panel title="Como está a base" subtitle={`Cada cliente em um grupo só, pelo estado em ${mesCurto(mesRef)}; um clique abre a lista.`}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
-              <thead><tr><th>Situação</th><th className="num">Clientes</th><th className="num">% dos migrados</th></tr></thead>
+              <thead><tr><th>Grupo</th><th className="num">Clientes</th><th className="num">% da base</th><th className="col-p2">O que é</th></tr></thead>
               <tbody>
-                {situacoes.map(l => (
-                  <tr key={l.situacao}>
-                    <td><SituacaoBadge situacao={l.situacao} /></td>
-                    <td className="num">{n0(l.qtde)}</td>
-                    <td className="num">{r.migrados ? fmtPct((l.qtde / r.migrados) * 100) : TRACO}</td>
+                {MOMENTOS.filter(m => m !== 'recusou' || grupos.por[m] > 0).map(m => (
+                  <tr key={m}>
+                    <td><Link href={`${base}/clientes?momento=${m}`} className="link font-medium">{MOMENTO_GRUPO[m]}</Link></td>
+                    <td className={cn('num', m === 'risco' && grupos.por[m] > 0 && 'text-warn', !grupos.por[m] && 'subtle')}>{n0(grupos.por[m])}</td>
+                    <td className="num">{grupos.total ? fmtPct((grupos.por[m] / grupos.total) * 100) : TRACO}</td>
+                    <td className="muted col-p2">{m === 'risco' && grupos.por.risco > 0 ? `${fmtNum(grupos.emQueda)} em queda · ${fmtNum(grupos.pararam)} ${grupos.pararam === 1 ? 'parou' : 'pararam'}` : MOMENTO_RESUMO[m]}</td>
                   </tr>
                 ))}
-                <tr className="total"><td>Migrados</td><td className="num">{fmtNum(r.migrados)}</td><td className="num">100,0%</td></tr>
+                <tr className="total"><td>Todos</td><td className="num">{fmtNum(grupos.total)}</td><td className="num">100,0%</td><td className="col-p2">{fmtNum(grupos.giraram)} giraram em {mesCurto(mesRef)}</td></tr>
               </tbody>
             </table>
           </div>
@@ -146,38 +148,39 @@ export async function AbaClientes({ ctx }: { ctx: Contexto }) {
           action={<Link href={`${base}/clientes?momento=risco`} className="link text-label">ver todos ({fmtNum(totalRisco)})</Link>}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
-              <thead><tr><th>Cliente</th><th>Nível</th><th className="col-p2">Responsável</th><th>Risco</th><th className="num">Lotes mês</th><th className="num col-p2">Média 3 m</th><th className="num col-p3">Receita 12 m</th><th>Último giro</th></tr></thead>
+              <thead><tr><th>Cliente</th><th>Como está</th><th className="col-p2">Nível</th><th className="col-p2">Responsável</th><th className="num col-p2">Lotes mês</th><th className="num col-p2">Média 3 m</th><th className="num col-p3">Receita 12 m</th><th className="num col-p2">Último giro</th></tr></thead>
               <tbody>
                 {risco.length === 0 && <LinhaVazia colunas={8}>Nenhum cliente em risco.</LinhaVazia>}
                 {risco.map(c => (
                   <tr key={c.cliente_id}>
-                    <td className="max-w-[200px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link></td>
-                    <td><NivelMarca nivel={c.nivel} media={c.lotes_media_3m} /></td>
+                    <td className="max-w-[170px] truncate md:max-w-[200px]"><Link href={`${base}/clientes/${c.cliente_id}`} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link></td>
+                    {/* o mesmo selo da lista de Clientes: "Em queda" ou "Parou há N dias" */}
+                    <td className="whitespace-nowrap"><MomentoBadge cliente={{ situacao: '', risco: c.risco, dias_sem_giro: c.dias_sem_giro }} /></td>
+                    <td className="col-p2"><NivelMarca nivel={c.nivel} media={c.lotes_media_3m} /></td>
                     <td className="muted col-p2">{c.responsavel ?? TRACO}</td>
-                    <td><RiscoTexto risco={c.risco} diasSemGiro={c.dias_sem_giro} /></td>
-                    <td className={cn('num', !c.lotes_mes && 'subtle')}>{n0(c.lotes_mes)}</td>
+                    <td className={cn('num col-p2', !c.lotes_mes && 'subtle')}>{n0(c.lotes_mes)}</td>
                     <td className="num col-p2">{n0(Math.round(c.lotes_media_3m))}</td>
                     <td className="num col-p3">{r0(c.receita_12m)}</td>
-                    <td className="num">{dataCurta(c.ultimo_giro)}</td>
+                    <td className="num col-p2">{dataCurta(c.ultimo_giro)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </Panel>
-        <Panel title="Migrados sem giro" subtitle="Priorizar contato · migrações mais recentes primeiro."
-          action={<Link href={`${base}/clientes?momento=nunca`} className="link text-label">ver todos ({fmtNum(r.nunca_giraram)})</Link>}>
+        <Panel title="Nunca operaram" subtitle="Migraram e ainda não giraram: priorizar contato · migrações mais recentes primeiro."
+          action={<Link href={`${base}/clientes?momento=nunca`} className="link text-label">ver todos ({fmtNum(grupos.por.nunca)})</Link>}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
-              <thead><tr><th>Cliente</th><th className="col-p2">Responsável</th><th>Migração</th><th className="num">Telefone</th></tr></thead>
+              <thead><tr><th>Cliente</th><th className="col-p2">Responsável</th><th className="num col-p2">Migrou em</th><th className="num">Telefone</th></tr></thead>
               <tbody>
-                {semGiro.length === 0 && <LinhaVazia colunas={4}>Nenhum migrado sem giro.</LinhaVazia>}
+                {semGiro.length === 0 && <LinhaVazia colunas={4}>Ninguém migrou sem operar.</LinhaVazia>}
                 {semGiro.map(c => (
                   <tr key={c.cliente_id}>
-                    <td className="max-w-[200px] truncate"><Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link></td>
+                    <td className="max-w-[170px] truncate md:max-w-[200px]"><Link href={`${base}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link></td>
                     <td className="muted col-p2">{c.responsavel ?? TRACO}</td>
-                    <td className="num">{dataCurta(c.data_migracao)}</td>
-                    <td className="num">{c.telefone ?? TRACO}</td>
+                    <td className="num col-p2">{dataCurta(c.data_migracao)}</td>
+                    <td className="num whitespace-nowrap">{telefoneCurto(c.telefone) ?? TRACO}</td>
                   </tr>
                 ))}
               </tbody>

@@ -115,7 +115,7 @@ export default async function DashboardPage() {
   const atencao: Atencao[] = [
     { rotulo: 'Leads em aberto que pedem contato', itens: comAlerta ? [{ texto: `${fmtNum(comAlerta)} de ${fmtNum(leads.abertos)} em aberto`, href: '/leads' }] : [] },
     { rotulo: 'Clientes em risco de parar', itens: porCorretoraCom(l => l.emRisco, s => `/${s}/clientes?momento=risco`) },
-    { rotulo: 'Migrados que nunca giraram', itens: porCorretoraCom(l => l.nuncaGiraram, s => `/${s}/oportunidades`) },
+    { rotulo: 'Clientes que nunca operaram', itens: porCorretoraCom(l => l.nuncaGiraram, s => `/${s}/oportunidades`) },
     { rotulo: 'Lançamentos sem cliente cadastrado', itens: admin ? porCorretoraCom(l => l.pendencias, s => `/${s}/importar#nao-cadastrados`, ' linhas') : [] },
   ].filter(a => a.itens.length > 0)
 

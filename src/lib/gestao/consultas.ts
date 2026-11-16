@@ -8,6 +8,7 @@ import { diarioPelaLista, type ContatoClienteLeve, type ContatoLeve, type LeadLe
 import { equipe, equipeLeads, falha, linhas, num, str, type Admin } from './guard'
 import { porAssessor, porResponsavel, resumoClientes, type GrupoClientes } from './derivados'
 import { grupoCorretagem, nivel as nivelDe, nivelPelaMedia, risco as riscoDe } from './tipos'
+import { contarPorMomento, type ClienteDoMomento, type ContagemDaBase } from './momentoCliente'
 import { casaBusca, contaCasa, digitosTelefone, indexarBusca, lerBusca, regexDoTexto } from '@/lib/busca'
 import { mesmaPessoa, normTexto } from '@/lib/texto'
 import type { ClienteEncontrado, GanhoDia } from './tipos'
@@ -82,6 +83,22 @@ export const mapCliente = (r: Row): ClienteRow => ({
 export async function clientesLista(corretora: Corretora, mesRef: string | null): Promise<ClienteRow[]> {
   const { db } = await equipe()
   return linhas(await rpc(db, 'clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef }), mapCliente)
+}
+
+// Como a base se divide nos grupos da tela Clientes (Operando, Em risco, Inativos, Nunca operaram, Em
+// abertura, Recusaram). Lê só a situação e o risco de cada cliente (a mesma função da lista, com duas
+// colunas), para o Painel mostrar os mesmos números dos cartões sem carregar a lista inteira.
+export async function gruposDaBase(corretora: Corretora, mesRef: string | null): Promise<ContagemDaBase> {
+  const { db } = await equipe()
+  const clientes: ClienteDoMomento[] = []
+  for (let offset = 0; ; offset += PAGINA) {
+    const { data, error } = await db.rpc('clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef }).select('situacao, risco').range(offset, offset + PAGINA - 1)
+    if (error) falha(error, 'clientes_lista')
+    const rows = (data ?? []) as Row[]
+    for (const r of rows) clientes.push({ situacao: str(r.situacao) ?? 'Em processamento', risco: riscoDe(r.risco) })
+    if (rows.length < PAGINA) break
+  }
+  return contarPorMomento(clientes)
 }
 
 // Contas do cliente no mês de referência; antes da S37 a função não tem p_mes_ref

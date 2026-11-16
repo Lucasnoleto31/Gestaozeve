@@ -84,9 +84,9 @@ export const CAMPOS_CLIENTE_LINHA = [
 export type ClienteLinha = Pick<ClienteRow, (typeof CAMPOS_CLIENTE_LINHA)[number]>
 // Idem para a tabela da tela Receita
 export const CAMPOS_RECEITA_LINHA = [
-  'cliente_id', 'nome', 'status', 'situacao', 'responsavel', 'tarifa', 'data_migracao', 'lotes_mes', 'zerados_mes', 'receita_mes',
+  'cliente_id', 'nome', 'situacao', 'responsavel', 'tarifa', 'data_migracao', 'lotes_mes', 'zerados_mes', 'receita_mes',
   'receita_corretagem_mes', 'receita_zeragem_mes', 'lotes_12m', 'receita_12m', 'ultimo_mes_giro', 'meses_sem_giro',
-  'receita_total', 'meses_ativos', 'risco', 'nivel', 'lotes_media_3m',
+  'receita_total', 'meses_ativos', 'risco', 'dias_sem_giro', 'nivel', 'lotes_media_3m',
 ] as const satisfies readonly (keyof ClienteRow)[]
 export type ReceitaLinha = Pick<ClienteRow, (typeof CAMPOS_RECEITA_LINHA)[number]>
 

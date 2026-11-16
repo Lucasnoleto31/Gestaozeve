@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MOMENTOS, MOMENTO_EXPLICA, MOMENTO_GRUPO, MOMENTO_RESUMO, dicaDoMomento, momentoDoCliente, rotuloMomento, tomDoMomento, type ClienteDoMomento } from './momentoCliente'
+import { MOMENTOS, MOMENTO_EXPLICA, MOMENTO_GRUPO, MOMENTO_RESUMO, contarPorMomento, dicaDoMomento, momentoDoCliente, rotuloMomento, somarPorMomento, tomDoMomento, type ClienteDoMomento } from './momentoCliente'
 
 const c = (p: Partial<ClienteDoMomento> = {}): ClienteDoMomento => ({ situacao: 'Ativo', risco: null, dias_sem_giro: null, meses_sem_giro: null, ...p })
 
@@ -44,6 +44,31 @@ describe('rotuloMomento e tomDoMomento', () => {
     expect(dicaDoMomento(c())).toBe(MOMENTO_EXPLICA.operando)
     expect(dicaDoMomento(c({ risco: 'parou' }))).toContain('sem giro há dias')
     expect(dicaDoMomento(c({ risco: 'em queda' }))).toContain('abaixo da média')
+  })
+})
+
+describe('a base por grupo', () => {
+  const base = [
+    c(), c(), c({ risco: 'em queda' }),                                              // 3 ativos: 2 operando, 1 em queda
+    c({ situacao: 'Inativo', risco: 'parou', dias_sem_giro: 15 }), c({ situacao: 'Inativo' }),   // 2 inativos: 1 parou há pouco
+    c({ situacao: 'Nunca girou' }), c({ situacao: 'Em processamento' }),
+  ]
+  it('conta cada cliente em um grupo só; os grupos somam a base', () => {
+    const n = contarPorMomento(base)
+    expect(n).toEqual({ total: 7, por: { operando: 2, risco: 2, inativo: 1, nunca: 1, abertura: 1, recusou: 0 }, pararam: 1, emQueda: 1, giraram: 3 })
+    expect(Object.values(n.por).reduce((s, x) => s + x, 0)).toBe(n.total)
+    expect(contarPorMomento([])).toEqual({ total: 0, por: { operando: 0, risco: 0, inativo: 0, nunca: 0, abertura: 0, recusou: 0 }, pararam: 0, emQueda: 0, giraram: 0 })
+  })
+  it('soma lotes e receita por grupo, só dos grupos que têm alguém, na ordem da tela', () => {
+    const com = (p: Partial<ClienteDoMomento>, lotes: number, receita: number, mes: number) => ({ ...c(p), lotes_12m: lotes, receita_12m: receita, receita_mes: mes })
+    const soma = somarPorMomento([
+      com({ situacao: 'Nunca girou' }, 0, 0, 0), com({}, 100, 30, 5), com({ risco: 'parou' }, 50, 12, 0), com({}, 200, 60, 10), com({ situacao: 'Inativo', risco: 'parou' }, 10, 3, 0),
+    ])
+    expect(soma).toEqual([
+      { momento: 'operando', clientes: 2, lotes12m: 300, receita12m: 90, receitaMes: 15 },
+      { momento: 'risco', clientes: 2, lotes12m: 60, receita12m: 15, receitaMes: 0 },
+      { momento: 'nunca', clientes: 1, lotes12m: 0, receita12m: 0, receitaMes: 0 },
+    ])
   })
 })
 

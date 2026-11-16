@@ -92,15 +92,6 @@ export function situacaoMigrados(rows: ClienteRow[]) {
   }
 }
 
-// Por situação (aba Receita): clientes, lotes 12m, receita 12m
-export function porSituacao(rows: ClienteRow[]) {
-  const ordem: Situacao[] = ['Ativo', 'Inativo', 'Nunca girou', 'Em processamento', 'Recusou']
-  return ordem.map(s => {
-    const do_ = rows.filter(r => r.situacao === s)
-    return { situacao: s, clientes: do_.length, lotes12m: do_.reduce((a, r) => a + r.lotes_12m, 0), receita12m: do_.reduce((a, r) => a + r.receita_12m, 0), receitaMes: do_.reduce((a, r) => a + r.receita_mes, 0) }
-  }).filter(l => l.clientes > 0)
-}
-
 export function mediana(valores: number[]): number {
   if (!valores.length) return 0
   const v = [...valores].sort((a, b) => a - b)

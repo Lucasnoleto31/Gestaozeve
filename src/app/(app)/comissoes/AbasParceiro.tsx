@@ -2,6 +2,8 @@
 // (o que as contas dele renderam ao escritório, comparado com a comissão).
 import Link from 'next/link'
 import { comissaoCarteiraMes, comissaoContasMes, comissaoItens, comissaoMensal, comissaoPagamentos, comissaoRegras } from '@/lib/gestao/consultas'
+import type { RegrasCorretora } from '@/lib/gestao/consultasParticipacao'
+import { textoDaRegra } from '@/lib/gestao/participacao'
 import { linhasPlanilha, nomeArquivoExtrato, totaisExtrato } from '@/lib/gestao/extrato'
 import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import { CORRETORA_LABEL, CORRETORA_SLUG, isCorretora } from '@/lib/corretoras'
@@ -47,25 +49,40 @@ export async function AbaExtrato({ parceiro, corretora, mesRef }: FiltroAba) {
 }
 
 // ── Pagamentos e regras ──────────────────────────────────────────────────────
-export async function AbaPagamentos({ parceiro, admin }: { parceiro: string; admin: boolean }) {
+// receita = regras de participação em corretagem, zeragem e incentivo do parceiro (parceiros_receita), por
+// corretora. Quem só recebe assim não tem regra por conta: o bloco de regras de abertura e ativação some.
+export async function AbaPagamentos({ parceiro, admin, comissionado = true, receita = [] }: { parceiro: string; admin: boolean; comissionado?: boolean; receita?: RegrasCorretora[] }) {
   const [pagamentos, regras] = await Promise.all([comissaoPagamentos(parceiro), comissaoRegras(parceiro)])
   const prazo = regras[0]?.prazo_ativacao_dias ?? 60
   const mesesReativacao = regras[0]?.reativacao_meses ?? 4
+  const porConta = comissionado || regras.length > 0 || receita.length === 0
   return (
     <>
-      <div className="grid gap-8 xl:grid-cols-2">
+      <div className={cn('grid gap-8', porConta && 'xl:grid-cols-2')}>
         <PagamentosComissao parceiro={parceiro} pagamentos={pagamentos} admin={admin} />
-        <RegrasComissao parceiro={parceiro} regras={regras} admin={admin} />
+        {porConta && <RegrasComissao parceiro={parceiro} regras={regras} admin={admin} />}
       </div>
-      <Panel title="Como a comissão é calculada">
-        <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
-          <li><span className="text-fg">Abertura</span>: conta migrada na corretora.</li>
-          <li><span className="text-fg">Ativação</span>: primeira operação em até {prazo} dias da abertura.</li>
-          <li><span className="text-fg">Reativação</span>: cliente da carteira que volta a operar depois de {mesesReativacao} meses sem girar (vale como ativação).</li>
-          <li>O valor por conta segue a faixa alcançada no mês, pela regra vigente na data do evento.</li>
-          <li>Conta atribuída na campanha de ativação não gera abertura: só ativação e reativação.</li>
-        </ul>
-      </Panel>
+      {receita.length > 0 && (
+        <Panel title="Regra de participação na receita" subtitle={`O que ${parceiro} recebe sobre o que os clientes dele geram. O valor de cada mês está na aba Resumo.`}>
+          <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
+            {receita.flatMap(r => r.regras.map(x => (
+              <li key={`${r.corretora}:${x.desde}`}><span className="text-fg">{CORRETORA_LABEL[r.corretora]}, desde {mesLongo(x.desde)}</span>: {textoDaRegra(x)} dos clientes dos códigos de assessor ligados a ele.</li>
+            )))}
+            <li>Os percentuais ficam nos Parâmetros da corretora (Parceiros com participação na receita) e o código do parceiro, em Parâmetros › Assessores, coluna Parceiro.</li>
+          </ul>
+        </Panel>
+      )}
+      {porConta && (
+        <Panel title="Como a comissão é calculada">
+          <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
+            <li><span className="text-fg">Abertura</span>: conta migrada na corretora.</li>
+            <li><span className="text-fg">Ativação</span>: primeira operação em até {prazo} dias da abertura.</li>
+            <li><span className="text-fg">Reativação</span>: cliente da carteira que volta a operar depois de {mesesReativacao} meses sem girar (vale como ativação).</li>
+            <li>O valor por conta segue a faixa alcançada no mês, pela regra vigente na data do evento.</li>
+            <li>Conta atribuída na campanha de ativação não gera abertura: só ativação e reativação.</li>
+          </ul>
+        </Panel>
+      )}
     </>
   )
 }

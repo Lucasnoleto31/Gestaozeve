@@ -12,6 +12,10 @@ import {
   excluirAssessor, excluirConsolidado, excluirFaixa, excluirMultiplicador, excluirResponsavel, excluirStatusConta, excluirStatusLead,
   recalcularTudo, salvarAssessor, salvarConsolidado, salvarFaixa, salvarMultiplicador, salvarParametro, salvarResponsavel, salvarStatusConta, salvarStatusLead,
 } from '@/lib/gestao/acoes'
+import { salvarParceirosReceita } from '@/lib/gestao/acoesParticipacao'
+import { CHAVE_PARCEIROS_RECEITA, lerParceirosReceita, nomesComRegra, textoDaRegra } from '@/lib/gestao/participacao'
+import { mesLongo } from '@/lib/gestao/meses'
+import { normTexto } from '@/lib/texto'
 import type { parametrosDaCorretora } from '@/lib/gestao/consultas'
 import type { AssessorParam, Resultado } from '@/lib/gestao/tipos'
 import type { Corretora } from '@/lib/corretoras'
@@ -42,14 +46,24 @@ function useAcao() {
 }
 
 export function Parametros({ corretora, label, dados }: { corretora: Corretora; label: string; dados: Dados }) {
+  // Quem pode ser o parceiro de um assessor: os comissionados e quem tem participação na receita desta corretora
+  const regrasReceita = dados.parametros.find(p => p.chave === CHAVE_PARCEIROS_RECEITA)?.valor ?? ''
+  const comissionados = dados.responsaveis.filter(r => r.ativo && r.comissionado).map(r => r.nome)
+  const comReceita = nomesComRegra(lerParceirosReceita(regrasReceita)).filter(n => !comissionados.some(c => normTexto(c) === normTexto(n)))
   return (
     <div className="space-y-8">
       <div className="grid gap-5 xl:grid-cols-2">
         <SecaoGerais corretora={corretora} label={label} parametros={dados.parametros} gerais={dados.gerais} />
-        <SecaoManutencao corretora={corretora} />
+        {corretora === 'BTG' ? <SecaoManutencao corretora={corretora} /> : (
+          // no BTG a participação de parceiro segue a cadeia do repasse (cartão Repasse, mais abaixo)
+          <div className="space-y-5">
+            <SecaoManutencao corretora={corretora} />
+            <SecaoParceirosReceita key={regrasReceita} corretora={corretora} label={label} valor={regrasReceita} />
+          </div>
+        )}
         {corretora === 'BTG' && <SecaoBtg corretora={corretora} label={label} parametros={dados.parametros} />}
       </div>
-      <SecaoAssessores corretora={corretora} assessores={dados.assessores} naoCadastrados={dados.assessoresNaoCadastrados} responsaveis={dados.responsaveis.filter(r => r.ativo && r.atende_clientes).map(r => r.nome)} parceiros={dados.responsaveis.filter(r => r.ativo && r.comissionado).map(r => r.nome)} />
+      <SecaoAssessores corretora={corretora} assessores={dados.assessores} naoCadastrados={dados.assessoresNaoCadastrados} responsaveis={dados.responsaveis.filter(r => r.ativo && r.atende_clientes).map(r => r.nome)} parceiros={[...comissionados, ...comReceita]} />
       <div className="grid gap-5 xl:grid-cols-2">
         <SecaoStatusConta corretora={corretora} mapa={dados.statusConta} naoMapeadas={dados.situacoesNaoMapeadas} />
         <SecaoConsolidados corretora={corretora} itens={dados.consolidados} />
@@ -106,6 +120,43 @@ function CampoParametro({ label, valor, tipo, onSalvar }: { label: string; valor
       </label>
       <Button size="sm" variant={mudou ? 'primary' : 'secondary'} disabled={!mudou} loading={salvando} onClick={async () => { setSalvando(true); await onSalvar(v); setSalvando(false) }}>Salvar</Button>
     </div>
+  )
+}
+
+// ── Parceiros com participação na receita (corretagem, zeragem e incentivo) ──
+// Depois de salvar, o campo mostra o texto como ficou gravado (a ação devolve a forma canônica); o cartão
+// também remonta quando o valor gravado muda (key no pai)
+function SecaoParceirosReceita({ corretora, label, valor }: { corretora: Corretora; label: string; valor: string }) {
+  const { erro, rodar } = useAcao()
+  const [v, setV] = useState(valor)
+  const [salvando, setSalvando] = useState(false)
+  const regras = lerParceirosReceita(valor)
+  const mudou = v !== valor
+  const salvar = async () => {
+    setSalvando(true)
+    await rodar(async () => { const r = await salvarParceirosReceita(corretora, v); if (r.ok) setV(r.dados.valor); return r }, undefined, 'Regra salva')
+    setSalvando(false)
+  }
+  return (
+    <Panel variant="card" title={`Parceiros com participação na receita · ${label}`} subtitle="Parceiro que recebe uma parte da corretagem, da zeragem e do incentivo dos clientes dele. O valor de cada mês aparece em Comissões.">
+      {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
+      <div className="flex items-end gap-2">
+        <label className="flex-1">
+          <span className="label block">Regras — &quot;nome:% da corretagem:% da zeragem:% do incentivo:desde AAAA-MM&quot; separadas por ; (ex.: Fabio PTAX:100:100:50:2026-11). Vazio = ninguém</span>
+          <input className="field-sm mt-1 w-full" value={v} onChange={e => setV(e.target.value)} />
+        </label>
+        <Button size="sm" variant={mudou ? 'primary' : 'secondary'} disabled={!mudou} loading={salvando} onClick={salvar}>Salvar</Button>
+      </div>
+      {regras.length > 0 && (
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-label text-fg-muted">
+          {regras.map(r => <li key={`${r.nome}:${r.desde}`}><span className="text-fg">{r.nome}</span>, desde {mesLongo(r.desde)}: {textoDaRegra(r)}.</li>)}
+        </ul>
+      )}
+      <p className="mt-3 text-label text-fg-subtle">
+        Os clientes do parceiro são os dos assessores com o nome dele na coluna Parceiro (seção Assessores, abaixo). Corretagem e zeragem são as do sistema,
+        antes do repasse da corretora e de impostos: para repassar só uma parte, use um percentual menor. Para mudar os percentuais a partir de um mês, acrescente outra regra do mesmo parceiro com o novo início.
+      </p>
+    </Panel>
   )
 }
 
@@ -197,8 +248,10 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis, 
         </select>
       </td>
       <td className="col-p2">
-        <select className="field-sm" value={form?.parceiro ?? ''} onChange={e => form && setForm({ ...form, parceiro: e.target.value })} aria-label="Parceiro comissionado" title="Os clientes deste assessor contam na comissão do parceiro">
+        <select className="field-sm" value={form?.parceiro ?? ''} onChange={e => form && setForm({ ...form, parceiro: e.target.value })} aria-label="Parceiro" title="Os clientes deste assessor contam na comissão ou na participação na receita do parceiro">
           <option value="">—</option>{parceiros.map(p => <option key={p}>{p}</option>)}
+          {/* parceiro já gravado que saiu da lista: continua escolhido até alguém trocar */}
+          {form?.parceiro && !parceiros.includes(form.parceiro) && <option>{form.parceiro}</option>}
         </select>
       </td>
       <td className="col-p3"><input type="checkbox" checked={form?.ativo ?? true} onChange={e => form && setForm({ ...form, ativo: e.target.checked })} aria-label="Ativo" /></td>
@@ -210,7 +263,7 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis, 
   )
 
   return (
-    <Panel title="Assessores" subtitle="Corretagem em R$ por lote operado. Zeragem padrão usa o ZeragemRS; fixa usa o valor do assessor. O responsável é herdado pelos clientes do assessor; o parceiro recebe a comissão de abertura e ativação dos clientes dele."
+    <Panel title="Assessores" subtitle="Corretagem em R$ por lote operado. Zeragem padrão usa o ZeragemRS; fixa usa o valor do assessor. O responsável é herdado pelos clientes do assessor; o parceiro recebe a comissão de abertura e ativação dos clientes dele ou, se tiver participação na receita, a parte dele no que esses clientes geram."
       action={<Button size="sm" onClick={() => setForm(formVazio())} disabled={!!form}><Plus className="h-4 w-4" aria-hidden />Assessor</Button>}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       {naoCadastrados.length > 0 && (

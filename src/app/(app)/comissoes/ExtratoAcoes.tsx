@@ -9,7 +9,7 @@ import { buttonClasses } from '@/components/ui/buttonStyles'
 import { useToast } from '@/components/ui/Toast'
 import type { Celula } from '@/lib/gestao/extrato'
 
-export function ExtratoAcoes({ matriz, nomeArquivo, hrefImpressao }: { matriz: Celula[][]; nomeArquivo: string; hrefImpressao: string }) {
+export function ExtratoAcoes({ matriz, nomeArquivo, hrefImpressao, aba = 'Extrato' }: { matriz: Celula[][]; nomeArquivo: string; hrefImpressao: string; aba?: string }) {
   const { avisar } = useToast()
   const [gerando, setGerando] = useState(false)
   const baixar = async () => {
@@ -19,7 +19,7 @@ export function ExtratoAcoes({ matriz, nomeArquivo, hrefImpressao }: { matriz: C
       const ws = XLSX.utils.aoa_to_sheet(matriz)
       ws['!cols'] = (matriz[0] ?? []).map((_, i) => ({ wch: i === 0 ? 36 : 16 }))
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Extrato')
+      XLSX.utils.book_append_sheet(wb, ws, aba)
       XLSX.writeFile(wb, nomeArquivo)
       avisar({ titulo: 'Planilha gerada', detalhe: nomeArquivo, tom: 'gain' })
     } catch (e) {

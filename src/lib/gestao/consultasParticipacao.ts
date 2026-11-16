@@ -11,9 +11,10 @@ import { equipe, falha, num, str } from './guard'
 import { comissaoCarteiraMes, comissaoMensal, incentivoMes, painelMensal, todasAsLinhas, ultimaData } from './consultas'
 import { calcularRepasse, configBtg, type ParceiroRepasse } from './btg'
 import {
-  CHAVE_PARCEIROS_RECEITA, lerParceirosReceita, medirLote, receitaDoMes, regraDoMes, regrasDoParceiro,
-  type LoteMedido, type MesReceita, type RegraReceita,
+  CHAVE_PARCEIROS_RECEITA, lerParceirosReceita, medirLote, receitaDoMes, regraDoMes, regrasDoParceiro, repassePorMes,
+  type LoteMedido, type MesReceita, type MesRepasseBtg, type RegraReceita,
 } from './participacao'
+import { mesAtual } from './meses'
 import type { Parametro } from './tipos'
 
 type Row = Record<string, unknown>
@@ -120,7 +121,13 @@ export type ParticipacaoBtg = {
   imposto: number
   parte: number              // o que vai para o parceiro
   clientes: { cliente_id: string; nome: string; lotes: number; receita: number; parte: number }[]   // quem gerou receita no mês
+  // contas dele que giraram no mês mas ainda não estão como migradas na ficha: a receita delas fica fora da
+  // conta (aqui e no Painel do BTG) até a situação da ficha ser corrigida
+  foraDaConta: { cliente_id: string; nome: string; situacao: string; receita: number }[]
 }
+
+// Situação da conta que entra na divisão: a mesma de comissao_mensal.receita_carteira (a fonte do Painel)
+const CONTA_QUE_CONTA = 'Migrado'
 
 // A parte de um parceiro no BTG num mês, com a mesma conta do Painel do BTG e da visão geral de Comissões
 // (calcularRepasse sobre a receita do mês); null quando ele não está em repasse_parceiros. A cadeia é
@@ -135,10 +142,56 @@ export async function participacaoBtg(parceiro: string, mesRef: string): Promise
   const r = calcularRepasse(receitaBtg, cfg, mesRef, { [regra.nome]: dele })
   const p = r.parceiros.find(x => x.nome === regra.nome)
   const comReceita = carteira.filter(c => c.receita_mes > 0)
-  const soma = comReceita.reduce((s, c) => s + c.receita_mes, 0)
+  const naConta = comReceita.filter(c => c.status === CONTA_QUE_CONTA)
+  const soma = naConta.reduce((s, c) => s + c.receita_mes, 0)
   return {
     regra, impostoPct: cfg.impostoPct, pctComissao: r.pctEfetivo, fechado: cfg.pctMes[mesRef.slice(0, 7)] != null, contas: carteira.length,
     receita: p?.receita ?? 0, comissao: p?.comissao ?? 0, imposto: p?.imposto ?? 0, parte: p?.parceiro ?? 0,
-    clientes: comReceita.map(c => ({ cliente_id: c.cliente_id, nome: c.nome, lotes: c.lotes_mes, receita: c.receita_mes, parte: soma > 0 ? Math.round(((p?.parceiro ?? 0) * c.receita_mes / soma) * 100) / 100 : 0 })),
+    clientes: naConta.map(c => ({ cliente_id: c.cliente_id, nome: c.nome, lotes: c.lotes_mes, receita: c.receita_mes, parte: soma > 0 ? Math.round(((p?.parceiro ?? 0) * c.receita_mes / soma) * 100) / 100 : 0 })),
+    foraDaConta: comReceita.filter(c => c.status !== CONTA_QUE_CONTA).map(c => ({ cliente_id: c.cliente_id, nome: c.nome, situacao: c.status, receita: c.receita_mes })),
   }
+}
+
+export type RepasseBtgDoParceiro = {
+  regra: ParceiroRepasse
+  impostoPct: number
+  meses: MesRepasseBtg[]   // os meses em que os clientes dele geraram receita no BTG, em ordem
+}
+
+const JANELA_REPASSE_BTG = 36   // meses para trás, a partir do mês corrente
+
+// Receita do BTG inteiro por mês ('AAAA-MM-01' → R$), na janela até `fim`: a base das faixas de comissão
+async function receitaMensalDoBtg(fim: string): Promise<Record<string, number>> {
+  const mensal = await painelMensal('BTG', fim, JANELA_REPASSE_BTG)
+  return Object.fromEntries(mensal.map(m => [m.mes_ref, m.receita]))
+}
+
+type ConfigDoBtg = Awaited<ReturnType<typeof configDoBtg>>
+
+async function livroBtgDoParceiro(cfg: ConfigDoBtg, regra: ParceiroRepasse, receitaBtg: Record<string, number>, fim: string, desde: string | null): Promise<RepasseBtgDoParceiro> {
+  const livro = await comissaoMensal(fim, JANELA_REPASSE_BTG, regra.nome, 'BTG')
+  const dele: Record<string, number> = {}
+  for (const l of livro) dele[l.mes_ref] = (dele[l.mes_ref] ?? 0) + l.receita_carteira
+  return { regra, impostoPct: cfg.impostoPct, meses: repassePorMes(cfg, regra.nome, receitaBtg, dele, desde) }
+}
+
+// A parte do parceiro na comissão do BTG mês a mês, até o mês corrente: é o que entra no "gerado" e no
+// saldo a pagar dele. `desde` ('AAAA-MM-01') limita o começo: quem também tem regra de participação na
+// receita (parceiros_receita) só conta o BTG a partir do início dessa regra.
+export async function repasseBtgMensal(parceiro: string, desde: string | null = null): Promise<RepasseBtgDoParceiro | null> {
+  const cfg = await configDoBtg()
+  const regra = cfg.parceiros.find(p => normTexto(p.nome) === normTexto(parceiro))
+  if (!regra) return null
+  const fim = mesAtual()
+  return livroBtgDoParceiro(cfg, regra, await receitaMensalDoBtg(fim), fim, desde)
+}
+
+// O mesmo para todos os parceiros do repasse de uma vez (visão geral de Comissões): a configuração e a
+// receita do BTG são lidas uma vez só. `desdeDe` devolve o primeiro mês que conta para cada parceiro.
+export async function repasseBtgDeTodos(desdeDe: (nome: string) => string | null = () => null): Promise<RepasseBtgDoParceiro[]> {
+  const cfg = await configDoBtg()
+  if (!cfg.parceiros.length) return []
+  const fim = mesAtual()
+  const receitaBtg = await receitaMensalDoBtg(fim)
+  return Promise.all(cfg.parceiros.map(p => livroBtgDoParceiro(cfg, p, receitaBtg, fim, desdeDe(p.nome))))
 }

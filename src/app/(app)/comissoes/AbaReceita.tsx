@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { comissaoPagamentos } from '@/lib/gestao/consultas'
-import { participacaoReceita, type RegrasCorretora } from '@/lib/gestao/consultasParticipacao'
+import { participacaoReceita, repasseBtgMensal, type RegrasCorretora } from '@/lib/gestao/consultasParticipacao'
 import { pctComum, planilhaReceita, resumirReceita, textoDaRegra, TOTAIS_VAZIOS } from '@/lib/gestao/participacao'
 import { nomeArquivoExtrato, rotuloCorretora } from '@/lib/gestao/extrato'
 import { mesAtual, mesCurto, mesLongo, parseMes, somarMeses } from '@/lib/gestao/meses'
@@ -21,8 +21,9 @@ import { fonteKpi, hrefComissoes, pagamentosDoFiltro, round2, type FiltroAba } f
 
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
-// extra = bloco que entra antes de "Como é calculado" (a parte do parceiro na comissão do BTG, quando ele tem)
-export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, extra }: FiltroAba & { regras: RegrasCorretora[]; admin: boolean; extra?: ReactNode }) {
+// btg = o parceiro também segue a divisão da comissão do BTG (repasse_parceiros): a parte dele lá, a partir
+// do início desta regra, soma no valor a receber e no saldo. extra = o bloco do BTG, antes de "Como é calculado".
+export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, btg = false, extra }: FiltroAba & { regras: RegrasCorretora[]; admin: boolean; btg?: boolean; extra?: ReactNode }) {
   const [livros, pagamentos] = await Promise.all([
     Promise.all(regras.map(r => participacaoReceita(r.corretora, r.regras, parceiro))),
     comissaoPagamentos(parceiro),
@@ -31,10 +32,17 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, e
   const res = resumirReceita(livros, mesRef)
   const t = res.mes
   const pago = visiveis.reduce((s, p) => s + p.valor, 0)
-  const saldo = round2(res.gerado - pago)
   const variasCorretoras = livros.length > 1
   const mes = mesCurto(mesRef)
   const inicio = livros.map(l => l.regras[0]?.desde).filter(Boolean).sort()[0] ?? mesRef
+  // a parte dele na comissão do BTG, mês a mês, desde o início da regra
+  const repasse = btg ? await repasseBtgMensal(parceiro, inicio) : null
+  const btgPorMes = new Map((repasse?.meses ?? []).map(m => [m.mes, m.parte]))
+  const btgMes = btgPorMes.get(mesRef) ?? 0
+  const geradoBtg = round2((repasse?.meses ?? []).reduce((s, m) => s + m.parte, 0))
+  const gerado = round2(res.gerado + geradoBtg)
+  const totalMes = round2(t.total + btgMes)
+  const saldo = round2(gerado - pago)
   const antesDoInicio = mesRef < inicio
   // mês corrente: os lotes vão até o último dia importado
   const corrente = mesRef === mesAtual()
@@ -76,13 +84,13 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, e
       )}
 
       <KpiRow cols={6}>
-        <KpiCard destaque label={`A receber de ${mes}`} value={fmtBRL2(t.total)} valueClassName={fonteKpi(fmtBRL2(t.total))}
-          sub={corrente ? (ultima ? `parcial · lotes até ${ddmm(ultima)}` : 'parcial · sem lotes no mês ainda') : 'corretagem, zeragem e incentivo'} />
+        <KpiCard destaque label={`A receber de ${mes}`} value={fmtBRL2(totalMes)} valueClassName={fonteKpi(fmtBRL2(totalMes))}
+          sub={`${corrente ? (ultima ? `parcial · lotes até ${ddmm(ultima)}` : 'parcial · sem lotes no mês ainda') : 'corretagem, zeragem e incentivo'}${btgMes > 0 ? ` · inclui ${fmtBRL2(btgMes)} do BTG` : ''}`} />
         <KpiCard label="Corretagem" value={fmtBRL2(t.parteCorretagem)} valueClassName={fonteKpi(fmtBRL2(t.parteCorretagem))} sub={`${de('pctCorretagem', t.corretagem)} · ${fmtNum(t.lotes)} lotes`} />
         <KpiCard label="Zeragem" value={fmtBRL2(t.parteZeragem)} valueClassName={fonteKpi(fmtBRL2(t.parteZeragem))} sub={`${de('pctZeragem', t.zeragem)} · ${fmtNum(t.zerados)} ${t.zerados === 1 ? 'contrato zerado' : 'contratos zerados'}`} />
         <KpiCard label="Incentivo" value={fmtBRL2(t.parteIncentivo)} valueClassName={fonteKpi(fmtBRL2(t.parteIncentivo))} sub={`${de('pctIncentivo', t.incentivo)} · ${fmtNum(t.comFaixa)} ${t.comFaixa === 1 ? 'cliente com faixa' : 'clientes com faixa'}`} />
         <KpiCard label="Saldo a pagar" value={fmtBRL2(saldo)} valueClassName={fonteKpi(fmtBRL2(saldo))} tone={saldo < 0 ? 'warn' : 'neutral'}
-          sub={saldo < 0 ? 'pago acima do gerado até hoje' : `gerado ${fmtBRL2(res.gerado)} menos pago ${fmtBRL2(pago)}`} />
+          sub={saldo < 0 ? 'pago acima do gerado até hoje' : `gerado ${fmtBRL2(gerado)} menos pago ${fmtBRL2(pago)}`} />
         <KpiCard label={`Giraram em ${mes}`} value={fmtNum(t.ativos)}
           sub={codigos.length ? `de ${fmtNum(clientesNosCodigos)} ${clientesNosCodigos === 1 ? 'cliente' : 'clientes'} com conta no código ${codigos.join(', ')}` : 'nenhum código ligado'} />
       </KpiRow>
@@ -106,14 +114,16 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, e
             <thead>
               <tr>
                 <th>Mês</th><th className="num col-p3">Giraram</th><th className="num col-p2">Lotes</th><th className="num col-p2">Corretagem</th><th className="num col-p2">Zeragem</th>
-                <th className="num col-p2">Incentivo</th><th className="num">A receber</th><th className="num">Pago</th><th className="num">Falta pagar</th>
+                <th className="num col-p2">Incentivo</th>{geradoBtg > 0 && <th className="num col-p2">BTG</th>}<th className="num">A receber</th><th className="num">Pago</th><th className="num">Falta pagar</th>
               </tr>
             </thead>
             <tbody>
               {[...janela].reverse().map(m => {
                 const x = porMes.get(m) ?? TOTAIS_VAZIOS
                 const pg = pagoPorMes.get(m) ?? 0
-                const falta = round2(x.total - pg)
+                const doBtg = btgPorMes.get(m) ?? 0
+                const total = round2(x.total + doBtg)
+                const falta = round2(total - pg)
                 return (
                   <tr key={m} className={cn(m === mesRef && 'bg-accent-soft')}>
                     <td className="font-medium"><Link href={hrefComissoes({ parceiro, corretora, mes: m })} className="link">{mesLongo(m)}</Link></td>
@@ -122,7 +132,8 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, e
                     <td className={cn('num col-p2', !x.parteCorretagem && 'subtle')}>{r0(x.parteCorretagem)}</td>
                     <td className={cn('num col-p2', !x.parteZeragem && 'subtle')}>{r0(x.parteZeragem)}</td>
                     <td className={cn('num col-p2', !x.parteIncentivo && 'subtle')}>{r0(x.parteIncentivo)}</td>
-                    <td className={cn('num font-medium', !x.total && 'subtle')}>{r0(x.total)}</td>
+                    {geradoBtg > 0 && <td className={cn('num col-p2', !doBtg && 'subtle')}>{r0(doBtg)}</td>}
+                    <td className={cn('num font-medium', !total && 'subtle')}>{r0(total)}</td>
                     <td className={cn('num', !pg && 'subtle')}>{r0(pg)}</td>
                     <td className={cn('num font-medium', falta < 0 ? 'text-warn' : !falta && 'subtle')} title={falta < 0 ? 'pago acima do valor do mês' : undefined}>{r0(falta)}</td>
                   </tr>
@@ -137,9 +148,10 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, e
                   <td className="num col-p2">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteCorretagem, 0)))}</td>
                   <td className="num col-p2">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteZeragem, 0)))}</td>
                   <td className="num col-p2">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteIncentivo, 0)))}</td>
-                  <td className="num">{r0(res.gerado)}</td>
+                  {geradoBtg > 0 && <td className="num col-p2">{r0(geradoBtg)}</td>}
+                  <td className="num">{r0(gerado)}</td>
                   <td className="num">{r0(pagoNaJanela)}</td>
-                  <td className={cn('num', res.gerado - pagoNaJanela < 0 && 'text-warn')}>{r0(round2(res.gerado - pagoNaJanela))}</td>
+                  <td className={cn('num', gerado - pagoNaJanela < 0 && 'text-warn')}>{r0(round2(gerado - pagoNaJanela))}</td>
                 </tr>
               </tfoot>
             )}

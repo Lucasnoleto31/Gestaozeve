@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  lerParceirosReceita, medirLote, nomesComRegra, planilhaReceita, receitaDoMes, regraDoMes, regrasDoParceiro, somarMeses, textoDaRegra, textoParceirosReceita,
+  lerParceirosReceita, medirLote, nomesComRegra, planilhaReceita, receitaDoMes, regraDoMes, regrasDoParceiro, repassePorMes, somarMeses, textoDaRegra, textoParceirosReceita,
   type LoteBruto, type RegraReceita,
 } from './participacao'
 
@@ -149,5 +149,29 @@ describe('totais e planilha', () => {
     expect(m[0][1]).toBe('Corretora')
     expect(m[1][1]).toBe('Genial')
     expect(m[3][1]).toBeNull()
+  })
+})
+
+describe('repassePorMes (participação na comissão do BTG)', () => {
+  // receita → ÷ (1 − 9,65 %) → − 6,65 % → comissão (% do fechamento ou faixas) → imposto 16,5 % → 50 % do parceiro
+  const CFG = {
+    faixas: [{ de: 0, pct: 75 }, { de: 100000, pct: 80 }], pctMes: { '2026-10': 80 }, parceiros: [{ nome: 'Atual Capital', pctParceiro: 50, pctEscritorio: 70 }],
+    impostosEmbutidosPct: 9.65, impostoBtgPct: 6.65, deltaPct: 30, impostoPct: 16.5, participacoes: [],
+  }
+  const total = { '2026-09-01': 20000, '2026-10-01': 22727.41, '2026-11-01': 18000 }
+  it('dá a parte do parceiro em cada mês com receita dos clientes dele, com o percentual do fechamento quando há', () => {
+    const meses = repassePorMes(CFG, 'Atual Capital', total, { '2026-10-01': 1107.35, '2026-11-01': 1707.4, '2026-09-01': 0 })
+    expect(meses.map(m => m.mes)).toEqual(['2026-10-01', '2026-11-01'])
+    expect(meses[0]).toMatchObject({ receita: 1107.35, comissao: 915.29, imposto: 151.02, parte: 382.14, pct: 80, fechado: true })
+    expect(meses[1]).toMatchObject({ receita: 1707.4, comissao: 1323.07, parte: 552.38, pct: 75, fechado: false })
+  })
+  it('só conta a partir do mês de início, quando informado', () => {
+    const meses = repassePorMes(CFG, 'Atual Capital', total, { '2026-10-01': 1107.35, '2026-11-01': 1707.4 }, '2026-11-01')
+    expect(meses.map(m => m.mes)).toEqual(['2026-11-01'])
+  })
+  it('parceiro que não está na configuração ou sem receita não gera mês', () => {
+    expect(repassePorMes(CFG, 'Outro', total, { '2026-10-01': 500 })).toEqual([])
+    expect(repassePorMes(CFG, 'Atual Capital', total, {})).toEqual([])
+    expect(repassePorMes(CFG, 'Atual Capital', {}, { '2026-10-01': 500 })).toEqual([])
   })
 })

@@ -12,7 +12,6 @@ import { parceirosDeComissao } from '@/lib/gestao/comissao'
 import { normTexto } from '@/lib/texto'
 import { mesAtual, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { CORRETORAS, CORRETORA_LABEL, corretorasDoPerfil, isCorretora } from '@/lib/corretoras'
-import { fmtNum } from '@/lib/format'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Alert } from '@/components/ui/Alert'
 import { MesPicker, SelectParam } from '@/components/gestao/Filtros'
@@ -20,7 +19,7 @@ import { Abas } from '@/components/gestao/Abas'
 import { VisaoGeral } from './VisaoGeral'
 import { AbaResumo } from './AbaResumo'
 import { AbaReceita } from './AbaReceita'
-import { ParticipacaoBtg } from './ParticipacaoBtg'
+import { AbaRepasseBtg, ParticipacaoBtg } from './ParticipacaoBtg'
 import { AbaCarteira, AbaExtrato, AbaPagamentos, AbaRetorno } from './AbasParceiro'
 import { hrefComissoes } from './comum'
 
@@ -86,7 +85,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
         <PageHeader eyebrow="Parceiros · todas as corretoras" title="Comissões" actions={filtros}
           description={`Quanto cada parceiro gerou em ${mesLongo(mesRef)}, o que já foi pago e o saldo a pagar.`} />
         <PageBody>
-          <VisaoGeral parceiros={parceiros} corretora={corretora} mesRef={mesRef} verBtg={verBtg} regras={regras} />
+          <VisaoGeral parceiros={parceiros} corretora={corretora} mesRef={mesRef} verBtg={verBtg} regras={regras} regrasTodas={regrasTodas} />
         </PageBody>
       </>
     )
@@ -97,55 +96,63 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   const receitaTodas = regrasDoParceiroPorCorretora(regrasTodas, parceiro)
   const receita = regrasDoParceiroPorCorretora(regras, parceiro)
   const temReceita = receitaTodas.length > 0
-  // quem só tem participação na comissão do BTG não tem valor por conta: abre no extrato. O Retorno (receita
-  // das contas menos a comissão por conta) não serve para quem recebe sobre a própria receita
-  const abas = temReceita && !parceiroSel.comissionado ? ABAS.filter(a => a.valor !== 'retorno') : ABAS
-  const padrao = parceiroSel.comissionado || temReceita ? 'resumo' : 'extrato'
+  // no BTG o parceiro pode seguir a divisão da comissão (repasse_parceiros): só ela (Atual Capital) ou junto
+  // com a participação na receita de outra corretora (Fabio Ferron)
+  const regraBtg = noBtg.find(r => normTexto(r.nome) === normTexto(parceiro)) ?? null
+  const mostraBtg = !!regraBtg && (!corretora || corretora === 'BTG')
+  const participa = temReceita || !!regraBtg
+  // o Retorno (receita das contas menos a comissão por conta) não serve para quem recebe sobre a própria receita
+  const abas = participa && !parceiroSel.comissionado ? ABAS.filter(a => a.valor !== 'retorno') : ABAS
+  const padrao = 'resumo'
   const pedida = q('aba')
   const aba = abas.some(a => a.valor === pedida) ? pedida : padrao
   const filtro = { parceiro, corretora, mesRef }
   const naCorretora = (c: string) => `na ${isCorretora(c) ? CORRETORA_LABEL[c] : c}`
   const descricaoReceita = receitaTodas.map(r => `${textoDaRegra(r.regras[r.regras.length - 1])} dos clientes dele ${naCorretora(r.corretora)}`).join('; ')
-  // no BTG o mesmo parceiro pode seguir a divisão da comissão (repasse_parceiros), como a Atual Capital
-  const regraBtg = noBtg.find(r => normTexto(r.nome) === normTexto(parceiro)) ?? null
-  const mostraBtg = !!regraBtg && (!corretora || corretora === 'BTG')
-  const blocoBtg = mostraBtg ? <ParticipacaoBtg parceiro={parceiro} mesRef={mesRef} /> : null
+  const descricaoBtg = regraBtg ? `${regraBtg.pctParceiro.toLocaleString('pt-BR')} % da comissão que o BTG paga sobre os clientes dele, depois do imposto` : ''
+  // quem também tem regra de participação na receita só conta o BTG a partir do início dela
+  const inicioReceita = receitaTodas.flatMap(r => r.regras.map(x => x.desde)).sort()[0] ?? null
+  const blocoBtg = mostraBtg ? <ParticipacaoBtg parceiro={parceiro} mesRef={mesRef} desde={inicioReceita} /> : null
 
   return (
     <>
       <PageHeader eyebrow="Comissões" title={parceiro} actions={filtros}
         description={temReceita
-          ? `Participação na receita: ${descricaoReceita}${regraBtg ? `; no BTG, ${regraBtg.pctParceiro.toLocaleString('pt-BR')} % da comissão sobre os clientes dele, depois do imposto` : ''}.${parceiroSel.comissionado ? ' Também recebe comissão por conta aberta e ativada.' : ''}`
-          : parceiroSel.comissionado
-            ? `Comissão por abertura, ativação e reativação de conta${corretora ? ` na ${CORRETORA_LABEL[corretora]}` : ''}, em ${mesLongo(mesRef)}.`
-            : `Participação na receita do BTG sobre ${fmtNum(parceiroSel.clientes)} ${parceiroSel.clientes === 1 ? 'cliente' : 'clientes'} dele: carteira e extrato; o valor do mês está na visão geral.`}>
+          ? `Participação na receita: ${descricaoReceita}${regraBtg ? `; no BTG, ${descricaoBtg}` : ''}.${parceiroSel.comissionado ? ' Também recebe comissão por conta aberta e ativada.' : ''}`
+          : regraBtg
+            ? `Participação na comissão do BTG: ${descricaoBtg}.${parceiroSel.comissionado ? ' Também recebe comissão por conta aberta e ativada.' : ''}`
+            : `Comissão por abertura, ativação e reativação de conta${corretora ? ` na ${CORRETORA_LABEL[corretora]}` : ''}, em ${mesLongo(mesRef)}.`}>
         <Link href={hrefComissoes({ corretora, mes: mesRef })} className="link mt-3 inline-flex items-center gap-1 text-label"><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Todos os parceiros</Link>
         <Abas caminho="/comissoes" query={{ parceiro, corretora, mes: mesRef.slice(0, 7) }} valor={aba} opcoes={abas} padrao={padrao} rotulo={`Seções de ${parceiro}`} />
       </PageHeader>
       <PageBody>
-        {aba === 'resumo' && temReceita && parceiroSel.comissionado && (
+        {aba === 'resumo' && participa && parceiroSel.comissionado && (
           <Alert tone="warn" title={`${parceiro} recebe comissão por conta e participação na receita`}>
             Os pagamentos lançados abatem dos dois saldos mostrados abaixo. O saldo certo é o da visão geral, que soma os dois valores gerados antes de descontar o que foi pago.
           </Alert>
         )}
-        {aba === 'resumo' && temReceita && (receita.length > 0
-          ? <AbaReceita {...filtro} regras={receita} admin={admin} extra={blocoBtg} />
-          : blocoBtg ? (
-            // filtro numa corretora em que ele só tem a divisão da comissão do BTG
-            <>
-              {blocoBtg}
+        {/* participação em corretagem, zeragem e incentivo (com a parte do BTG somada, quando ele também tem) */}
+        {aba === 'resumo' && receita.length > 0 && <AbaReceita {...filtro} regras={receita} admin={admin} btg={mostraBtg} extra={blocoBtg} />}
+        {/* só a participação na comissão do BTG: a Atual Capital sempre, ou outro parceiro com o filtro no BTG */}
+        {aba === 'resumo' && receita.length === 0 && mostraBtg && (
+          <>
+            <AbaRepasseBtg {...filtro} desde={inicioReceita} />
+            {temReceita && (
               <Alert tone="neutral" title={`O restante da participação de ${parceiro} vale ${receitaTodas.map(r => naCorretora(r.corretora)).join(' e ')}`}>
-                <Link href={hrefComissoes({ parceiro, mes: mesRef })} className="link">Ver sem o filtro de corretora</Link>, com o valor a receber, os pagamentos e o saldo.
+                <Link href={hrefComissoes({ parceiro, mes: mesRef })} className="link">Ver sem o filtro de corretora</Link>, com o valor a receber de todas as corretoras, os pagamentos e o saldo.
               </Alert>
-            </>
-          ) : (
-            <Alert tone="neutral" title={`${parceiro} não tem participação na receita ${corretora ? naCorretora(corretora) : 'nas suas corretoras'}`}>
-              A regra dele vale {receitaTodas.map(r => naCorretora(r.corretora)).join(' e ')}. <Link href={hrefComissoes({ parceiro, mes: mesRef })} className="link">Ver sem o filtro de corretora</Link>. A carteira e o extrato dele aqui ficam nas outras abas.
-            </Alert>
-          ))}
-        {aba === 'resumo' && (parceiroSel.comissionado || !temReceita) && <AbaResumo {...filtro} comissionado={parceiroSel.comissionado} participacao={parceiroSel.participacao} admin={admin} />}
+            )}
+          </>
+        )}
+        {/* filtro numa corretora em que o parceiro não tem participação */}
+        {aba === 'resumo' && participa && receita.length === 0 && !mostraBtg && (
+          <Alert tone="neutral" title={`${parceiro} não tem participação ${corretora ? naCorretora(corretora) : 'nas suas corretoras'}`}>
+            A participação dele vale {[...receitaTodas.map(r => naCorretora(r.corretora)), ...(regraBtg ? ['no BTG'] : [])].join(' e ')}. <Link href={hrefComissoes({ parceiro, mes: mesRef })} className="link">Ver sem o filtro de corretora</Link>. A carteira e o extrato dele aqui ficam nas outras abas.
+          </Alert>
+        )}
+        {aba === 'resumo' && parceiroSel.comissionado && <AbaResumo {...filtro} comissionado participacao={parceiroSel.participacao} admin={admin} />}
         {aba === 'extrato' && <AbaExtrato {...filtro} />}
-        {aba === 'pagamentos' && <AbaPagamentos parceiro={parceiro} admin={admin} comissionado={parceiroSel.comissionado} receita={receitaTodas} btg={temReceita ? regraBtg : null} />}
+        {aba === 'pagamentos' && <AbaPagamentos parceiro={parceiro} admin={admin} comissionado={parceiroSel.comissionado} receita={receitaTodas} btg={regraBtg} />}
         {aba === 'carteira' && <AbaCarteira {...filtro} />}
         {aba === 'retorno' && <AbaRetorno {...filtro} />}
       </PageBody>

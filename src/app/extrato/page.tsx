@@ -2,12 +2,12 @@ export const dynamic = 'force-dynamic'
 
 // Extrato mensal do parceiro para imprimir ou salvar em PDF (S48): página limpa, sempre clara e sem
 // a navegação do sistema. Abre a partir da tela Comissões (?parceiro=&mes=AAAA-MM&corretora=&receita=0).
-// Parceiro com participação na receita (parceiros_receita) ganha, antes da carteira, o que tem a receber
-// no mês e de quais clientes veio.
+// Parceiro com participação na receita (parceiros_receita) ou na comissão do BTG (repasse_parceiros) ganha,
+// antes da carteira, o que tem a receber no mês e de quais clientes veio.
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { comissaoCarteiraMes, parceirosLista } from '@/lib/gestao/consultas'
-import { participacaoReceita, regrasDoParceiroPorCorretora, regrasReceita } from '@/lib/gestao/consultasParticipacao'
+import { participacaoBtg, participacaoReceita, regrasDoParceiroPorCorretora, regrasReceita } from '@/lib/gestao/consultasParticipacao'
 import { pctComum, resumirReceita, textoDaRegra } from '@/lib/gestao/participacao'
 import { normTexto } from '@/lib/texto'
 import { mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
@@ -20,7 +20,7 @@ import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { rCurto } from '@/components/gestao/Celulas'
 import { TabelaExtrato } from '@/components/gestao/TabelaExtrato'
 import { TabelaReceitaParceiro } from '@/components/gestao/TabelaReceitaParceiro'
-import { ParticipacaoBtg } from '@/app/(app)/comissoes/ParticipacaoBtg'
+import { ParticipacaoBtg, btgNoPeriodo } from '@/app/(app)/comissoes/ParticipacaoBtg'
 import { BotaoImprimir } from './BotaoImprimir'
 
 export default async function ExtratoPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -40,12 +40,17 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
   const minhas = corretorasDoPerfil(profile)
   const regrasDele = comReceita ? regrasDoParceiroPorCorretora(await regrasReceita(minhas), parceiro) : []
   const regras = corretora ? regrasDele.filter(r => r.corretora === corretora) : regrasDele
-  // quem tem essa participação e também segue a divisão da comissão do BTG ganha o bloco do BTG (só quando há valor)
-  const comBtg = regrasDele.length > 0 && minhas.includes('BTG') && (!corretora || corretora === 'BTG')
-  const [linhas, livros] = await Promise.all([
+  // quem segue a divisão da comissão do BTG (só ela, como a Atual Capital, ou junto com a participação na
+  // receita) ganha o bloco do BTG: só no extrato com receita, só quando há valor no mês e, para quem tem
+  // regra de participação na receita, só do início dela em diante
+  const verBtg = comReceita && minhas.includes('BTG') && (!corretora || corretora === 'BTG')
+  const inicioDele = regrasDele.flatMap(r => r.regras.map(x => x.desde)).sort()[0] ?? null
+  const [linhas, livros, doBtg] = await Promise.all([
     comissaoCarteiraMes(parceiro, corretora, mesRef),
     Promise.all(regras.map(r => participacaoReceita(r.corretora, r.regras, parceiro))),
+    verBtg ? participacaoBtg(parceiro, mesRef) : Promise.resolve(null),
   ])
+  const comBtg = !!doBtg && btgNoPeriodo(doBtg, mesRef, inicioDele).receita > 0
   const t = totaisExtrato(linhas)
   const emitido = hojeBrasil().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   // o bloco só aparece do mês em que a regra começa em diante
@@ -90,10 +95,10 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
             </div>
           </section>
         )}
-        {comBtg && <div className="mt-8"><ParticipacaoBtg parceiro={parceiro} mesRef={mesRef} impressao /></div>}
+        {comBtg && <div className={part ? 'mt-8' : 'mt-6'}><ParticipacaoBtg parceiro={parceiro} mesRef={mesRef} impressao desde={inicioDele} dados={doBtg} /></div>}
         {(part || comBtg) && <h2 className="mt-8 text-section font-semibold">Carteira completa</h2>}
 
-        <KpiRow cols={comReceita ? 3 : 2} className={part ? 'mb-6 mt-3' : 'my-6'}>
+        <KpiRow cols={comReceita ? 3 : 2} className={part || comBtg ? 'mb-6 mt-3' : 'my-6'}>
           <KpiCard label="Contas na carteira" value={fmtNum(t.contas)} sub={`${fmtNum(t.giraram)} ${t.giraram === 1 ? 'girou' : 'giraram'} em ${mesCurto(mesRef)}`} />
           <KpiCard label={`Lotes em ${mesCurto(mesRef)}`} value={fmtNum(t.lotes_mes)} sub={`${fmtNum(t.lotes_12m)} nos 12 meses até ${mesCurto(mesRef)}`} />
           {comReceita && <KpiCard label={`Receita bruta em ${mesCurto(mesRef)}`} value={rCurto(t.receita_mes)} sub={`${rCurto(t.receita_12m)} nos 12 meses`} />}

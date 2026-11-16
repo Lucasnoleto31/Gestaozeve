@@ -12,7 +12,7 @@
 // repasse da corretora e de impostos; o incentivo é o da tela Incentivo (pontos do cliente → faixa).
 // Só funções puras (testes em participacao.test.ts); as leituras ficam em consultasParticipacao.ts.
 import { normTexto } from '@/lib/texto'
-import { numeroParam } from './btg'
+import { calcularRepasse, numeroParam, type ConfigRepasse } from './btg'
 import type { Celula } from './extrato'
 import type { IncentivoRow } from './tipos'
 
@@ -226,4 +226,31 @@ export function planilhaReceita(linhas: LinhaPlanilhaReceita[], comCorretora = f
   const t = somarReceita(linhas)
   const total: Celula[] = [`Total · ${linhas.length} ${linhas.length === 1 ? 'cliente' : 'clientes'}`, ...cor(null), t.lotes, t.zerados, t.corretagem, t.zeragem, null, t.incentivo, t.parteCorretagem, t.parteZeragem, t.parteIncentivo, t.total]
   return [cab, ...corpo, total]
+}
+
+// ── Participação na comissão do BTG, mês a mês ─────────────────────────────────
+// No BTG o parceiro (Atual Capital, Fabio Ferron) segue a cadeia do fechamento: a comissão que o BTG paga
+// sobre os clientes dele paga o imposto do escritório e ele leva a parte dele (parâmetro repasse_parceiros).
+// Aqui, o que isso dá em cada mês, para a página do parceiro em Comissões e para o saldo a pagar.
+export type MesRepasseBtg = {
+  mes: string
+  receita: number    // receita (corretagem e zeragem) dos clientes do parceiro no mês
+  comissao: number   // comissão do BTG sobre eles
+  imposto: number
+  parte: number      // o que vai para o parceiro, em centavos
+  pct: number        // % de comissão do BTG usado no mês
+  fechado: boolean   // o mês já tem o percentual do fechamento (senão é prévia pelas faixas)
+}
+
+// receitaBtg e receitaDoParceiro: 'AAAA-MM-01' → R$. Só entram os meses em que os clientes do parceiro
+// geraram receita, a partir de `desde` quando informado. A conta é a mesma do Painel (calcularRepasse).
+export function repassePorMes(cfg: ConfigRepasse, nome: string, receitaBtg: Record<string, number>, receitaDoParceiro: Record<string, number>, desde?: string | null): MesRepasseBtg[] {
+  return Object.keys(receitaDoParceiro).sort().flatMap(mes => {
+    const dele = receitaDoParceiro[mes] ?? 0
+    if (dele <= 0 || (desde && mes < desde)) return []
+    const r = calcularRepasse(receitaBtg[mes] ?? 0, cfg, mes, { [nome]: dele })
+    const p = r.parceiros.find(x => x.nome === nome)
+    if (!p) return []
+    return [{ mes, receita: round2(p.receita), comissao: round2(p.comissao), imposto: round2(p.imposto), parte: round2(p.parceiro), pct: r.pctEfetivo, fechado: cfg.pctMes?.[mes.slice(0, 7)] != null }]
+  })
 }

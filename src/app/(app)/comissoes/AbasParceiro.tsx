@@ -64,23 +64,24 @@ export async function AbaPagamentos({ parceiro, admin, comissionado = true, rece
   const [pagamentos, regras] = await Promise.all([comissaoPagamentos(parceiro), comissaoRegras(parceiro)])
   const prazo = regras[0]?.prazo_ativacao_dias ?? 60
   const mesesReativacao = regras[0]?.reativacao_meses ?? 4
-  const porConta = comissionado || regras.length > 0 || receita.length === 0
+  // regras por conta: para o comissionado, para quem já tem alguma e para quem não recebe de outro jeito
+  const porConta = comissionado || regras.length > 0 || (receita.length === 0 && !btg)
   return (
     <>
       <div className={cn('grid gap-8', porConta && 'xl:grid-cols-2')}>
         <PagamentosComissao parceiro={parceiro} pagamentos={pagamentos} admin={admin} />
         {porConta && <RegrasComissao parceiro={parceiro} regras={regras} admin={admin} />}
       </div>
-      {receita.length > 0 && (
-        <Panel title="Regra de participação na receita" subtitle={`O que ${parceiro} recebe sobre o que os clientes dele geram. O valor de cada mês está na aba Resumo.`}>
+      {(receita.length > 0 || btg) && (
+        <Panel title="Regra de participação" subtitle={`O que ${parceiro} recebe sobre o que os clientes dele geram. O valor de cada mês e o saldo estão na aba Resumo.`}>
           <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
             {receita.flatMap(r => r.regras.map(x => (
               <li key={`${r.corretora}:${x.desde}`}><span className="text-fg">{CORRETORA_LABEL[r.corretora]}, desde {mesLongo(x.desde)}</span>: {textoDaRegra(x)} dos clientes dos códigos de assessor ligados a ele.</li>
             )))}
             {btg && (
-              <li><span className="text-fg">BTG</span>: {btg.pctParceiro.toLocaleString('pt-BR')} % da comissão que o BTG paga sobre os clientes dele (corretagem e zeragem), depois do imposto; clientes dele são os que têm {parceiro} no campo Parceiro da ficha. O valor segue o fechamento mensal do BTG e não entra no saldo dos pagamentos acima.</li>
+              <li><span className="text-fg">BTG</span>: {btg.pctParceiro.toLocaleString('pt-BR')} % da comissão que o BTG paga sobre os clientes dele (corretagem e zeragem), depois do imposto; clientes dele são os que têm {parceiro} no campo Parceiro da ficha.</li>
             )}
-            <li>Os percentuais ficam nos Parâmetros da corretora (Parceiros com participação na receita{btg ? '; no BTG, em Repasse' : ''}) e o código do parceiro, em Parâmetros › Assessores, coluna Parceiro.</li>
+            <li>Onde mudar: {receita.length > 0 ? 'os percentuais ficam nos Parâmetros da corretora (Parceiros com participação na receita) e o código do parceiro, em Parâmetros › Assessores, coluna Parceiro' : ''}{receita.length > 0 && btg ? '; ' : ''}{btg ? 'a divisão do BTG fica em Parâmetros › BTG › Repasse' : ''}.</li>
           </ul>
         </Panel>
       )}

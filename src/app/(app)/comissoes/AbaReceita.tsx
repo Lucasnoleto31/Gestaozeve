@@ -1,6 +1,6 @@
 // Resumo de um parceiro com participação na receita (parâmetro parceiros_receita da corretora): quanto
 // ele tem a receber no mês, de quais clientes veio, o mês a mês e a regra. Lucas, 16/11/2026: Fabio PTAX
-// é a ZEVE INVESTIMENTOS 5 na Genial e recebe a corretagem, a zeragem e metade do incentivo dos clientes dele.
+// é a ZEVE INVESTIMENTOS 5 na Genial e recebe metade da corretagem, da zeragem e do incentivo dos clientes dele.
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { comissaoPagamentos } from '@/lib/gestao/consultas'

@@ -77,7 +77,13 @@ describe('medirLote', () => {
 })
 
 describe('receitaDoMes', () => {
-  it('o exemplo do Lucas: incentivo de R$ 200 vira R$ 100 para o parceiro, além da corretagem e da zeragem', () => {
+  it('a regra do Fabio PTAX: metade da corretagem, da zeragem e do incentivo (R$ 200 de incentivo viram R$ 100)', () => {
+    const lotes = [lote({ qtd: 1154, multiplicador: 2 }), lote({ zeragem: true, qtd: 10, zeragem_rs: 20.75 })].map(medirLote)
+    const m = receitaDoMes('2026-11-01', lotes, [inc('DOC:1', 2308, 200)], lerParceirosReceita('Fabio PTAX:50:50:50:2026-11')[0])
+    expect(m.clientes[0]).toMatchObject({ corretagem: 288.5, zeragem: 207.5, incentivo: 200, parteCorretagem: 144.25, parteZeragem: 103.75, parteIncentivo: 100, total: 348 })
+    expect(m).toMatchObject({ corretagem: 288.5, zeragem: 207.5, incentivo: 200, parteCorretagem: 144.25, parteZeragem: 103.75, parteIncentivo: 100, total: 348 })
+  })
+  it('regra de 100 % da corretagem e da zeragem e 50 % do incentivo', () => {
     const lotes = [lote({ qtd: 1154, multiplicador: 2 }), lote({ zeragem: true, qtd: 10, zeragem_rs: 20.75 })].map(medirLote)
     const m = receitaDoMes('2026-11-01', lotes, [inc('DOC:1', 2308, 200, { nome: 'Cliente Um', cliente_id: 'c1', faixa_min: 1000, pontos_faltantes: 2692 })], FABIO)
     expect(m.clientes).toHaveLength(1)

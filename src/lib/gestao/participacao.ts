@@ -1,5 +1,5 @@
 // Participação de um parceiro na receita dos clientes dele: corretagem, zeragem e incentivo.
-// Lucas, 16/11/2026: o parceiro Fabio PTAX é a ZEVE INVESTIMENTOS 5 na Genial; ele recebe metade da
+// Lucas, 16/11/2026: o parceiro Fabio Ferron é a ZEVE INVESTIMENTOS 5 na Genial; ele recebe metade da
 // corretagem, da zeragem e do incentivo que esses clientes geram ("GENIAL: CORRETAGEM 50% | ZERAGEM 50% |
 // INCENTIVO 50%"; "cliente gerou R$ 200 de incentivo: R$ 100 para ele, R$ 100 para nós").
 //
@@ -38,7 +38,7 @@ function mesDoTexto(t: string): string | null {
   return ano && Number(mes) >= 1 && Number(mes) <= 12 ? `${ano}-${mes}-01` : null
 }
 
-// 'Fabio PTAX:50:50:50:2026-11' → regras (vazio quando alguma linha é inválida)
+// 'Fabio Ferron:50:50:50:2026-11' → regras (vazio quando alguma linha é inválida)
 export function lerParceirosReceita(s: string | null | undefined): RegraReceita[] {
   if (!s || !s.trim()) return []
   const out: RegraReceita[] = []

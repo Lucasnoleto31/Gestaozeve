@@ -1,8 +1,8 @@
 // A parte de um parceiro na comissão do BTG num mês (parâmetro repasse_parceiros): o bloco do BTG na
-// página dele em Comissões e, sem os links, na versão para imprimir. Lucas, 16/11/2026, sobre o Fabio
-// PTAX: "BTG: corretagem | zeragem | igual foi com a Atual Capital mês passado". A conta é a do Painel do
-// BTG; o valor não entra no saldo dos pagamentos de Comissões, porque o acerto do BTG segue o fechamento
-// mensal (como o da Atual Capital).
+// página dele em Comissões e, sem os links, na versão para imprimir. Lucas, 16/11/2026, sobre o parceiro
+// Fabio Ferron: "BTG: corretagem | zeragem | igual foi com a Atual Capital mês passado". A conta é a do
+// Painel do BTG; o valor não entra no saldo dos pagamentos de Comissões, porque o acerto do BTG segue o
+// fechamento mensal (como o da Atual Capital).
 import Link from 'next/link'
 import { participacaoBtg } from '@/lib/gestao/consultasParticipacao'
 import { mesCurto, mesLongo } from '@/lib/gestao/meses'
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { n0, r0 } from '@/components/gestao/Celulas'
+import { fonteKpi } from './comum'
 
 const pct = (v: number) => fmtPct(v, Number.isInteger(v) ? 0 : 1).replace('%', ' %')
 
@@ -26,9 +27,9 @@ export async function ParticipacaoBtg({ parceiro, mesRef, impressao }: { parceir
       {b.receita > 0 ? (
         <>
           <KpiRow cols={3}>
-            <KpiCard label={`Parte de ${parceiro} em ${mes}`} value={fmtBRL2(b.parte)} sub={`${pct(b.regra.pctParceiro)} de ${fmtBRL2(b.comissao - b.imposto)}`} />
-            <KpiCard label="Receita dos clientes dele" value={fmtBRL2(b.receita)} sub={`${fmtNum(b.clientes.length)} ${b.clientes.length === 1 ? 'cliente girou' : 'clientes giraram'} · corretagem e zeragem`} />
-            <KpiCard label="Comissão do BTG sobre eles" value={fmtBRL2(b.comissao)} sub={`${pct(Math.round(b.pctComissao * 10) / 10)} da receita líquida · imposto ${fmtBRL2(b.imposto)}`} />
+            <KpiCard label={`Parte de ${parceiro} em ${mes}`} value={fmtBRL2(b.parte)} valueClassName={fonteKpi(fmtBRL2(b.parte))} sub={`${pct(b.regra.pctParceiro)} de ${fmtBRL2(b.comissao - b.imposto)}`} />
+            <KpiCard label="Receita dos clientes dele" value={fmtBRL2(b.receita)} valueClassName={fonteKpi(fmtBRL2(b.receita))} sub={`${fmtNum(b.clientes.length)} ${b.clientes.length === 1 ? 'cliente girou' : 'clientes giraram'} · corretagem e zeragem`} />
+            <KpiCard label="Comissão do BTG sobre eles" value={fmtBRL2(b.comissao)} valueClassName={fonteKpi(fmtBRL2(b.comissao))} sub={`${pct(Math.round(b.pctComissao * 10) / 10)} da receita líquida · imposto ${fmtBRL2(b.imposto)}`} />
           </KpiRow>
           <div className="tbl-wrap mt-4">
             <table className="tbl tbl-dense">

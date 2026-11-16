@@ -1,5 +1,5 @@
 // Resumo de um parceiro com participação na receita (parâmetro parceiros_receita da corretora): quanto
-// ele tem a receber no mês, de quais clientes veio, o mês a mês e a regra. Lucas, 16/11/2026: Fabio PTAX
+// ele tem a receber no mês, de quais clientes veio, o mês a mês e a regra. Lucas, 16/11/2026: Fabio Ferron
 // é a ZEVE INVESTIMENTOS 5 na Genial e recebe metade da corretagem, da zeragem e do incentivo dos clientes dele.
 import type { ReactNode } from 'react'
 import Link from 'next/link'
@@ -17,11 +17,9 @@ import { Alert } from '@/components/ui/Alert'
 import { n0, r0 } from '@/components/gestao/Celulas'
 import { TabelaReceitaParceiro } from '@/components/gestao/TabelaReceitaParceiro'
 import { ExtratoAcoes } from './ExtratoAcoes'
-import { hrefComissoes, pagamentosDoFiltro, round2, type FiltroAba } from './comum'
+import { fonteKpi, hrefComissoes, pagamentosDoFiltro, round2, type FiltroAba } from './comum'
 
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
-// Valor com centavos e cinco ou mais dígitos não cabe na célula da faixa de KPIs: a fonte desce um degrau
-const fonteDo = (valor: string) => (valor.length > 12 ? 'text-[1.05rem]!' : valor.length > 11 ? 'text-[1.2rem]!' : undefined)
 
 // extra = bloco que entra antes de "Como é calculado" (a parte do parceiro na comissão do BTG, quando ele tem)
 export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, extra }: FiltroAba & { regras: RegrasCorretora[]; admin: boolean; extra?: ReactNode }) {
@@ -78,12 +76,12 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, e
       )}
 
       <KpiRow cols={6}>
-        <KpiCard destaque label={`A receber de ${mes}`} value={fmtBRL2(t.total)} valueClassName={fonteDo(fmtBRL2(t.total))}
+        <KpiCard destaque label={`A receber de ${mes}`} value={fmtBRL2(t.total)} valueClassName={fonteKpi(fmtBRL2(t.total))}
           sub={corrente ? (ultima ? `parcial · lotes até ${ddmm(ultima)}` : 'parcial · sem lotes no mês ainda') : 'corretagem, zeragem e incentivo'} />
-        <KpiCard label="Corretagem" value={fmtBRL2(t.parteCorretagem)} valueClassName={fonteDo(fmtBRL2(t.parteCorretagem))} sub={`${de('pctCorretagem', t.corretagem)} · ${fmtNum(t.lotes)} lotes`} />
-        <KpiCard label="Zeragem" value={fmtBRL2(t.parteZeragem)} valueClassName={fonteDo(fmtBRL2(t.parteZeragem))} sub={`${de('pctZeragem', t.zeragem)} · ${fmtNum(t.zerados)} ${t.zerados === 1 ? 'contrato zerado' : 'contratos zerados'}`} />
-        <KpiCard label="Incentivo" value={fmtBRL2(t.parteIncentivo)} valueClassName={fonteDo(fmtBRL2(t.parteIncentivo))} sub={`${de('pctIncentivo', t.incentivo)} · ${fmtNum(t.comFaixa)} ${t.comFaixa === 1 ? 'cliente com faixa' : 'clientes com faixa'}`} />
-        <KpiCard label="Saldo a pagar" value={fmtBRL2(saldo)} valueClassName={fonteDo(fmtBRL2(saldo))} tone={saldo < 0 ? 'warn' : 'neutral'}
+        <KpiCard label="Corretagem" value={fmtBRL2(t.parteCorretagem)} valueClassName={fonteKpi(fmtBRL2(t.parteCorretagem))} sub={`${de('pctCorretagem', t.corretagem)} · ${fmtNum(t.lotes)} lotes`} />
+        <KpiCard label="Zeragem" value={fmtBRL2(t.parteZeragem)} valueClassName={fonteKpi(fmtBRL2(t.parteZeragem))} sub={`${de('pctZeragem', t.zeragem)} · ${fmtNum(t.zerados)} ${t.zerados === 1 ? 'contrato zerado' : 'contratos zerados'}`} />
+        <KpiCard label="Incentivo" value={fmtBRL2(t.parteIncentivo)} valueClassName={fonteKpi(fmtBRL2(t.parteIncentivo))} sub={`${de('pctIncentivo', t.incentivo)} · ${fmtNum(t.comFaixa)} ${t.comFaixa === 1 ? 'cliente com faixa' : 'clientes com faixa'}`} />
+        <KpiCard label="Saldo a pagar" value={fmtBRL2(saldo)} valueClassName={fonteKpi(fmtBRL2(saldo))} tone={saldo < 0 ? 'warn' : 'neutral'}
           sub={saldo < 0 ? 'pago acima do gerado até hoje' : `gerado ${fmtBRL2(res.gerado)} menos pago ${fmtBRL2(pago)}`} />
         <KpiCard label={`Giraram em ${mes}`} value={fmtNum(t.ativos)}
           sub={codigos.length ? `de ${fmtNum(clientesNosCodigos)} ${clientesNosCodigos === 1 ? 'cliente' : 'clientes'} com conta no código ${codigos.join(', ')}` : 'nenhum código ligado'} />

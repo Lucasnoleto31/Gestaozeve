@@ -18,7 +18,7 @@ export async function salvarParceirosReceita(corretoraIn: string, valor: string)
     const { db } = await somenteAdmin()
     const v = valor.trim()
     const regras = lerParceirosReceita(v)
-    if (v && regras.length === 0) throw new Error('Use "nome:% da corretagem:% da zeragem:% do incentivo:desde AAAA-MM", separados por ; — por exemplo: Fabio PTAX:50:50:50:2026-11')
+    if (v && regras.length === 0) throw new Error('Use "nome:% da corretagem:% da zeragem:% do incentivo:desde AAAA-MM", separados por ; — por exemplo: Fabio Ferron:50:50:50:2026-11')
     const gravado = textoParceirosReceita(regras)
     if (!v) {
       const { error } = await db.from('parametros').delete().eq('corretora', corretora).eq('chave', CHAVE_PARCEIROS_RECEITA)

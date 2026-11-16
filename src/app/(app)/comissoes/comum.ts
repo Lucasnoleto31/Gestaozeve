@@ -15,7 +15,10 @@ export const TIPO: Record<ComissaoContaMes['tipo'], { label: string; variant: Ba
 }
 export const corretoraNome = (c: string) => (isCorretora(c) ? CORRETORA_LABEL[c] : c)
 export const round2 = (v: number) => Math.round(v * 100) / 100
-const ddmmaa = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`
+// Fonte de um valor em reais com centavos dentro da faixa de KPIs, para o número nunca cortar: em tela com
+// menos de 375 px a fonte acompanha a largura, e valor de cinco ou mais dígitos desce um degrau em qualquer tela
+export const fonteKpi = (valor: string) => `max-[374px]:text-[5.2vw]! ${valor.length > 12 ? 'text-[1.05rem]!' : valor.length > 11 ? 'text-[1.2rem]!' : ''}`.trim()
+const ddmmaa =(iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`
 
 export function origemTexto(origem: ComissaoItem['origem'], dataLead: string | null, assessor: string | null): string {
   if (origem === 'lead') return dataLead ? `lead em ${ddmmaa(dataLead)}` : 'lead'

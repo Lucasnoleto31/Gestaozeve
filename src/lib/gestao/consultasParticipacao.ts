@@ -95,7 +95,7 @@ export async function participacaoReceita(corretora: Corretora, regrasDaCorretor
 // ── Participação na comissão do BTG (parâmetro repasse_parceiros) ──────────────
 // No BTG o parceiro segue a cadeia do fechamento, como a Atual Capital: a comissão que o BTG paga sobre os
 // clientes dele (os que têm o nome dele no campo Parceiro da ficha) paga o imposto do escritório, o parceiro
-// leva a parte dele e o escritório fica com a sua parte do restante. Lucas, 16/11/2026, sobre o Fabio PTAX:
+// leva a parte dele e o escritório fica com a sua parte do restante. Lucas, 16/11/2026, sobre o Fabio Ferron:
 // "BTG: corretagem | zeragem | igual foi com a Atual Capital mês passado".
 async function configDoBtg() {
   const { db } = await equipe()

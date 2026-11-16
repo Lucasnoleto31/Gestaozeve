@@ -142,7 +142,7 @@ function SecaoParceirosReceita({ corretora, label, valor }: { corretora: Correto
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <div className="flex items-end gap-2">
         <label className="flex-1">
-          <span className="label block">Regras — &quot;nome:% da corretagem:% da zeragem:% do incentivo:desde AAAA-MM&quot; separadas por ; (ex.: Fabio PTAX:50:50:50:2026-11). Vazio = ninguém</span>
+          <span className="label block">Regras — &quot;nome:% da corretagem:% da zeragem:% do incentivo:desde AAAA-MM&quot; separadas por ; (ex.: Fabio Ferron:50:50:50:2026-11). Vazio = ninguém</span>
           <input className="field-sm mt-1 w-full" value={v} onChange={e => setV(e.target.value)} />
         </label>
         <Button size="sm" variant={mudou ? 'primary' : 'secondary'} disabled={!mudou} loading={salvando} onClick={salvar}>Salvar</Button>

@@ -4,7 +4,7 @@ import {
   type LoteBruto, type RegraReceita,
 } from './participacao'
 
-const FABIO: RegraReceita = { nome: 'Fabio PTAX', pctCorretagem: 100, pctZeragem: 100, pctIncentivo: 50, desde: '2026-11-01' }
+const FABIO: RegraReceita = { nome: 'Fabio Ferron', pctCorretagem: 100, pctZeragem: 100, pctIncentivo: 50, desde: '2026-11-01' }
 const lote = (x: Partial<LoteBruto>): LoteBruto => ({
   data: '2026-11-10', chave_incentivo: 'DOC:1', cliente_id: 'c1', conta: '100', nome_cliente: 'CLIENTE UM',
   qtd: 100, tarifa: 0.25, zeragem_rs: 0, multiplicador: 1, zeragem: false, posicao: false, acoes: false, ...x,
@@ -14,47 +14,47 @@ const inc = (chave: string, pontos: number, valor: number, x: { nome?: string; c
 
 describe('lerParceirosReceita', () => {
   it('lê nome, os três percentuais e o mês de início', () => {
-    expect(lerParceirosReceita('Fabio PTAX:100:100:50:2026-11')).toEqual([FABIO])
+    expect(lerParceirosReceita('Fabio Ferron:100:100:50:2026-11')).toEqual([FABIO])
   })
   it('aceita vírgula no percentual, o mês como MM/AAAA e mais de um parceiro', () => {
-    expect(lerParceirosReceita(' Fabio PTAX : 65,35 : 65,35 : 50 : 11/2026 ; Outro:10:0:0:2027-01;')).toEqual([
-      { nome: 'Fabio PTAX', pctCorretagem: 65.35, pctZeragem: 65.35, pctIncentivo: 50, desde: '2026-11-01' },
+    expect(lerParceirosReceita(' Fabio Ferron : 65,35 : 65,35 : 50 : 11/2026 ; Outro:10:0:0:2027-01;')).toEqual([
+      { nome: 'Fabio Ferron', pctCorretagem: 65.35, pctZeragem: 65.35, pctIncentivo: 50, desde: '2026-11-01' },
       { nome: 'Outro', pctCorretagem: 10, pctZeragem: 0, pctIncentivo: 0, desde: '2027-01-01' },
     ])
   })
   it('o mesmo parceiro pode ter outra regra a partir de outro mês', () => {
-    expect(lerParceirosReceita('Fabio PTAX:100:100:50:2026-11;fabio ptax:100:100:60:2027-01')).toHaveLength(2)
+    expect(lerParceirosReceita('Fabio Ferron:100:100:50:2026-11;fabio ferron:100:100:60:2027-01')).toHaveLength(2)
   })
   it('devolve vazio quando falta campo, o percentual passa de 100, o mês é inválido ou a regra se repete', () => {
     expect(lerParceirosReceita('')).toEqual([])
-    expect(lerParceirosReceita('Fabio PTAX:100:100:50')).toEqual([])
-    expect(lerParceirosReceita('Fabio PTAX:100:100:150:2026-11')).toEqual([])
-    expect(lerParceirosReceita('Fabio PTAX:100:100:50:2026-13')).toEqual([])
+    expect(lerParceirosReceita('Fabio Ferron:100:100:50')).toEqual([])
+    expect(lerParceirosReceita('Fabio Ferron:100:100:150:2026-11')).toEqual([])
+    expect(lerParceirosReceita('Fabio Ferron:100:100:50:2026-13')).toEqual([])
     expect(lerParceirosReceita(':100:100:50:2026-11')).toEqual([])
-    expect(lerParceirosReceita('Fabio PTAX:100:100:50:2026-11;FABIO PTAX:90:90:50:2026-11')).toEqual([])
+    expect(lerParceirosReceita('Fabio Ferron:100:100:50:2026-11;FABIO FERRON:90:90:50:2026-11')).toEqual([])
   })
   it('grava na forma canônica, por parceiro e por mês de início', () => {
-    const regras = lerParceirosReceita('Zeta:1:2:3:2027-01;Fabio PTAX:100:100:60:01/2027;Fabio PTAX:100:100:50:2026-11')
-    expect(textoParceirosReceita(regras)).toBe('Fabio PTAX:100:100:50:2026-11;Fabio PTAX:100:100:60:2027-01;Zeta:1:2:3:2027-01')
+    const regras = lerParceirosReceita('Zeta:1:2:3:2027-01;Fabio Ferron:100:100:60:01/2027;Fabio Ferron:100:100:50:2026-11')
+    expect(textoParceirosReceita(regras)).toBe('Fabio Ferron:100:100:50:2026-11;Fabio Ferron:100:100:60:2027-01;Zeta:1:2:3:2027-01')
     expect(lerParceirosReceita(textoParceirosReceita(regras))).toHaveLength(3)
   })
 })
 
 describe('regras do parceiro', () => {
-  const regras = lerParceirosReceita('Fabio PTAX:100:100:60:2027-01;Outro:10:10:10:2026-01;Fabio PTAX:100:100:50:2026-11')
+  const regras = lerParceirosReceita('Fabio Ferron:100:100:60:2027-01;Outro:10:10:10:2026-01;Fabio Ferron:100:100:50:2026-11')
   it('junta as regras do parceiro sem ligar para acento e caixa, da mais antiga para a mais nova', () => {
-    expect(regrasDoParceiro(regras, 'fábio ptax').map(r => r.desde)).toEqual(['2026-11-01', '2027-01-01'])
+    expect(regrasDoParceiro(regras, 'fábio ferron').map(r => r.desde)).toEqual(['2026-11-01', '2027-01-01'])
     expect(regrasDoParceiro(regras, 'Ninguém')).toEqual([])
   })
   it('em cada mês vale a regra de início mais recente; antes da primeira, nenhuma', () => {
-    const dele = regrasDoParceiro(regras, 'Fabio PTAX')
+    const dele = regrasDoParceiro(regras, 'Fabio Ferron')
     expect(regraDoMes(dele, '2026-10-01')).toBeNull()
     expect(regraDoMes(dele, '2026-11-01')?.pctIncentivo).toBe(50)
     expect(regraDoMes(dele, '2026-12-01')?.pctIncentivo).toBe(50)
     expect(regraDoMes(dele, '2027-03-01')?.pctIncentivo).toBe(60)
   })
   it('lista cada nome uma vez e descreve a regra por extenso', () => {
-    expect(nomesComRegra(regras).sort()).toEqual(['Fabio PTAX', 'Outro'])
+    expect(nomesComRegra(regras).sort()).toEqual(['Fabio Ferron', 'Outro'])
     expect(textoDaRegra(FABIO)).toBe('100 % da corretagem, 100 % da zeragem e 50 % do incentivo')
     expect(textoDaRegra({ ...FABIO, pctCorretagem: 65.35 })).toContain('65,35 % da corretagem')
   })
@@ -77,9 +77,9 @@ describe('medirLote', () => {
 })
 
 describe('receitaDoMes', () => {
-  it('a regra do Fabio PTAX: metade da corretagem, da zeragem e do incentivo (R$ 200 de incentivo viram R$ 100)', () => {
+  it('a regra do Fabio Ferron: metade da corretagem, da zeragem e do incentivo (R$ 200 de incentivo viram R$ 100)', () => {
     const lotes = [lote({ qtd: 1154, multiplicador: 2 }), lote({ zeragem: true, qtd: 10, zeragem_rs: 20.75 })].map(medirLote)
-    const m = receitaDoMes('2026-11-01', lotes, [inc('DOC:1', 2308, 200)], lerParceirosReceita('Fabio PTAX:50:50:50:2026-11')[0])
+    const m = receitaDoMes('2026-11-01', lotes, [inc('DOC:1', 2308, 200)], lerParceirosReceita('Fabio Ferron:50:50:50:2026-11')[0])
     expect(m.clientes[0]).toMatchObject({ corretagem: 288.5, zeragem: 207.5, incentivo: 200, parteCorretagem: 144.25, parteZeragem: 103.75, parteIncentivo: 100, total: 348 })
     expect(m).toMatchObject({ corretagem: 288.5, zeragem: 207.5, incentivo: 200, parteCorretagem: 144.25, parteZeragem: 103.75, parteIncentivo: 100, total: 348 })
   })

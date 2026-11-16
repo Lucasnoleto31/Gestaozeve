@@ -8,8 +8,10 @@ import { useId } from 'react'
 import { useChartColors } from '@/lib/theme'
 import { fmtBRL, fmtNum, fmtPct } from '@/lib/format'
 
-export type Formato = 'num' | 'brl' | 'pct'
-const FMT: Record<Formato, (v: number) => string> = { num: fmtNum, brl: fmtBRL, pct: v => fmtPct(v, 1) }
+// 'dec' = número com duas casas (R$ por lote), que em 'num' e 'brl' arredondaria para zero
+export type Formato = 'num' | 'brl' | 'pct' | 'dec'
+const dec2 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const FMT: Record<Formato, (v: number) => string> = { num: fmtNum, brl: fmtBRL, pct: v => fmtPct(v, 1), dec: dec2 }
 const compacto = (v: number) => (Math.abs(v) >= 1_000_000 ? `${(v / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}M`
   : Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}k` : fmtNum(v))
 
@@ -67,7 +69,7 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   const gradId = (key: string) => `g${uid}-${key.replace(/[^a-zA-Z0-9]/g, '')}`
   const temDir = series.some(s => s.eixo === 'dir')
-  const fmtEsq = formato === 'brl' ? (v: number) => `R$ ${compacto(v)}` : formato === 'pct' ? (v: number) => `${v}%` : compacto
+  const fmtEsq = formato === 'brl' ? (v: number) => `R$ ${compacto(v)}` : formato === 'pct' ? (v: number) => `${v}%` : formato === 'dec' ? dec2 : compacto
   const fmtDirAxis = formatoDir === 'brl' ? (v: number) => `R$ ${compacto(v)}` : formatoDir === 'pct' ? (v: number) => `${v}%` : compacto
   return (
     <ResponsiveContainer width="100%" height={altura}>

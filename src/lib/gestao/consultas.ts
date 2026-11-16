@@ -101,16 +101,18 @@ export async function gruposDaBase(corretora: Corretora, mesRef: string | null):
   return contarPorMomento(clientes)
 }
 
-// Por qual assessor cada cliente entrou e quando migrou: três colunas da mesma função da lista, para a tela
-// Responsáveis contar as contas novas do mês de cada pessoa sem carregar a lista inteira.
-export async function clientesPorAssessor(corretora: Corretora, mesRef: string | null): Promise<{ assessor_nome: string | null; data_migracao: string | null; status: string }[]> {
+// Por qual assessor cada cliente entrou, quando migrou e se já operou: quatro colunas da mesma função da
+// lista, para a tela Responsáveis contar as contas novas do mês de cada pessoa e a tela Gráficos ver, de
+// quem migrou em cada mês, quantos já operaram, sem carregar a lista inteira.
+export type ClienteEmResumo = { assessor_nome: string | null; data_migracao: string | null; status: string; situacao: string }
+export async function clientesPorAssessor(corretora: Corretora, mesRef: string | null): Promise<ClienteEmResumo[]> {
   const { db } = await equipe()
-  const clientes: { assessor_nome: string | null; data_migracao: string | null; status: string }[] = []
+  const clientes: ClienteEmResumo[] = []
   for (let offset = 0; ; offset += PAGINA) {
-    const { data, error } = await db.rpc('clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef }).select('assessor_nome, data_migracao, status').range(offset, offset + PAGINA - 1)
+    const { data, error } = await db.rpc('clientes_lista', { p_corretora: corretora, p_mes_ref: mesRef }).select('assessor_nome, data_migracao, status, situacao').range(offset, offset + PAGINA - 1)
     if (error) falha(error, 'clientes_lista')
     const rows = (data ?? []) as Row[]
-    for (const r of rows) clientes.push({ assessor_nome: str(r.assessor_nome), data_migracao: str(r.data_migracao), status: String(r.status ?? '') })
+    for (const r of rows) clientes.push({ assessor_nome: str(r.assessor_nome), data_migracao: str(r.data_migracao), status: String(r.status ?? ''), situacao: String(r.situacao ?? '') })
     if (rows.length < PAGINA) break
   }
   return clientes

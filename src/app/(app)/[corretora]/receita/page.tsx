@@ -102,7 +102,7 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
               delta={{ atual: proj.receita.projetado, anterior: proj.receita.anteriorTotal, rotulo: `vs ${mesCurto(mesAnt)} inteiro`, fmt: rCurto }}
               dica="Previsão para o mês inteiro: a receita até agora, levada ao fim do mês pelo ritmo que os meses anteriores tinham neste mesmo ponto." />
           ) : (
-            <KpiCard label="Receita em 12 meses" value={rCurto(receita12)} sub={`${fmtNum(lotes12)} lotes`}
+            <KpiCard label="Receita em 12 meses" value={rCurto(receita12)} valueClassName={receita12 >= 1_000_000 ? 'max-md:text-section' : undefined} sub={`${fmtNum(lotes12)} lotes`}
               dica="Soma dos clientes cadastrados nos 12 meses até este mês. Lotes de contas sem cliente cadastrado ficam de fora; por isso pode ser menor que a soma dos meses do gráfico." />
           )}
           <KpiCard label="R$ por lote" value={porLote != null ? n2(Math.round(porLote * 1000) / 1000) : TRACO}

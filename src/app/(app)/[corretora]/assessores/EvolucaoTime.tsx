@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Panel } from '@/components/ui/Panel'
 import { Recolhido } from '@/components/ui/Recolhido'
 import { GraficoSeries } from '@/components/gestao/Graficos'
@@ -14,7 +14,14 @@ import { cn } from '@/lib/utils'
 // e só com os meses que têm dado.
 type Medida = 'receita' | 'lotes'
 
-export function EvolucaoTime({ evolucao, mesRef, parcial }: { evolucao: EvolucaoDoTime; mesRef: string; parcial: boolean }) {
+export function EvolucaoTime({ evolucao, mesRef, parcial, titulo = 'Evolução por mês', comNumeros = true, rodape }: {
+  evolucao: EvolucaoDoTime
+  mesRef: string
+  parcial: boolean
+  titulo?: string          // na tela Gráficos o título é a pergunta que o gráfico responde
+  comNumeros?: boolean     // "ver os números mês a mês" (a tabela pessoa × mês)
+  rodape?: ReactNode
+}) {
   const [medida, setMedida] = useState<Medida>('receita')
   const { series, valores } = seriesDaEvolucao(evolucao, medida, 6)
   const dados = evolucao.meses.map((m, i) => ({ label: mesCurto(m), ...valores[i] }))
@@ -26,7 +33,7 @@ export function EvolucaoTime({ evolucao, mesRef, parcial }: { evolucao: Evolucao
   const colMes = (i: number) => { const n = evolucao.meses.length; return i >= n - 1 ? '' : i >= n - 4 ? 'col-p2' : 'col-p3' }
 
   return (
-    <Panel title="Evolução por mês" subtitle={`${medida === 'receita' ? 'Receita' : 'Lotes'} de cada pessoa${parcial ? `; ${mesCurto(mesRef)} ainda está em andamento` : ''}.`}
+    <Panel title={titulo} subtitle={`${medida === 'receita' ? 'Receita' : 'Lotes'} de cada pessoa${parcial ? `; ${mesCurto(mesRef)} ainda está em andamento` : ''}.`}
       action={
         <div className="seg" role="group" aria-label="O que o gráfico mostra">
           <button type="button" data-active={medida === 'receita'} onClick={() => setMedida('receita')}>Receita</button>
@@ -37,7 +44,8 @@ export function EvolucaoTime({ evolucao, mesRef, parcial }: { evolucao: Evolucao
         <>
           {/* a chave refaz o gráfico ao trocar a medida, para as séries e a legenda seguirem a nova ordem */}
           <GraficoSeries key={medida} colorido dados={dados} series={series.map(s => ({ ...s, tipo: 'bar' as const, empilhar: 't' }))} formato={medida === 'receita' ? 'brl' : 'num'} altura={260} />
-          <Recolhido tamanho="linha" titulo="ver os números mês a mês">
+          {rodape}
+          {comNumeros && <Recolhido tamanho="linha" titulo="ver os números mês a mês">
             <div className="tbl-wrap">
               <table className="tbl tbl-dense max-md:[&_td]:px-1.5 max-md:[&_th]:px-1.5">
                 <thead>
@@ -63,7 +71,7 @@ export function EvolucaoTime({ evolucao, mesRef, parcial }: { evolucao: Evolucao
                 </tbody>
               </table>
             </div>
-          </Recolhido>
+          </Recolhido>}
         </>
       )}
     </Panel>

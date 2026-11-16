@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { fmtBRL2, fmtNum, fmtNum2, fmtPct } from '@/lib/format'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import type { Nivel, Risco, Situacao, StatusConta } from '@/lib/gestao/tipos'
+import { dicaDoMomento, rotuloMomento, tomDoMomento, type ClienteDoMomento } from '@/lib/gestao/momentoCliente'
 
 export const TRACO = '–'
 
@@ -75,6 +76,12 @@ export function SituacaoBadge({ situacao, mesesSemGiro }: { situacao: Situacao |
   const v = SITUACAO_VARIANT[situacao as Situacao] ?? 'neutral'
   const texto = situacao === 'Inativo' && mesesSemGiro ? `Inativo há ${mesesSemGiro} m` : situacao
   return <Badge variant={v}>{texto}</Badge>
+}
+
+// Como está o cliente, em um selo só (lista de Clientes e ficha): Operando, Em queda, Parou há N dias,
+// Inativo há N meses, Nunca operou, Em abertura, Recusou. Cor só para quem opera, caiu ou parou.
+export function MomentoBadge({ cliente }: { cliente: ClienteDoMomento }) {
+  return <span title={dicaDoMomento(cliente)}><Badge variant={tomDoMomento(cliente)}>{rotuloMomento(cliente)}</Badge></span>
 }
 
 // Risco de inativação (S44): parou = sem giro há N dias (contados até o último dia lançado);

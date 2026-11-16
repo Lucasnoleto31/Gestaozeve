@@ -18,7 +18,7 @@ import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { buttonClasses } from '@/components/ui/buttonStyles'
 import { MesPicker } from '@/components/gestao/Filtros'
 import { Abas } from '@/components/gestao/Abas'
-import { NivelBadge, RiscoBadge, SituacaoBadge, StatusBadge, TRACO, dataCurta, dataPt, n0 } from '@/components/gestao/Celulas'
+import { MomentoBadge, NivelBadge, TRACO, dataCurta, dataPt, n0 } from '@/components/gestao/Celulas'
 import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria } from '@/lib/corretoras'
 import { BuscaCliente } from '../BuscaCliente'
 import { ExcluirClienteButton } from '../ExcluirClienteButton'
@@ -47,10 +47,13 @@ function linkLigar(telefone: string | null): string | null {
   return `tel:+${d.startsWith('55') && d.length >= 12 ? d : `55${d}`}`
 }
 
-// A ficha do cliente. Em cima, quem é e como falar com ele; logo abaixo, "Agora": a situação em uma
-// frase, o que ela pede, o atendimento (último contato, retorno combinado, dias operados) e se o
-// cliente também está nas outras corretoras. O resto vem em quatro abas, uma pergunta por aba: Resumo
-// (como está, contatos e lead de origem), Giro (o que e como opera), Contas e tarifas, Cadastro.
+// A ficha do cliente. Em cima, quem é, como está (um selo só, o mesmo da lista de Clientes) e como falar
+// com ele; logo abaixo, "Agora": a situação em uma frase, o que ela pede, o atendimento (último contato,
+// retorno combinado, último giro) e se o cliente também está nas outras corretoras. O resto vem em quatro
+// abas, uma pergunta por aba: Resumo (os números do mês, o giro e os contatos), Giro (o que e como
+// opera), Contas e tarifas, Cadastro (com o status e as datas de entrada e migração).
+// Lucas, 16/11/2026: "eu mesmo estou perdido com essas páginas". Saíram os quatro selos de estado, a
+// faixa de datas que repetia o último giro e os campos vazios do cabeçalho.
 export default async function ConsultaClientePage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
   const { id } = await params
@@ -90,22 +93,26 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   const passo = resumo ? proximoPasso(resumo, { hoje, mes: mesCurto(mesRef), mesParcial: mesRef === mesAtual(), contatos: contatos.length, ultimoContato: ultimoContato?.data ?? null, proximoContato: retorno }) : null
   const niver = proximoAniversario(cadastro.dt_nascimento, hoje)
 
-  const linhaTempo = [
-    { rotulo: 'Entrada', data: resumo?.data_entrada ?? null, nota: resumo?.parceiro && !/^direto$/i.test(resumo.parceiro) ? `parceiro ${resumo.parceiro}` : 'direto' },
-    { rotulo: 'Migração', data: resumo?.data_migracao ?? null, nota: resumo?.dias_ate_migrar != null ? `${resumo.dias_ate_migrar} dias depois da entrada` : resumo?.status ?? '' },
-    { rotulo: 'Último giro', data: resumo?.ultimo_giro ?? null, nota: resumo?.meses_sem_giro ? `${resumo.meses_sem_giro} ${resumo.meses_sem_giro === 1 ? 'mês' : 'meses'} sem giro` : resumo?.ultimo_giro ? 'girou no mês de referência' : 'nunca girou' },
+  // Quem cuida do cliente e desde quando: só o que está preenchido (responsável vazio é informação: ninguém cuida)
+  const temParceiro = !!resumo?.parceiro && !/^direto$/i.test(resumo.parceiro)
+  const quemCuida: { rotulo: string; valor: string; dica?: string }[] = [
+    ...(resumo?.assessor_nome ? [{ rotulo: 'Assessor', valor: resumo.assessor_nome }] : []),
+    { rotulo: 'Responsável', valor: resumo?.responsavel ?? 'ninguém' },
+    ...(temParceiro ? [{ rotulo: 'Parceiro', valor: resumo!.parceiro! }] : []),
+    ...(resumo?.ativador ? [{ rotulo: 'Campanha de ativação', valor: resumo.ativador, dica: 'Atendente da campanha de ativação; não mexe no responsável nem na comissão' }] : []),
+    ...(resumo?.data_migracao ? [{ rotulo: 'Migrou em', valor: dataPt(resumo.data_migracao) }] : resumo?.data_entrada ? [{ rotulo: 'Entrou em', valor: dataPt(resumo.data_entrada) }] : []),
   ]
 
   return (
     <>
       <PageHeader
-        eyebrow={`${ctx.eyebrow} · Consulta`}
-        title={<Link href={`${base}/clientes${mesParam ? `?mes=${mesParam}` : ''}`} className="inline-flex items-center gap-2 text-fg hover:text-accent"><ArrowLeft className="h-5 w-5" aria-hidden />Cliente</Link>}
+        eyebrow={`${ctx.eyebrow} · Ficha do cliente`}
+        title={<Link href={`${base}/clientes${mesParam ? `?mes=${mesParam}` : ''}`} className="inline-flex items-center gap-2 text-fg hover:text-accent"><ArrowLeft className="h-5 w-5" aria-hidden />Clientes</Link>}
         actions={<><BuscaCliente corretora={corretora} base={base} placeholder="Abrir outra ficha: nome, CPF, conta…" /><MesPicker valor={mesRef} /></>}
       />
       <PageBody>
         <div className="space-y-4">
-          {/* Quem é e como falar com ele */}
+          {/* Quem é, como está (um selo só, o mesmo da lista) e como falar com ele */}
           <section className="panel p-5 md:p-6">
             <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
               <div className="flex min-w-0 items-start gap-4">
@@ -113,27 +120,39 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-title font-semibold tracking-tight text-fg">{cadastro.nome}</h2>
-                    {resumo && <StatusBadge status={resumo.status} />}
-                    {resumo && <SituacaoBadge situacao={resumo.situacao} mesesSemGiro={resumo.meses_sem_giro} />}
+                    {resumo && <MomentoBadge cliente={resumo} />}
                     {resumo?.nivel && <NivelBadge nivel={resumo.nivel} media={resumo.lotes_media_3m} />}
-                    {resumo?.risco && <RiscoBadge risco={resumo.risco} diasSemGiro={resumo.dias_sem_giro} />}
                   </div>
-                  <dl className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 text-dense sm:grid-cols-[auto_1fr_auto_1fr]">
-                    <dt className="text-fg-subtle">Telefone</dt>
-                    <dd className="min-w-0">{cadastro.telefone ? <Copiar valor={cadastro.telefone.replace(/\D/g, '')} rotulo="o telefone">{telefoneCurto(cadastro.telefone)}</Copiar> : TRACO}</dd>
-                    <dt className="text-fg-subtle">CPF/CNPJ</dt>
-                    <dd className="min-w-0">{cadastro.documento ? <Copiar valor={cadastro.documento} rotulo="o CPF/CNPJ">{cadastro.documento}</Copiar> : TRACO}</dd>
-                    <dt className="text-fg-subtle">Conta</dt>
-                    <dd className="min-w-0">
-                      {resumo?.conta_principal ? <Copiar valor={resumo.conta_principal} rotulo="a conta">{resumo.conta_principal}</Copiar> : TRACO}
-                      {contas.length > 1 && <Link href={hrefAba('contas')} className="ml-1.5 text-fg-subtle hover:text-fg" title="Ver todas as contas">+{contas.length - 1}</Link>}
-                    </dd>
-                    <dt className="text-fg-subtle">E-mail</dt>
-                    <dd className="min-w-0 truncate">{cadastro.email ? <a href={`mailto:${cadastro.email}`} className="hover:text-accent hover:underline">{cadastro.email}</a> : TRACO}</dd>
-                    <dt className="text-fg-subtle">Assessor</dt><dd className="truncate">{resumo?.assessor_nome ?? TRACO}</dd>
-                    <dt className="text-fg-subtle">Responsável</dt><dd>{resumo?.responsavel ?? TRACO}</dd>
-                    <dt className="text-fg-subtle">Ativação</dt><dd title="Atendente da campanha de ativação; não mexe no responsável nem na comissão">{resumo?.ativador ?? <span className="text-fg-subtle">fora da campanha</span>}</dd>
-                    <dt className="text-fg-subtle">Parceiro</dt><dd>{resumo?.parceiro ?? <span className="text-fg-subtle">direto</span>}</dd>
+                  <dl className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-dense">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <dt className="text-fg-subtle">Telefone</dt>
+                      <dd className="min-w-0">{cadastro.telefone ? <Copiar valor={cadastro.telefone.replace(/\D/g, '')} rotulo="o telefone">{telefoneCurto(cadastro.telefone)}</Copiar> : TRACO}</dd>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <dt className="text-fg-subtle">Conta</dt>
+                      <dd className="min-w-0">
+                        {resumo?.conta_principal ? <Copiar valor={resumo.conta_principal} rotulo="a conta">{resumo.conta_principal}</Copiar> : TRACO}
+                        {contas.length > 1 && <Link href={hrefAba('contas')} className="ml-1.5 text-fg-subtle hover:text-fg" title="Ver todas as contas">+{contas.length - 1}</Link>}
+                      </dd>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <dt className="text-fg-subtle">CPF/CNPJ</dt>
+                      <dd className="min-w-0">{cadastro.documento ? <Copiar valor={cadastro.documento} rotulo="o CPF/CNPJ">{cadastro.documento}</Copiar> : TRACO}</dd>
+                    </div>
+                    {cadastro.email && (
+                      <div className="flex min-w-0 items-center gap-2">
+                        <dt className="text-fg-subtle">E-mail</dt>
+                        <dd className="min-w-0 truncate"><a href={`mailto:${cadastro.email}`} className="hover:text-accent hover:underline">{cadastro.email}</a></dd>
+                      </div>
+                    )}
+                  </dl>
+                  <dl className="mt-1.5 flex flex-wrap items-center gap-x-6 gap-y-1 text-dense">
+                    {quemCuida.map(q => (
+                      <div key={q.rotulo} className="flex min-w-0 items-center gap-2" title={q.dica}>
+                        <dt className="text-fg-subtle">{q.rotulo}</dt>
+                        <dd className={cn('min-w-0 truncate', q.valor === 'ninguém' ? 'text-fg-subtle' : 'text-fg-muted')}>{q.valor}</dd>
+                      </div>
+                    ))}
                   </dl>
                 </div>
               </div>
@@ -156,17 +175,6 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                 {temListaPropria(corretora) && admin && <ExcluirClienteButton corretora={corretora} clienteId={id} nome={cadastro.nome} base={base} variante="botao" />}
               </div>
             </div>
-
-            <ol className="mt-5 grid gap-4 border-t border-line pt-5 sm:grid-cols-3">
-              {linhaTempo.map(p => (
-                <li key={p.rotulo} className="relative pl-4">
-                  <span className={cn('absolute left-0 top-1.5 h-2 w-2 rounded-full', p.data ? 'bg-accent' : 'bg-line-strong')} aria-hidden />
-                  <p className="label">{p.rotulo}</p>
-                  <p className={cn('mt-0.5 text-section font-semibold tabular-nums', !p.data && 'text-fg-subtle')}>{p.data ? dataPt(p.data) : TRACO}</p>
-                  <p className="text-micro text-fg-muted">{p.nota}</p>
-                </li>
-              ))}
-            </ol>
           </section>
 
           {/* Agora: a situação em uma frase, o que ela pede e o atendimento */}
@@ -184,7 +192,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                     </p>
                   )}
                 </div>
-                <dl className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-4 text-dense lg:col-span-3 lg:grid-cols-4">
+                <dl className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-4 text-dense sm:grid-cols-3 lg:col-span-3">
                   <div className="min-w-0">
                     <dt className="label">Último contato</dt>
                     <dd className={cn('mt-1 font-semibold tabular-nums', !ultimoContato && 'text-fg-subtle')}>{ultimoContato ? dataCurta(ultimoContato.data) : 'nenhum'}</dd>
@@ -201,12 +209,10 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                   <div className="min-w-0">
                     <dt className="label">Último giro</dt>
                     <dd className={cn('mt-1 font-semibold tabular-nums', !resumo?.ultimo_giro && 'text-fg-subtle')}>{resumo?.ultimo_giro ? dataCurta(resumo.ultimo_giro) : 'nunca girou'}</dd>
-                    <p className="text-micro text-fg-muted">{resumo?.ultimo_giro ? quando(resumo.ultimo_giro, hoje) : resumo?.data_migracao ? `migrou ${quando(resumo.data_migracao, hoje)}` : 'sem lote lançado'}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className="label">Dias com giro em {mesCurto(mesRef)}</dt>
-                    <dd className={cn('mt-1 font-semibold tabular-nums', !noMes?.operados && 'text-fg-subtle')}>{noMes ? fmtNum(noMes.operados) : TRACO}</dd>
-                    <p className="text-micro text-fg-muted">{noMes?.operados ? `média de ${fmtNum(Math.round(noMes.mediaPorDia))} lotes por dia operado` : noMes ? 'não operou no mês' : 'extrato não cobre o mês inteiro'}</p>
+                    <p className="text-micro text-fg-muted">
+                      {resumo?.ultimo_giro ? quando(resumo.ultimo_giro, hoje) : resumo?.data_migracao ? `migrou ${quando(resumo.data_migracao, hoje)}` : 'sem lote lançado'}
+                      {noMes?.operados ? ` · ${fmtNum(noMes.operados)} ${noMes.operados === 1 ? 'dia' : 'dias'} com giro em ${mesCurto(mesRef)}` : ''}
+                    </p>
                   </div>
                 </dl>
               </div>
@@ -216,7 +222,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                     <li key={o.corretora} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-fg-subtle">Também na</span>
                       <Link href={`/${CORRETORA_SLUG[o.corretora]}/clientes/${id}`} className="link font-semibold">{CORRETORA_LABEL[o.corretora]}</Link>
-                      <SituacaoBadge situacao={o.resumo.situacao} mesesSemGiro={o.resumo.meses_sem_giro} />
+                      <MomentoBadge cliente={o.resumo} />
                       <span className="text-fg-muted">
                         {o.resumo.lotes_12m > 0
                           ? <>{n0(o.resumo.lotes_mes)} lotes no mês · {n0(o.resumo.lotes_12m)} em 12 meses · último giro em {dataCurta(o.resumo.ultimo_giro)}</>

@@ -114,7 +114,7 @@ export default async function DashboardPage() {
     comDados.filter(l => valor(l) > 0).map(l => ({ texto: `${CORRETORA_LABEL[l.corretora]} ${fmtNum(valor(l))}${sufixo}`, href: href(CORRETORA_SLUG[l.corretora]) }))
   const atencao: Atencao[] = [
     { rotulo: 'Leads em aberto que pedem contato', itens: comAlerta ? [{ texto: `${fmtNum(comAlerta)} de ${fmtNum(leads.abertos)} em aberto`, href: '/leads' }] : [] },
-    { rotulo: 'Clientes em risco de parar', itens: porCorretoraCom(l => l.emRisco, s => `/${s}/clientes?risco=qualquer`) },
+    { rotulo: 'Clientes em risco de parar', itens: porCorretoraCom(l => l.emRisco, s => `/${s}/clientes?momento=risco`) },
     { rotulo: 'Migrados que nunca giraram', itens: porCorretoraCom(l => l.nuncaGiraram, s => `/${s}/oportunidades`) },
     { rotulo: 'Lançamentos sem cliente cadastrado', itens: admin ? porCorretoraCom(l => l.pendencias, s => `/${s}/importar#nao-cadastrados`, ' linhas') : [] },
   ].filter(a => a.itens.length > 0)
@@ -200,7 +200,7 @@ export default async function DashboardPage() {
                         </td>
                       )}
                       <td className="num col-p2">{n0(l.ativos)}</td>
-                      <td className="num col-p3">{l.emRisco ? <Link href={`/${slug}/clientes?risco=qualquer`} className="link text-warn">{fmtNum(l.emRisco)}</Link> : TRACO}</td>
+                      <td className="num col-p3">{l.emRisco ? <Link href={`/${slug}/clientes?momento=risco`} className="link text-warn">{fmtNum(l.emRisco)}</Link> : TRACO}</td>
                       <td className="col-p3 text-right"><Link href={`/${slug}/painel`} className="link inline-flex items-center gap-1 text-label">Painel <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link></td>
                     </tr>
                   )

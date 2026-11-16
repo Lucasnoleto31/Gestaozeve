@@ -1,4 +1,5 @@
-// Ficha do cliente › Cadastro: os dados do cadastro e o que falta completar
+// Ficha do cliente › Cadastro: o status da conta, as datas de entrada e migração, os dados do cadastro e
+// o que falta completar
 import { Panel } from '@/components/ui/Panel'
 import { TRACO, dataPt, rCurto } from '@/components/gestao/Celulas'
 import { ListaPendencias, type Ficha, type Pendencia } from './comum'
@@ -12,6 +13,14 @@ export function AbaCadastro({ ficha, pendencias }: { ficha: Ficha; pendencias: P
     <div className="grid gap-5 xl:grid-cols-2">
       <Panel variant="card" title="Cadastro" subtitle="Dados do export da corretora e os campos manuais da ficha.">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-dense">
+          {/* status e datas: saíram do alto da ficha (lá fica só o estado do cliente) e moram aqui */}
+          <dt className="text-fg-subtle">Status</dt><dd className={resumo?.status === 'Recusou' ? 'text-loss' : undefined}>{resumo?.status ?? TRACO}</dd>
+          <dt className="text-fg-subtle">Entrada</dt><dd className="tabular-nums">{dataPt(resumo?.data_entrada)}</dd>
+          <dt className="text-fg-subtle">Migração</dt>
+          <dd className="tabular-nums">
+            {dataPt(resumo?.data_migracao)}
+            {resumo?.data_migracao && resumo.dias_ate_migrar != null && resumo.dias_ate_migrar >= 0 && <span className="text-fg-subtle"> · {resumo.dias_ate_migrar} {resumo.dias_ate_migrar === 1 ? 'dia' : 'dias'} depois da entrada</span>}
+          </dd>
           <dt className="text-fg-subtle">Tipo</dt><dd>{cadastro.tipo_pessoa ?? TRACO}</dd>
           <dt className="text-fg-subtle">Perfil</dt><dd>{cadastro.perfil ?? TRACO}{cadastro.perfil_suitability ? ` · ${cadastro.perfil_suitability}` : ''}</dd>
           <dt className="text-fg-subtle">UF</dt><dd>{cadastro.uf ?? TRACO}</dd>

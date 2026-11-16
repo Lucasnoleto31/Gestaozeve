@@ -60,7 +60,7 @@ export async function AbaClientes({ ctx }: { ctx: Contexto }) {
         <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(r.em_processamento)} em processamento · ${fmtPct(pctAtivosLevados)} giram`} />
         <KpiCard label="Taxa de migração" value={fmtPct(taxaMigracao)} sub={`${fmtNum(r.migrados)} migrados · ${fmtNum(r.recusaram)} recusaram`} />
         <KpiCard label="Em risco" tone={r.em_risco_alto ? 'warn' : 'neutral'}
-          value={totalRisco ? <Link href={`${base}/clientes?risco=qualquer`} className="link">{fmtNum(totalRisco)}</Link> : fmtNum(0)}
+          value={totalRisco ? <Link href={`${base}/clientes?momento=risco`} className="link">{fmtNum(totalRisco)}</Link> : fmtNum(0)}
           sub={`${r.em_risco_alto ? `${fmtNum(r.em_risco_alto)} de nível alto · ` : ''}giraram nos últimos 3 meses e pararam ou caíram`} />
       </KpiRow>
 
@@ -143,7 +143,7 @@ export async function AbaClientes({ ctx }: { ctx: Contexto }) {
 
       <div className="grid gap-8 xl:grid-cols-2">
         <Panel title="Clientes em risco" subtitle={`Giraram nos últimos 3 meses e pararam (dias contados até o último lançamento) ou caíram contra os 3 meses anteriores · nível mais alto primeiro${r.em_risco_alto ? ` · ${fmtNum(r.em_risco_alto)} de nível alto` : ''}.`}
-          action={<Link href={`${base}/clientes?risco=qualquer`} className="link text-label">ver todos ({fmtNum(totalRisco)})</Link>}>
+          action={<Link href={`${base}/clientes?momento=risco`} className="link text-label">ver todos ({fmtNum(totalRisco)})</Link>}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead><tr><th>Cliente</th><th>Nível</th><th className="col-p2">Responsável</th><th>Risco</th><th className="num">Lotes mês</th><th className="num col-p2">Média 3 m</th><th className="num col-p3">Receita 12 m</th><th>Último giro</th></tr></thead>
@@ -166,7 +166,7 @@ export async function AbaClientes({ ctx }: { ctx: Contexto }) {
           </div>
         </Panel>
         <Panel title="Migrados sem giro" subtitle="Priorizar contato · migrações mais recentes primeiro."
-          action={<Link href={`${base}/clientes?situacao=Nunca%20girou`} className="link text-label">ver todos ({fmtNum(r.nunca_giraram)})</Link>}>
+          action={<Link href={`${base}/clientes?momento=nunca`} className="link text-label">ver todos ({fmtNum(r.nunca_giraram)})</Link>}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead><tr><th>Cliente</th><th className="col-p2">Responsável</th><th>Migração</th><th className="num">Telefone</th></tr></thead>

@@ -4,13 +4,16 @@ import { mesCurto } from '@/lib/gestao/meses'
 import { cn } from '@/lib/utils'
 import { Panel } from '@/components/ui/Panel'
 import { Badge } from '@/components/ui/Badge'
-import { LinhaVazia, StatusBadge, TRACO, dataPt, n0, r0 } from '@/components/gestao/Celulas'
+import { LinhaVazia, StatusBadge, TRACO, dataPt, n0, n2, r0 } from '@/components/gestao/Celulas'
 import { TarifasCliente } from './TarifasCliente'
 import type { Ficha } from './comum'
 
 export function AbaContas({ ctx, id, ficha, admin }: { ctx: Contexto; id: string; ficha: Ficha; admin: boolean }) {
   const { corretora, mesRef } = ctx
   const { resumo, contas, tarifas } = ficha
+  // quanto o cliente pagou por lote no mês, com a zeragem dentro (vinha no cartão "Tarifa vigente" do Resumo)
+  const zeragemMes = resumo?.receita_zeragem_mes ?? 0
+  const efetiva = resumo && resumo.lotes_mes > 0 ? resumo.receita_mes / resumo.lotes_mes : null
 
   return (
     <div className="grid gap-8 xl:grid-cols-3">
@@ -45,7 +48,8 @@ export function AbaContas({ ctx, id, ficha, admin }: { ctx: Contexto; id: string
       </Panel>
 
       <div className="min-w-0">
-        <TarifasCliente corretora={corretora} clienteId={id} tarifas={tarifas} admin={admin} tarifaAtual={resumo?.tarifa ?? 0} />
+        <TarifasCliente corretora={corretora} clienteId={id} tarifas={tarifas} admin={admin} tarifaAtual={resumo?.tarifa ?? 0}
+          nota={efetiva != null && zeragemMes > 0 ? `Em ${mesCurto(mesRef)}, com a zeragem, pagou R$ ${n2(efetiva)} por lote.` : null} />
       </div>
     </div>
   )

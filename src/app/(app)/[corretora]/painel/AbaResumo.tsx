@@ -105,7 +105,7 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
         <KpiCard label="Ativos no mês" value={fmtNum(r.ativos)} sub={`${fmtPct(pctAtivosMigrados)} da base migrada · ${fmtPct(pctAtivosLevados)} do total levado`}
           delta={variacaoMensal(r.ativos, mesAnt?.clientes_ativos, proj.mesAnterior, proj.parcial, fmtNum)} />
         <KpiCard label="Em risco" tone={r.em_risco_alto ? 'warn' : 'neutral'}
-          value={totalRisco ? <Link href={`${base}/clientes?risco=qualquer`} className="link">{fmtNum(totalRisco)}</Link> : fmtNum(0)}
+          value={totalRisco ? <Link href={`${base}/clientes?momento=risco`} className="link">{fmtNum(totalRisco)}</Link> : fmtNum(0)}
           sub={`${r.em_risco_alto ? `${fmtNum(r.em_risco_alto)} de nível alto · ` : ''}giraram nos últimos 3 meses e pararam ou caíram`} />
         <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(r.em_processamento)} em processamento`} />
         <KpiCard label="Taxa de migração" value={fmtPct(taxaMigracao)} sub={`${fmtNum(r.migrados)} migrados · ${fmtNum(r.recusaram)} recusaram`} />
@@ -139,7 +139,7 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
             </li>
             <li className="flex items-center justify-between gap-3 py-3">
               <span>Migrados que nunca giraram</span>
-              <Link href={`${base}/clientes?situacao=Nunca%20girou`} className="link tabular-nums">{fmtNum(r.nunca_giraram)} · {fmtNum(r.inativos)} inativos</Link>
+              <Link href={`${base}/clientes?momento=nunca`} className="link tabular-nums">{fmtNum(r.nunca_giraram)} · {fmtNum(r.inativos)} inativos</Link>
             </li>
           </ul>
         </Panel>

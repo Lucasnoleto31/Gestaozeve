@@ -14,12 +14,13 @@ import type { Corretora } from '@/lib/corretoras'
 import type { TarifaCliente } from '@/lib/gestao/tipos'
 import { numeroBR } from '@/lib/gestao/planilhas'
 
-export function TarifasCliente({ corretora, clienteId, tarifas, admin, tarifaAtual }: {
+export function TarifasCliente({ corretora, clienteId, tarifas, admin, tarifaAtual, nota }: {
   corretora: Corretora
   clienteId: string
   tarifas: TarifaCliente[]
   admin: boolean
   tarifaAtual: number
+  nota?: string | null   // uma frase a mais no subtítulo (quanto pagou por lote no mês, com a zeragem)
 }) {
   const router = useRouter()
   const { avisar } = useToast()
@@ -46,7 +47,8 @@ export function TarifasCliente({ corretora, clienteId, tarifas, admin, tarifaAtu
   }
 
   return (
-    <Panel variant="card" title="Tarifas" subtitle={`Vigente hoje: ${n2(tarifaAtual)} R$/lote${tarifas.length ? '' : ' (do assessor)'}`}
+    <Panel variant="card" title="Tarifas"
+      subtitle={`${tarifaAtual ? `Vigente hoje: ${n2(tarifaAtual)} R$/lote${tarifas.length ? '' : ' (do assessor)'}.` : 'Sem tarifa vigente, nem do cliente nem do assessor.'}${nota ? ` ${nota}` : ''}`}
       action={admin && !novo ? <Button variant="secondary" size="sm" onClick={() => setNovo(true)}><Plus className="h-4 w-4" aria-hidden />Tarifa</Button> : undefined}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       {novo && (

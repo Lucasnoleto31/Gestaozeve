@@ -4,10 +4,9 @@ import { cookies } from 'next/headers'
 import { CHAVES_FILTRO_CLIENTES, cookieFiltrosClientes, filtrosIniciais } from '@/lib/filtrosLista'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { assessoresPorCorretora, clientesLista, contatosClientesResumo, responsaveisAtivos } from '@/lib/gestao/consultas'
-import { resumoClientes } from '@/lib/gestao/derivados'
-import { mesCurto, mesLongo, somarDias } from '@/lib/gestao/meses'
+import { mesCurto, somarDias } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
-import { fmtNum, fmtPct } from '@/lib/format'
+import { fmtNum } from '@/lib/format'
 import { temListaPropria } from '@/lib/corretoras'
 import { getProfile } from '@/lib/auth/getProfile'
 import { compactar } from '@/lib/compacto'
@@ -16,12 +15,14 @@ import { COOKIE_VISAO_CLIENTES, visaoClientes } from '@/lib/gestao/listaClientes
 import { giroNasOutrasCorretoras } from '@/lib/gestao/consultasGiroFora'
 import type { GiroFora } from '@/lib/gestao/giroFora'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
-import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { MesPicker } from '@/components/gestao/Filtros'
 import { TabelaClientes } from './TabelaClientes'
-import { BuscaCliente } from './BuscaCliente'
 import { NovoClienteButton } from './NovoClienteButton'
 
+// Clientes: quem são e como cada um está. A base aparece separada em grupos (Operando, Em risco,
+// Inativos, Nunca operaram, Em abertura) que filtram a lista; quem monta os cartões e a tabela é a
+// TabelaClientes. Os números do caminho até o giro (levados, migrados, taxa de migração) ficam no
+// Painel › Clientes.
 export default async function ClientesPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base, q } = ctx
@@ -40,41 +41,29 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   const fora: Record<string, GiroFora> = {}
   for (const c of clientes) { const g = giroFora.get(c.cliente_id); if (g) fora[c.cliente_id] = g }
   const admin = profile?.role === 'admin'
-  const r = resumoClientes(clientes)
   const hoje = fmtDate(hojeBrasil())
+  // o movimento recente da base, em uma linha
   const d7 = somarDias(hoje, -7), d30 = somarDias(hoje, -30)
-  const migrados7d = clientes.filter(c => c.status === 'Migrado' && c.data_migracao && c.data_migracao >= d7).length
+  const migraram7d = clientes.filter(c => c.status === 'Migrado' && c.data_migracao && c.data_migracao >= d7).length
   const entraram30d = clientes.filter(c => c.data_entrada && c.data_entrada >= d30).length
-  const emRisco = clientes.filter(c => c.risco).length
-  const altoEmRisco = clientes.filter(c => c.nivel === 'Alto' && c.risco).length
+  const contas = clientes.reduce((s, c) => s + c.n_contas, 0)
+  const recente = [
+    entraram30d ? `${fmtNum(entraram30d)} ${entraram30d === 1 ? 'entrou' : 'entraram'} nos últimos 30 dias` : null,
+    migraram7d ? `${fmtNum(migraram7d)} ${migraram7d === 1 ? 'conta migrou' : 'contas migraram'} nos últimos 7` : null,
+  ].filter(Boolean).join(' e ')
 
   return (
     <>
       <PageHeader
         eyebrow={ctx.eyebrow}
         title="Clientes"
-        description={listaPropria
-          ? `A nossa lista de clientes levados para a ${ctx.label}: status, responsável e tarifa por cliente · giro e situação em ${mesLongo(mesRef)}.`
-          : `Um cliente por CPF/CNPJ, com as contas agrupadas · giro e situação em ${mesLongo(mesRef)}.`}
+        description={`Como está cada cliente em ${mesCurto(mesRef)}. São ${fmtNum(clientes.length)} clientes em ${fmtNum(contas)} contas${recente ? `; ${recente}` : ''}.`}
         actions={<>
           <NovoClienteButton corretora={corretora} base={base} responsaveis={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)} assessores={assessores[corretora]} hoje={hoje} />
-          <BuscaCliente corretora={corretora} base={base} placeholder="Abrir a ficha: nome, CPF, conta…" />
           <MesPicker valor={mesRef} />
         </>}
       />
       <PageBody>
-        {/* A base em seis números: quem gira no mês (o destaque), o tamanho da base e o caminho até o giro.
-            As contagens por situação, "em risco" e "com alertas" ficam nos botões da lista, que filtram. */}
-        <KpiRow cols={6}>
-          <KpiCard destaque label={`Ativos em ${mesCurto(mesRef)}`} value={fmtNum(r.ativosSit)} sub={`${fmtPct(r.migrados ? (r.ativosSit / r.migrados) * 100 : 0)} dos migrados · ${fmtNum(r.inativos)} inativos`} />
-          <KpiCard label="Clientes levados" value={fmtNum(r.levados)} sub={`${fmtNum(r.contas)} contas · ${fmtNum(entraram30d)} entraram em 30 dias`} />
-          <KpiCard label="Migrados" value={fmtNum(r.migrados)} sub={`${fmtPct(r.taxaMigracao)} da base · ${fmtNum(migrados7d)} nos últimos 7 dias`} />
-          <KpiCard label="Em processamento" value={fmtNum(r.emProcessamento)}
-            sub={`${r.mediaDiasMigrar != null ? `média de ${Math.round(r.mediaDiasMigrar)} dias até migrar` : 'sem data de entrada para medir'} · ${fmtNum(r.recusaram)} recusaram (${fmtPct(r.levados ? (r.recusaram / r.levados) * 100 : 0)})`} />
-          <KpiCard label="Migrados sem giro" value={fmtNum(r.nuncaGiraram)} sub="migraram e ainda não operaram" />
-          <KpiCard label="Em risco" value={fmtNum(emRisco)} tone={emRisco ? 'warn' : 'neutral'}
-            sub={emRisco ? `giravam e pararam ou caíram · ${fmtNum(altoEmRisco)} de nível alto` : 'ninguém parou ou caiu'} />
-        </KpiRow>
         <TabelaClientes
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}

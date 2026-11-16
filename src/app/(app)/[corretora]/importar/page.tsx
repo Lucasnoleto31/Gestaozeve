@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { importacoesLista, lotesNaoCadastrados, parametrosDaCorretora, painelKpis } from '@/lib/gestao/consultas'
 import { fechamentosAplicados } from '@/lib/gestao/consultasFechamento'
-import { bankingAplicados } from '@/lib/gestao/consultasBanking'
+import { extrasAplicados } from '@/lib/gestao/consultasBanking'
 import { getProfile } from '@/lib/auth/getProfile'
 import { temListaPropria } from '@/lib/corretoras'
 import { fmtNum } from '@/lib/format'
@@ -23,10 +23,10 @@ export default async function ImportarPage({ params, searchParams }: { params: P
   if (profile?.role !== 'admin') redirect(`${ctx.base}/painel`)
   const { corretora, base } = ctx
   const fechamentoNaTela = temListaPropria(corretora)   // BTG: o fechamento mensal entra pela planilha do BTG
-  const [historico, naoCad, par, kpis, fechamentos, banking] = await Promise.all([
+  const [historico, naoCad, par, kpis, fechamentos, extras] = await Promise.all([
     importacoesLista(corretora), lotesNaoCadastrados(corretora), parametrosDaCorretora(corretora), painelKpis(corretora, null),
     fechamentoNaTela ? fechamentosAplicados(corretora) : Promise.resolve([]),
-    fechamentoNaTela ? bankingAplicados(corretora) : Promise.resolve([]),   // a planilha de Banking da Delta (fora dos lotes)
+    fechamentoNaTela ? extrasAplicados(corretora) : Promise.resolve([]),   // o que o BTG paga fora dos lotes: fora do giro e Banking
   ])
   const modoZeragem = par.parametros.find(p => p.chave === 'modo_zeragem')?.valor ?? 'ZERAGEM'
   const zeragemManual = (par.parametros.find(p => p.chave === 'zeragem_manual')?.valor ?? '').trim().toUpperCase() === 'SIM'
@@ -48,7 +48,7 @@ export default async function ImportarPage({ params, searchParams }: { params: P
         </KpiRow>
         <Importador corretora={corretora} label={ctx.label} modoZeragem={modoZeragem} />
         {fechamentoNaTela && <FechamentoBtg corretora={corretora} base={base} aplicados={fechamentos} zeragemManual={zeragemManual} />}
-        {fechamentoNaTela && <BankingDelta corretora={corretora} base={base} aplicados={banking} />}
+        {fechamentoNaTela && <BankingDelta corretora={corretora} base={base} aplicados={extras} />}
         <NaoCadastrados corretora={corretora} linhas={naoCad} base={base} />
         <HistoricoImportacoes corretora={corretora} itens={historico} />
       </PageBody>

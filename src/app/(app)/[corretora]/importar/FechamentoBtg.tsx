@@ -15,24 +15,30 @@ import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { useToast } from '@/components/ui/Toast'
 import { LinhaVazia, TRACO, dataCurta, n0, r0 } from '@/components/gestao/Celulas'
 import { lerAbas } from '@/lib/gestao/lerArquivo'
-import { aplicavel, escolhasDoPlano, lerFechamentoBtg, type CasoFechamento, type LeituraFechamento } from '@/lib/gestao/fechamento'
+import { PRODUTOS_RV, aplicavel, escolhasDoPlano, lerFechamentoBtg, type CasoFechamento, type LeituraFechamento } from '@/lib/gestao/fechamento'
 import { aplicarFechamentoBtg, desfazerFechamentoBtg, prepararFechamentoBtg, type Conferencia } from '@/lib/gestao/acoesFechamento'
+import { lerQuadroFechamento, type QuadroFechamento } from '@/lib/gestao/foraGiro'
+import { aplicarForaDoGiroBtg, prepararForaDoGiroBtg, type ForaGiroConferido } from '@/lib/gestao/acoesBanking'
 import type { FechamentoAplicado } from '@/lib/gestao/consultasFechamento'
 import { mesLongo } from '@/lib/gestao/meses'
 import { fmtDataHoraPt, fmtNum, fmtPct } from '@/lib/format'
 import type { Corretora } from '@/lib/corretoras'
 import { cn } from '@/lib/utils'
 
-type Lido = Extract<LeituraFechamento, { ok: true }>
+// a leitura da planilha mais o quadro de resumo dela (parte do escritório por produto e alíquota de imposto)
+type Lido = Extract<LeituraFechamento, { ok: true }> & { quadro: QuadroFechamento }
+// fora = produtos fora do giro da planilha (CDB, saldo remunerado, aluguel…), já com a parte do escritório;
+// lancarFora = gravar essa comissão como receita do mês junto com o fechamento
+type Plano = { nome: string; leitura: Lido; conf: Conferencia; marcados: Set<string>; gravarPct: boolean; fora: ForaGiroConferido | null; lancarFora: boolean }
 type Estado =
   | { fase: 'vazio' }
   | { fase: 'lendo' }
   | { fase: 'erro'; erro: string }
   | { fase: 'lido'; nome: string; leitura: Lido }
   | { fase: 'conferindo'; nome: string; leitura: Lido }
-  | { fase: 'plano'; nome: string; leitura: Lido; conf: Conferencia; marcados: Set<string>; gravarPct: boolean; erro?: string }
-  | { fase: 'aplicando'; nome: string; leitura: Lido; conf: Conferencia; marcados: Set<string>; gravarPct: boolean }
-  | { fase: 'aplicado'; nome: string; resultado: { nome: string; ajustadas: number; inseridas: number; pct: number | null } }
+  | ({ fase: 'plano'; erro?: string } & Plano)
+  | ({ fase: 'aplicando' } & Plano)
+  | { fase: 'aplicado'; nome: string; resultado: { nome: string; ajustadas: number; inseridas: number; pct: number | null } | null; fora: { liquida: number; substituidos: number } | null; erroFora?: string }
 
 const TIPO: Record<CasoFechamento['acao']['tipo'], { label: string; variant: BadgeVariant }> = {
   tarifa: { label: 'Corretagem', variant: 'accent' },
@@ -54,9 +60,10 @@ export function FechamentoBtg({ corretora, base, aplicados, zeragemManual }: { c
     if (!file) return
     setEstado({ fase: 'lendo' })
     try {
-      const r = lerFechamentoBtg(await lerAbas(file))
+      const abas = await lerAbas(file)
+      const r = lerFechamentoBtg(abas)
       if (!r.ok) { setEstado({ fase: 'erro', erro: r.erro }); return }
-      setEstado({ fase: 'lido', nome: file.name, leitura: r })
+      setEstado({ fase: 'lido', nome: file.name, leitura: { ...r, quadro: lerQuadroFechamento(abas) } })
     } catch (e) {
       setEstado({ fase: 'erro', erro: e instanceof Error ? e.message : 'Não consegui ler o arquivo' })
     }
@@ -66,9 +73,20 @@ export function FechamentoBtg({ corretora, base, aplicados, zeragemManual }: { c
     if (estado.fase !== 'lido') return
     const { nome, leitura } = estado
     setEstado({ fase: 'conferindo', nome, leitura })
-    const r = await prepararFechamentoBtg(corretora, leitura.mes, leitura.linhas)
+    // o giro cruza com os lotes; o que não é giro (CDB, saldo remunerado, aluguel…) vira comissão à parte
+    const foraDoGiro = leitura.linhas.filter(l => !PRODUTOS_RV.includes(l.produto))
+    const [r, f] = await Promise.all([
+      prepararFechamentoBtg(corretora, leitura.mes, leitura.linhas),
+      foraDoGiro.length ? prepararForaDoGiroBtg(corretora, leitura.mes, foraDoGiro, leitura.quadro) : Promise.resolve(null),
+    ])
     if (!r.ok) { setEstado({ fase: 'erro', erro: r.erro }); return }
-    setEstado({ fase: 'plano', nome, leitura, conf: r.dados, marcados: new Set(r.dados.plano.casos.filter(aplicavel).map(c => c.chave)), gravarPct: leitura.resumo.pctComissao != null })
+    const fora = f && f.ok && f.dados.itens.length ? f.dados : null
+    setEstado({
+      fase: 'plano', nome, leitura, conf: r.dados, marcados: new Set(r.dados.plano.casos.filter(aplicavel).map(c => c.chave)), gravarPct: leitura.resumo.pctComissao != null,
+      // já marcado quando o mês ainda não tem fora do giro gravado, ou tem com outro valor
+      fora, lancarFora: !!fora && (!fora.gravado || Math.abs(fora.gravado.liquida - fora.total.liquida) > 0.005),
+      erro: f && !f.ok ? `Fora do giro: ${f.erro}` : undefined,
+    })
   }
 
   const alternar = (chave: string) => {
@@ -84,20 +102,31 @@ export function FechamentoBtg({ corretora, base, aplicados, zeragemManual }: { c
 
   const aplicar = async () => {
     if (estado.fase !== 'plano') return
-    const { nome, leitura, conf, marcados, gravarPct } = estado
+    const { nome, leitura, conf, marcados, gravarPct, fora, lancarFora } = estado
+    const plano: Plano = { nome, leitura, conf, marcados, gravarPct, fora, lancarFora }
     const { updates, inserts } = escolhasDoPlano(conf.plano, marcados)
     const pct = gravarPct ? leitura.resumo.pctComissao : null
+    const giro = updates.length > 0 || inserts.length > 0 || pct != null   // o que mexe nos lotes ou no % do mês
+    const lancar = lancarFora && fora ? fora : null
     const partes = [
       updates.length ? `${fmtNum(updates.length)} ${updates.length === 1 ? 'operação com corretagem ajustada' : 'operações com corretagem ajustada'}` : null,
       inserts.length ? `${fmtNum(inserts.length)} ${inserts.length === 1 ? 'lançamento novo' : 'lançamentos novos'}` : null,
       pct != null ? `comissão do mês ${fmtPct(pct)}` : null,
+      lancar ? `fora do giro: ${r0(lancar.total.liquida)} de comissão líquida` : null,
     ].filter(Boolean)
     if (!partes.length) { setEstado({ ...estado, erro: 'Nada marcado para aplicar.' }); return }
-    if (!confirm(`Aplicar o fechamento de ${mesLongo(leitura.mes)}?\n\n${partes.join('\n')}\n\nDá para desfazer depois, em "Fechamentos aplicados".`)) return
-    setEstado({ fase: 'aplicando', nome, leitura, conf, marcados, gravarPct })
-    const r = await aplicarFechamentoBtg(corretora, { mes: leitura.mes, origem: nome, updates, inserts, pct, versao: conf.versao })
-    if (!r.ok) { setEstado({ fase: 'plano', nome, leitura, conf, marcados, gravarPct, erro: r.erro }); return }
-    setEstado({ fase: 'aplicado', nome, resultado: r.dados })
+    if (!confirm(`Aplicar o fechamento de ${mesLongo(leitura.mes)}?\n\n${partes.join('\n')}\n\nDá para desfazer depois, em "Fechamentos aplicados"${lancar ? ' e em "Fora do giro e Banking gravados"' : ''}.`)) return
+    setEstado({ fase: 'aplicando', ...plano })
+    let resultado: Extract<Estado, { fase: 'aplicado' }>['resultado'] = null
+    if (giro) {
+      const r = await aplicarFechamentoBtg(corretora, { mes: leitura.mes, origem: nome, updates, inserts, pct, versao: conf.versao })
+      if (!r.ok) { setEstado({ fase: 'plano', ...plano, erro: r.erro }); return }
+      resultado = r.dados
+    }
+    // o fora do giro é um registro à parte: se falhar, o que já foi aplicado no giro fica e o erro aparece
+    const f = lancar ? await aplicarForaDoGiroBtg(corretora, { mes: leitura.mes, origem: nome, linhas: leitura.linhas.filter(l => !PRODUTOS_RV.includes(l.produto)), quadro: leitura.quadro }) : null
+    if (f && !f.ok && !giro) { setEstado({ fase: 'plano', ...plano, erro: f.erro }); return }
+    setEstado({ fase: 'aplicado', nome, resultado, fora: f && f.ok ? { liquida: f.dados.total.liquida, substituidos: f.dados.substituidos } : null, erroFora: f && !f.ok ? f.erro : undefined })
     avisar({ titulo: 'Fechamento aplicado', detalhe: partes.join(' · '), tom: 'gain' })
     router.refresh()
   }
@@ -147,13 +176,16 @@ export function FechamentoBtg({ corretora, base, aplicados, zeragemManual }: { c
         )}
 
         {(estado.fase === 'plano' || estado.fase === 'aplicando') && <PlanoView estado={estado} base={base} alternar={alternar} marcarTodos={marcarTodos} aplicar={aplicar}
-          gravarPct={v => { if (estado.fase === 'plano') setEstado({ ...estado, gravarPct: v }) }} cancelar={() => setEstado({ fase: 'vazio' })} />}
+          gravarPct={v => { if (estado.fase === 'plano') setEstado({ ...estado, gravarPct: v }) }}
+          lancarFora={v => { if (estado.fase === 'plano') setEstado({ ...estado, lancarFora: v }) }} cancelar={() => setEstado({ fase: 'vazio' })} />}
 
         {estado.fase === 'aplicado' && (
-          <Alert tone="gain" title={`Fechamento aplicado: ${estado.resultado.nome}`}>
+          <Alert tone={estado.erroFora ? 'warn' : 'gain'} title={estado.resultado ? `Fechamento aplicado: ${estado.resultado.nome}` : 'Fora do giro lançado'}>
             <ul className="list-disc pl-4">
-              <li>{fmtNum(estado.resultado.ajustadas)} {estado.resultado.ajustadas === 1 ? 'operação com corretagem ajustada' : 'operações com corretagem ajustada'} · {fmtNum(estado.resultado.inseridas)} {estado.resultado.inseridas === 1 ? 'lançamento novo' : 'lançamentos novos'}</li>
-              {estado.resultado.pct != null && <li>Comissão do mês gravada em Parâmetros (repasse_pct_mes): {fmtPct(estado.resultado.pct)}</li>}
+              {estado.resultado && <li>{fmtNum(estado.resultado.ajustadas)} {estado.resultado.ajustadas === 1 ? 'operação com corretagem ajustada' : 'operações com corretagem ajustada'} · {fmtNum(estado.resultado.inseridas)} {estado.resultado.inseridas === 1 ? 'lançamento novo' : 'lançamentos novos'}</li>}
+              {estado.resultado?.pct != null && <li>Comissão do mês gravada em Parâmetros (repasse_pct_mes): {fmtPct(estado.resultado.pct)}</li>}
+              {estado.fora && <li>Fora do giro: {r0(estado.fora.liquida)} de comissão líquida gravados{estado.fora.substituidos ? ' (substituiu o que estava gravado para o mês)' : ''}.</li>}
+              {estado.erroFora && <li>O fora do giro não foi gravado: {estado.erroFora}</li>}
               <li>Receita, comissão e repasse do mês recalculados. <Link href={`${base}/painel`} className="link inline-flex items-center gap-1">Ver no Painel <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link></li>
             </ul>
           </Alert>
@@ -188,18 +220,20 @@ export function FechamentoBtg({ corretora, base, aplicados, zeragemManual }: { c
   )
 }
 
-function PlanoView({ estado, base, alternar, marcarTodos, aplicar, gravarPct, cancelar }: {
+function PlanoView({ estado, base, alternar, marcarTodos, aplicar, gravarPct, lancarFora, cancelar }: {
   estado: Extract<Estado, { fase: 'plano' | 'aplicando' }>
   base: string
   alternar: (chave: string) => void
   marcarTodos: (sim: boolean) => void
   aplicar: () => void
   gravarPct: (v: boolean) => void
+  lancarFora: (v: boolean) => void
   cancelar: () => void
 }) {
-  const { conf, leitura, marcados } = estado
+  const { conf, leitura, marcados, fora } = estado
   const { plano } = conf
   const { updates, inserts } = escolhasDoPlano(plano, marcados)
+  const lancar = estado.lancarFora && !!fora
   const aplicaveis = plano.casos.filter(aplicavel).length
   const pct = leitura.resumo.pctComissao
   const aplicando = estado.fase === 'aplicando'
@@ -250,9 +284,9 @@ function PlanoView({ estado, base, alternar, marcarTodos, aplicar, gravarPct, ca
 
       {(leitura.resumo.foraRv.length > 0 || plano.semCadastro.length > 0 || plano.lotesSemCliente > 0) && (
         <div className="grid gap-4 lg:grid-cols-2">
-          {leitura.resumo.foraRv.length > 0 && (
+          {leitura.resumo.foraRv.length > 0 && !fora && (
             <div>
-              <p className="label mb-1">Fora do giro (não entra no sistema)</p>
+              <p className="label mb-1">Fora do giro</p>
               <div className="tbl-wrap">
                 <table className="tbl tbl-dense">
                   <thead><tr><th>Produto</th><th className="num">Linhas</th><th className="num">Bruta</th><th className="num">Comissão</th></tr></thead>
@@ -262,7 +296,38 @@ function PlanoView({ estado, base, alternar, marcarTodos, aplicar, gravarPct, ca
                   </tbody>
                 </table>
               </div>
-              <p className="mt-1 text-micro text-fg-subtle">Aluguel, CDB, saldo remunerado… o BTG paga, mas não são lotes: ficam fora da receita do sistema.</p>
+              <p className="mt-1 text-micro text-fg-subtle">Aluguel, CDB, saldo remunerado… o BTG paga, mas não são lotes. Não consegui calcular a parte do escritório desta vez; confira de novo para lançar.</p>
+            </div>
+          )}
+          {fora && (
+            <div>
+              <p className="label mb-1">Fora do giro (comissão à parte dos lotes)</p>
+              <div className="tbl-wrap">
+                <table className="tbl tbl-dense">
+                  <thead><tr><th>Produto</th><th className="num col-p2">Linhas</th><th className="num">Comissão do BTG</th><th className="num">Parte do escritório</th><th className="num">Líquida</th></tr></thead>
+                  <tbody>
+                    {fora.grupos.map(g => (
+                      <tr key={g.grupo}>
+                        <td>{g.grupo}</td><td className="num col-p2">{n0(g.linhas)}</td><td className="num">{r0(g.comissao)}</td>
+                        <td className="num">{r0(g.parte)} <span className="text-fg-subtle">({fmtPct(g.pctEscritorio, 0)})</span></td><td className="num font-semibold">{r0(g.liquida)}</td>
+                      </tr>
+                    ))}
+                    <tr className="total"><td>Total</td><td className="num col-p2">{n0(fora.total.linhas)}</td><td className="num">{r0(fora.total.comissao)}</td><td className="num">{r0(fora.total.parte)}</td><td className="num">{r0(fora.total.liquida)}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-1 text-micro text-fg-subtle">
+                Aluguel, CDB, saldo remunerado, fundos… o BTG paga, mas não são lotes. A parte do escritório vem do quadro da planilha e a líquida já desconta o imposto ({fmtPct(fora.grupos[0]?.impostoPct ?? 0)}).
+                {fora.repasse > 0 && ` Dos clientes de parceiro, ${r0(fora.repasse)} cabem ao parceiro e ficam fora da líquida.`}
+              </p>
+              {fora.avisos.map((a, i) => <p key={i} className="mt-1 text-micro text-warn">{a}</p>)}
+              <label className="mt-2 flex items-start gap-2 text-dense">
+                <input type="checkbox" className="mt-0.5" checked={estado.lancarFora} onChange={e => lancarFora(e.target.checked)} disabled={aplicando} />
+                <span>
+                  Lançar {r0(fora.total.liquida)} de comissão líquida fora do giro em {mesLongo(leitura.mes)}
+                  <span className="block text-label text-fg-subtle">{fora.gravado ? `já gravado: ${r0(fora.gravado.liquida)}${fora.gravado.origem ? ` (${fora.gravado.origem})` : ''}; marcar substitui` : 'ainda não gravado para este mês'}</span>
+                </span>
+              </label>
             </div>
           )}
           {(plano.semCadastro.length > 0 || plano.lotesSemCliente > 0) && (
@@ -296,8 +361,10 @@ function PlanoView({ estado, base, alternar, marcarTodos, aplicar, gravarPct, ca
 
       {estado.fase === 'plano' && estado.erro && <Alert tone="loss">{estado.erro}</Alert>}
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={aplicar} loading={aplicando} disabled={!updates.length && !inserts.length && !(estado.gravarPct && pct != null)}>
-          Aplicar {fmtNum(updates.length)} {updates.length === 1 ? 'corretagem' : 'corretagens'} e {fmtNum(inserts.length)} {inserts.length === 1 ? 'lançamento' : 'lançamentos'}
+        <Button onClick={aplicar} loading={aplicando} disabled={!updates.length && !inserts.length && !(estado.gravarPct && pct != null) && !lancar}>
+          {!updates.length && !inserts.length && lancar
+            ? `Lançar o fora do giro${estado.gravarPct && pct != null ? ' e gravar a comissão do mês' : ''}`
+            : `Aplicar ${fmtNum(updates.length)} ${updates.length === 1 ? 'corretagem' : 'corretagens'} e ${fmtNum(inserts.length)} ${inserts.length === 1 ? 'lançamento' : 'lançamentos'}${lancar ? ' e lançar o fora do giro' : ''}`}
         </Button>
         <Button variant="ghost" onClick={cancelar} disabled={aplicando}>Cancelar</Button>
         <span className="text-label text-fg-subtle">Faz um retrato antes de gravar: dá para desfazer.</span>

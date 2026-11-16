@@ -1,24 +1,29 @@
-// Receita de Banking gravada (só servidor): cada mês é uma importação protegida da corretora com
-// detalhes.banking (grupos, totais e as linhas da planilha da Delta). Não tem lotes: fica fora do giro.
+// Receitas do BTG fora dos lotes já gravadas (só servidor): o Banking (planilha "DW" da Delta) e os
+// produtos fora do giro do fechamento principal. Cada mês de cada fonte é uma importação protegida da
+// corretora, sem lotes, com detalhes.banking ou detalhes.fora_giro (grupos, totais e as linhas da planilha).
 import type { Corretora } from '@/lib/corretoras'
 import { equipe, falha, str } from './guard'
-import { lerBankingGravado, type BankingDoMes } from './banking'
+import { bankingPorMes, lerExtraGravado, type BankingDoMes, type FonteExtra } from './banking'
 
 type Row = Record<string, unknown>
 
-export type BankingAplicado = { id: string; nome_arquivo: string; created_at: string; criado_por_nome: string | null; banking: BankingDoMes }
+export type ExtraAplicado = { id: string; nome_arquivo: string; created_at: string; criado_por_nome: string | null; fonte: FonteExtra; dados: BankingDoMes }
 
-// Os meses de Banking gravados, do lançamento mais recente para o mais antigo
-export async function bankingAplicados(corretora: Corretora, limite = 120): Promise<BankingAplicado[]> {
+// Os meses gravados das duas fontes, do lançamento mais recente para o mais antigo
+export async function extrasAplicados(corretora: Corretora, limite = 240): Promise<ExtraAplicado[]> {
   const { db } = await equipe()
   const { data, error } = await db.from('importacoes').select('id, nome_arquivo, created_at, criado_por_nome, detalhes')
-    .eq('corretora', corretora).eq('tipo', 'lotes').eq('protegida', true).not('detalhes->banking', 'is', null)
+    .eq('corretora', corretora).eq('tipo', 'lotes').eq('protegida', true).or('detalhes->banking.not.is.null,detalhes->fora_giro.not.is.null')
     .order('created_at', { ascending: false }).limit(limite)
   if (error) falha(error, 'importacoes')
-  const out: BankingAplicado[] = []
+  const out: ExtraAplicado[] = []
   for (const r of (data ?? []) as Row[]) {
-    const banking = lerBankingGravado((r.detalhes as Row | null)?.banking)
-    if (banking) out.push({ id: String(r.id), nome_arquivo: String(r.nome_arquivo ?? ''), created_at: String(r.created_at), criado_por_nome: str(r.criado_por_nome), banking })
+    const extra = lerExtraGravado(r.detalhes)
+    if (extra) out.push({ id: String(r.id), nome_arquivo: String(r.nome_arquivo ?? ''), created_at: String(r.created_at), criado_por_nome: str(r.criado_por_nome), ...extra })
   }
   return out
 }
+
+// Um mês por fonte: 'AAAA-MM-01' → o registro mais recente daquela fonte
+export const extrasPorMes = (extras: ExtraAplicado[], fonte: FonteExtra): Map<string, BankingDoMes> =>
+  bankingPorMes(extras.filter(e => e.fonte === fonte).map(e => e.dados))

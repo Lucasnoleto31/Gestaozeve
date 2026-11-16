@@ -23,20 +23,32 @@ export type ItemBanking = {
   liquida: number
   comissao: number       // o que o BTG paga sobre a linha
 }
-export type GrupoBanking = {
-  grupo: string
+export type TotaisBanking = {
   linhas: number
   clientes: number
   bruta: number
-  comissao: number        // comissão que o BTG pagou no grupo
-  pctEscritorio: number   // parte do escritório, em % da comissão
+  comissao: number        // comissão que o BTG pagou
   parte: number           // comissão do escritório (antes do imposto)
-  impostoPct: number
   imposto: number
   liquida: number         // comissão líquida do escritório
 }
-export type TotaisBanking = Omit<GrupoBanking, 'grupo' | 'pctEscritorio' | 'impostoPct'>
+export type GrupoBanking = TotaisBanking & {
+  grupo: string
+  pctEscritorio: number   // parte do escritório, em % da comissão
+  impostoPct: number
+  // clientes de um parceiro com participação na comissão (fora do giro do fechamento principal): quem é,
+  // a parte dele (em % da comissão líquida de imposto) e quanto isso dá, a repassar
+  parceiro?: string
+  pctParceiro?: number
+  parteParceiro?: number
+}
+// O que define um grupo além das linhas: o nome e os percentuais (a tela manda isto; o servidor refaz o resto)
+export type PercentualGrupo = Pick<GrupoBanking, 'grupo' | 'pctEscritorio' | 'impostoPct' | 'parceiro' | 'pctParceiro'>
+// O mesmo formato guarda as duas receitas fora dos lotes: o Banking (planilha "DW" da Delta, em
+// detalhes.banking) e os produtos fora do giro do fechamento principal (detalhes.fora_giro, ver foraGiro.ts)
 export type BankingDoMes = { mes: string; origem: string | null; grupos: GrupoBanking[]; total: TotaisBanking; itens: ItemBanking[] }
+export type FonteExtra = 'banking' | 'fora_giro'
+export const FONTE_ROTULO: Record<FonteExtra, string> = { banking: 'Banking', fora_giro: 'Fora do giro' }
 export type LeituraBanking =
   | { ok: true; mes: string; grupos: GrupoBanking[]; total: TotaisBanking; itens: ItemBanking[]; avisos: string[] }
   | { ok: false; erro: string }
@@ -185,14 +197,16 @@ export function somarBanking(grupos: GrupoBanking[], itens?: ItemBanking[]): Tot
 }
 
 // Refaz os grupos a partir das linhas e dos percentuais (o servidor não confia nos totais que chegam da tela)
-export function gruposDasLinhas(itens: ItemBanking[], percentuais: { grupo: string; pctEscritorio: number; impostoPct: number }[]): GrupoBanking[] {
-  return percentuais.map(p => {
+export function gruposDasLinhas(itens: ItemBanking[], percentuais: PercentualGrupo[]): GrupoBanking[] {
+  return percentuais.map<GrupoBanking>(p => {
     const doGrupo = itens.filter(i => i.grupo === p.grupo)
     const comissao = doGrupo.reduce((s, i) => s + i.comissao, 0)
     const parte = (comissao * p.pctEscritorio) / 100, imposto = (parte * p.impostoPct) / 100
     return {
       grupo: p.grupo, linhas: doGrupo.length, clientes: new Set(doGrupo.map(i => i.conta || i.cliente)).size, bruta: r6(doGrupo.reduce((s, i) => s + i.bruta, 0)), comissao: r6(comissao),
       pctEscritorio: r6(p.pctEscritorio), parte: r6(parte), impostoPct: r6(p.impostoPct), imposto: r6(imposto), liquida: r6(parte - imposto),
+      // a parte do parceiro sai da comissão já líquida de imposto, como na aba dele no fechamento
+      ...(p.parceiro ? { parceiro: p.parceiro, pctParceiro: r6(p.pctParceiro ?? 0), parteParceiro: r6((comissao * (1 - p.impostoPct / 100) * (p.pctParceiro ?? 0)) / 100) } : {}),
     }
   }).filter(g => g.linhas > 0)
 }
@@ -210,12 +224,23 @@ export function lerBankingGravado(v: unknown): BankingDoMes | null {
   const grupos = (o.grupos as Record<string, unknown>[]).map<GrupoBanking>(g => ({
     grupo: txtDe(g.grupo), linhas: numDe(g.linhas), clientes: numDe(g.clientes), bruta: numDe(g.bruta), comissao: numDe(g.comissao), pctEscritorio: numDe(g.pctEscritorio),
     parte: numDe(g.parte), impostoPct: numDe(g.impostoPct), imposto: numDe(g.imposto), liquida: numDe(g.liquida),
+    ...(g.parceiro ? { parceiro: txtDe(g.parceiro), pctParceiro: numDe(g.pctParceiro), parteParceiro: numDe(g.parteParceiro) } : {}),
   }))
   const itens = (Array.isArray(o.itens) ? (o.itens as Record<string, unknown>[]) : []).map<ItemBanking>(i => ({
     grupo: txtDe(i.grupo), data: txtDe(i.data), conta: txtDe(i.conta), cliente: txtDe(i.cliente), categoria: txtDe(i.categoria), produto: txtDe(i.produto), ativo: txtDe(i.ativo), tipo: txtDe(i.tipo),
     bruta: numDe(i.bruta), liquida: numDe(i.liquida), comissao: numDe(i.comissao),
   }))
   return { mes, origem: o.origem == null ? null : txtDe(o.origem), grupos, total: somarBanking(grupos, itens.length ? itens : undefined), itens }
+}
+
+// O que uma importação protegida guarda fora dos lotes: o Banking ou os produtos fora do giro (ou nada)
+export function lerExtraGravado(detalhes: unknown): { fonte: FonteExtra; dados: BankingDoMes } | null {
+  if (!detalhes || typeof detalhes !== 'object') return null
+  const d = detalhes as Record<string, unknown>
+  const banking = lerBankingGravado(d.banking)
+  if (banking) return { fonte: 'banking', dados: banking }
+  const fora = lerBankingGravado(d.fora_giro)
+  return fora ? { fonte: 'fora_giro', dados: fora } : null
 }
 
 // Um total por mês (se o mesmo mês foi gravado duas vezes, vale o primeiro da lista: a mais recente)

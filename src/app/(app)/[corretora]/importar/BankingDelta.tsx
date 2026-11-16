@@ -13,9 +13,9 @@ import { Alert } from '@/components/ui/Alert'
 import { useToast } from '@/components/ui/Toast'
 import { TRACO, n0, r0 } from '@/components/gestao/Celulas'
 import { lerAbas } from '@/lib/gestao/lerArquivo'
-import { lerBankingDelta, type GrupoBanking, type LeituraBanking, type TotaisBanking } from '@/lib/gestao/banking'
-import { aplicarBankingBtg, desfazerBankingBtg } from '@/lib/gestao/acoesBanking'
-import type { BankingAplicado } from '@/lib/gestao/consultasBanking'
+import { FONTE_ROTULO, lerBankingDelta, type GrupoBanking, type LeituraBanking, type TotaisBanking } from '@/lib/gestao/banking'
+import { aplicarBankingBtg, tirarReceitaExtraBtg } from '@/lib/gestao/acoesBanking'
+import type { ExtraAplicado } from '@/lib/gestao/consultasBanking'
 import { mesLongo } from '@/lib/gestao/meses'
 import { fmtDataHoraPt, fmtPct } from '@/lib/format'
 import type { Corretora } from '@/lib/corretoras'
@@ -32,7 +32,8 @@ type Estado =
 
 const pct = (v: number) => fmtPct(v, Number.isInteger(Math.round(v * 100) / 100) ? 0 : 2)
 
-export function BankingDelta({ corretora, base, aplicados }: { corretora: Corretora; base: string; aplicados: BankingAplicado[] }) {
+// aplicados = os meses gravados das duas receitas fora dos lotes: o Banking (daqui) e o fora do giro (do Fechamento do mês)
+export function BankingDelta({ corretora, base, aplicados }: { corretora: Corretora; base: string; aplicados: ExtraAplicado[] }) {
   const router = useRouter()
   const { avisar } = useToast()
   const [estado, setEstado] = useState<Estado>({ fase: 'vazio' })
@@ -66,18 +67,19 @@ export function BankingDelta({ corretora, base, aplicados }: { corretora: Corret
     router.refresh()
   }
 
-  const desfazer = async (a: BankingAplicado) => {
-    if (!confirm(`Tirar o Banking de ${mesLongo(a.banking.mes)}?\n\nA comissão líquida de ${r0(a.banking.total.liquida)} sai do Painel. Os lotes não mudam.`)) return
+  const desfazer = async (a: ExtraAplicado) => {
+    const rotulo = a.fonte === 'banking' ? 'o Banking' : 'o fora do giro'
+    if (!confirm(`Tirar ${rotulo} de ${mesLongo(a.dados.mes)}?\n\nA comissão líquida de ${r0(a.dados.total.liquida)} sai do Painel. Os lotes não mudam.`)) return
     setDesfazendo(a.id); setErroDesfazer(null)
-    const r = await desfazerBankingBtg(corretora, a.id)
+    const r = await tirarReceitaExtraBtg(corretora, a.id)
     setDesfazendo(null)
     if (!r.ok) { setErroDesfazer(r.erro); return }
-    avisar({ titulo: 'Banking retirado', detalhe: mesLongo(a.banking.mes), tom: 'neutral' })
+    avisar({ titulo: `${FONTE_ROTULO[a.fonte]} retirado`, detalhe: mesLongo(a.dados.mes), tom: 'neutral' })
     if (estado.fase === 'gravado') setEstado({ fase: 'vazio' })
     router.refresh()
   }
 
-  const jaGravado = estado.fase === 'lido' || estado.fase === 'gravando' ? aplicados.find(a => a.banking.mes === estado.leitura.mes) : undefined
+  const jaGravado = estado.fase === 'lido' || estado.fase === 'gravando' ? aplicados.find(a => a.fonte === 'banking' && a.dados.mes === estado.leitura.mes) : undefined
 
   return (
     <>
@@ -100,12 +102,12 @@ export function BankingDelta({ corretora, base, aplicados }: { corretora: Corret
               <TabelaGrupos grupos={estado.leitura.grupos} total={estado.leitura.total} />
             </div>
             {estado.leitura.avisos.map((a, i) => <Alert key={i} tone="warn">{a}</Alert>)}
-            {jaGravado && <Alert tone="neutral">O Banking de {mesLongo(estado.leitura.mes)} já está gravado ({r0(jaGravado.banking.total.liquida)} líquidos, de {jaGravado.banking.origem ?? 'outra planilha'}). Gravar de novo substitui.</Alert>}
+            {jaGravado && <Alert tone="neutral">O Banking de {mesLongo(estado.leitura.mes)} já está gravado ({r0(jaGravado.dados.total.liquida)} líquidos, de {jaGravado.dados.origem ?? 'outra planilha'}). Gravar de novo substitui.</Alert>}
             {estado.fase === 'lido' && estado.erro && <Alert tone="loss">{estado.erro}</Alert>}
             <div className="flex flex-wrap items-center gap-2">
               <Button onClick={gravar} loading={estado.fase === 'gravando'}>Gravar o Banking de {mesLongo(estado.leitura.mes)}</Button>
               <Button variant="ghost" onClick={() => setEstado({ fase: 'vazio' })} disabled={estado.fase === 'gravando'}>Cancelar</Button>
-              <span className="text-label text-fg-subtle">Dá para desfazer depois, em “Banking gravado”.</span>
+              <span className="text-label text-fg-subtle">Dá para desfazer depois, em “Fora do giro e Banking gravados”.</span>
             </div>
           </div>
         )}
@@ -118,20 +120,21 @@ export function BankingDelta({ corretora, base, aplicados }: { corretora: Corret
       </Panel>
 
       {aplicados.length > 0 && (
-        <Panel title="Banking gravado" subtitle="Um registro por mês, com as linhas da planilha guardadas. Tirar o mês só remove a comissão de Banking do Painel.">
+        <Panel title="Fora do giro e Banking gravados" subtitle="Um registro por mês e por tipo, com as linhas da planilha guardadas: o fora do giro vem do Fechamento do mês e o Banking, da planilha da Delta. Tirar só remove a comissão do Painel.">
           {erroDesfazer && <Alert tone="loss" className="mb-3">{erroDesfazer}</Alert>}
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
-              <thead><tr><th>Mês</th><th className="col-p2">Planilha</th><th className="num col-p3">Linhas</th><th className="num col-p2">Comissão do BTG</th><th className="num col-p2">Parte do escritório</th><th className="num">Comissão líquida</th><th className="col-p3">Gravado</th><th><span className="sr-only">Ações</span></th></tr></thead>
+              <thead><tr><th>Mês</th><th>Tipo</th><th className="col-p2">Planilha</th><th className="num col-p3">Linhas</th><th className="num col-p2">Comissão do BTG</th><th className="num col-p2">Parte do escritório</th><th className="num">Comissão líquida</th><th className="col-p3">Gravado</th><th><span className="sr-only">Ações</span></th></tr></thead>
               <tbody>
                 {aplicados.map(a => (
                   <tr key={a.id}>
-                    <td className="font-medium">{mesLongo(a.banking.mes)}</td>
-                    <td className="col-p2 max-w-[260px] truncate" title={a.banking.origem ?? a.nome_arquivo}>{a.banking.origem ?? a.nome_arquivo}</td>
-                    <td className="num col-p3">{n0(a.banking.total.linhas)}</td>
-                    <td className="num col-p2">{r0(a.banking.total.comissao)}</td>
-                    <td className="num col-p2">{r0(a.banking.total.parte)}</td>
-                    <td className="num font-semibold">{r0(a.banking.total.liquida)}</td>
+                    <td className="font-medium">{mesLongo(a.dados.mes)}</td>
+                    <td className="muted whitespace-nowrap">{FONTE_ROTULO[a.fonte]}</td>
+                    <td className="col-p2 max-w-[260px] truncate" title={a.dados.origem ?? a.nome_arquivo}>{a.dados.origem ?? a.nome_arquivo}</td>
+                    <td className="num col-p3">{n0(a.dados.total.linhas)}</td>
+                    <td className="num col-p2">{r0(a.dados.total.comissao)}</td>
+                    <td className="num col-p2">{r0(a.dados.total.parte)}</td>
+                    <td className="num font-semibold">{r0(a.dados.total.liquida)}</td>
                     <td className="muted col-p3 whitespace-nowrap">{fmtDataHoraPt(a.created_at)}{a.criado_por_nome ? ` · ${a.criado_por_nome}` : ''}</td>
                     <td className="text-right"><Button variant="ghost" size="xs" loading={desfazendo === a.id} onClick={() => desfazer(a)}><Undo2 className="h-3.5 w-3.5" aria-hidden />Tirar</Button></td>
                   </tr>

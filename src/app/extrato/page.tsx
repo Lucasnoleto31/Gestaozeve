@@ -20,6 +20,7 @@ import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { rCurto } from '@/components/gestao/Celulas'
 import { TabelaExtrato } from '@/components/gestao/TabelaExtrato'
 import { TabelaReceitaParceiro } from '@/components/gestao/TabelaReceitaParceiro'
+import { ParticipacaoBtg } from '@/app/(app)/comissoes/ParticipacaoBtg'
 import { BotaoImprimir } from './BotaoImprimir'
 
 export default async function ExtratoPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -37,7 +38,10 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
   const comReceita = q('receita') !== '0'
   // participação na receita: só nas corretoras que o usuário vê, dentro do filtro, e só no extrato com receita
   const minhas = corretorasDoPerfil(profile)
-  const regras = comReceita ? regrasDoParceiroPorCorretora(await regrasReceita(corretora ? minhas.filter(c => c === corretora) : minhas), parceiro) : []
+  const regrasDele = comReceita ? regrasDoParceiroPorCorretora(await regrasReceita(minhas), parceiro) : []
+  const regras = corretora ? regrasDele.filter(r => r.corretora === corretora) : regrasDele
+  // quem tem essa participação e também segue a divisão da comissão do BTG ganha o bloco do BTG (só quando há valor)
+  const comBtg = regrasDele.length > 0 && minhas.includes('BTG') && (!corretora || corretora === 'BTG')
   const [linhas, livros] = await Promise.all([
     comissaoCarteiraMes(parceiro, corretora, mesRef),
     Promise.all(regras.map(r => participacaoReceita(r.corretora, r.regras, parceiro))),
@@ -84,9 +88,10 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
             <div className="tbl-wrap">
               <TabelaReceitaParceiro linhas={part.linhas} totais={part.mes} parceiro={parceiro} comCorretora={livros.length > 1} impressao vazio={`Nenhum cliente de ${parceiro} operou em ${mesLongo(mesRef)}.`} />
             </div>
-            <h2 className="mt-8 text-section font-semibold">Carteira completa</h2>
           </section>
         )}
+        {comBtg && <div className="mt-8"><ParticipacaoBtg parceiro={parceiro} mesRef={mesRef} impressao /></div>}
+        {(part || comBtg) && <h2 className="mt-8 text-section font-semibold">Carteira completa</h2>}
 
         <KpiRow cols={comReceita ? 3 : 2} className={part ? 'mb-6 mt-3' : 'my-6'}>
           <KpiCard label="Contas na carteira" value={fmtNum(t.contas)} sub={`${fmtNum(t.giraram)} ${t.giraram === 1 ? 'girou' : 'giraram'} em ${mesCurto(mesRef)}`} />

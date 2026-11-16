@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getProfile } from '@/lib/auth/getProfile'
-import { parceirosComParticipacao, parceirosLista } from '@/lib/gestao/consultas'
-import { regrasDoParceiroPorCorretora, regrasReceita } from '@/lib/gestao/consultasParticipacao'
+import { parceirosLista } from '@/lib/gestao/consultas'
+import { regrasDoParceiroPorCorretora, regrasReceita, repasseBtg } from '@/lib/gestao/consultasParticipacao'
+import type { ParceiroRepasse } from '@/lib/gestao/btg'
 import { nomesComRegra, textoDaRegra } from '@/lib/gestao/participacao'
 import { parceirosDeComissao } from '@/lib/gestao/comissao'
 import { normTexto } from '@/lib/texto'
@@ -19,6 +20,7 @@ import { Abas } from '@/components/gestao/Abas'
 import { VisaoGeral } from './VisaoGeral'
 import { AbaResumo } from './AbaResumo'
 import { AbaReceita } from './AbaReceita'
+import { ParticipacaoBtg } from './ParticipacaoBtg'
 import { AbaCarteira, AbaExtrato, AbaPagamentos, AbaRetorno } from './AbasParceiro'
 import { hrefComissoes } from './comum'
 
@@ -46,8 +48,8 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   // endereço casa sem acento nem caixa
   const minhas = corretorasDoPerfil(profile)
   const verBtg = minhas.includes('BTG')
-  const [todos, comParticipacao, regrasTodas] = await Promise.all([parceirosLista(), verBtg ? parceirosComParticipacao() : Promise.resolve<string[]>([]), regrasReceita(minhas)])
-  const parceiros = parceirosDeComissao(todos, [...comParticipacao, ...nomesComRegra(regrasTodas.flatMap(r => r.regras))])
+  const [todos, noBtg, regrasTodas] = await Promise.all([parceirosLista(), verBtg ? repasseBtg() : Promise.resolve<ParceiroRepasse[]>([]), regrasReceita(minhas)])
+  const parceiros = parceirosDeComissao(todos, [...noBtg.map(r => r.nome), ...nomesComRegra(regrasTodas.flatMap(r => r.regras))])
   const pedido = normTexto(q('parceiro'))
   const parceiroSel = pedido ? parceiros.find(p => normTexto(p.nome) === pedido) ?? null : null
   const corretoraParam = q('corretora')
@@ -104,12 +106,16 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   const filtro = { parceiro, corretora, mesRef }
   const naCorretora = (c: string) => `na ${isCorretora(c) ? CORRETORA_LABEL[c] : c}`
   const descricaoReceita = receitaTodas.map(r => `${textoDaRegra(r.regras[r.regras.length - 1])} dos clientes dele ${naCorretora(r.corretora)}`).join('; ')
+  // no BTG o mesmo parceiro pode seguir a divisão da comissão (repasse_parceiros), como a Atual Capital
+  const regraBtg = noBtg.find(r => normTexto(r.nome) === normTexto(parceiro)) ?? null
+  const mostraBtg = !!regraBtg && (!corretora || corretora === 'BTG')
+  const blocoBtg = mostraBtg ? <ParticipacaoBtg parceiro={parceiro} mesRef={mesRef} /> : null
 
   return (
     <>
       <PageHeader eyebrow="Comissões" title={parceiro} actions={filtros}
         description={temReceita
-          ? `Participação na receita: ${descricaoReceita}.${parceiroSel.comissionado ? ' Também recebe comissão por conta aberta e ativada.' : ''}`
+          ? `Participação na receita: ${descricaoReceita}${regraBtg ? `; no BTG, ${regraBtg.pctParceiro.toLocaleString('pt-BR')} % da comissão sobre os clientes dele, depois do imposto` : ''}.${parceiroSel.comissionado ? ' Também recebe comissão por conta aberta e ativada.' : ''}`
           : parceiroSel.comissionado
             ? `Comissão por abertura, ativação e reativação de conta${corretora ? ` na ${CORRETORA_LABEL[corretora]}` : ''}, em ${mesLongo(mesRef)}.`
             : `Participação na receita do BTG sobre ${fmtNum(parceiroSel.clientes)} ${parceiroSel.clientes === 1 ? 'cliente' : 'clientes'} dele: carteira e extrato; o valor do mês está na visão geral.`}>
@@ -123,15 +129,23 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
           </Alert>
         )}
         {aba === 'resumo' && temReceita && (receita.length > 0
-          ? <AbaReceita {...filtro} regras={receita} admin={admin} />
-          : (
+          ? <AbaReceita {...filtro} regras={receita} admin={admin} extra={blocoBtg} />
+          : blocoBtg ? (
+            // filtro numa corretora em que ele só tem a divisão da comissão do BTG
+            <>
+              {blocoBtg}
+              <Alert tone="neutral" title={`O restante da participação de ${parceiro} vale ${receitaTodas.map(r => naCorretora(r.corretora)).join(' e ')}`}>
+                <Link href={hrefComissoes({ parceiro, mes: mesRef })} className="link">Ver sem o filtro de corretora</Link>, com o valor a receber, os pagamentos e o saldo.
+              </Alert>
+            </>
+          ) : (
             <Alert tone="neutral" title={`${parceiro} não tem participação na receita ${corretora ? naCorretora(corretora) : 'nas suas corretoras'}`}>
               A regra dele vale {receitaTodas.map(r => naCorretora(r.corretora)).join(' e ')}. <Link href={hrefComissoes({ parceiro, mes: mesRef })} className="link">Ver sem o filtro de corretora</Link>. A carteira e o extrato dele aqui ficam nas outras abas.
             </Alert>
           ))}
         {aba === 'resumo' && (parceiroSel.comissionado || !temReceita) && <AbaResumo {...filtro} comissionado={parceiroSel.comissionado} participacao={parceiroSel.participacao} admin={admin} />}
         {aba === 'extrato' && <AbaExtrato {...filtro} />}
-        {aba === 'pagamentos' && <AbaPagamentos parceiro={parceiro} admin={admin} comissionado={parceiroSel.comissionado} receita={receitaTodas} />}
+        {aba === 'pagamentos' && <AbaPagamentos parceiro={parceiro} admin={admin} comissionado={parceiroSel.comissionado} receita={receitaTodas} btg={temReceita ? regraBtg : null} />}
         {aba === 'carteira' && <AbaCarteira {...filtro} />}
         {aba === 'retorno' && <AbaRetorno {...filtro} />}
       </PageBody>

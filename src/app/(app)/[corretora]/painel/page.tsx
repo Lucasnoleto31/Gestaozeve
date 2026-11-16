@@ -70,6 +70,8 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   // receita mensal dos clientes de cada parceiro com participação na comissão (um livro à parte na cadeia)
   const receitaParceiros = (mes: string): Record<string, number> => Object.fromEntries(livros.map(l => [l.nome, l.meses.find(x => x.mes_ref === mes)?.receita_carteira ?? 0]))
   const temLivros = livros.some(l => l.meses.some(x => x.receita_carteira > 0))
+  // parceiro já cadastrado, mas ainda sem cliente com receita na janela, não ocupa linhas na tabela
+  const parceirosComLivro = cfg.parceiros.filter(p => livros.some(l => l.nome === p.nome && l.meses.some(x => x.receita_carteira > 0)))
   const repasseDe = (m: Mes) => calcularRepasse(m.receita, cfg, m.mes_ref, receitaParceiros(m.mes_ref))
   // Comissão fora dos lotes: os produtos fora do giro do fechamento (CDB, saldo remunerado, aluguel, fundos…)
   // e o Banking (cartão e saldo remunerado da planilha da Delta). Não passam pela cadeia do giro: cada um traz
@@ -162,7 +164,7 @@ export default async function PainelPage({ params, searchParams }: { params: Par
     // clientes de parceiros com participação: imposto, parte do parceiro (a repassar) e o que fica para o escritório
     ...(temLivros ? [
       { label: 'Comissão líquida dos clientes diretos', valores: col(m => (m ? repasseDe(m).liquidoDireto : null)), fmt: rr, total: true } as Linha,
-      ...cfg.parceiros.flatMap((p): Linha[] => {
+      ...parceirosComLivro.flatMap((p): Linha[] => {
         const de = (m: Mes) => repasseDe(m).parceiros.find(x => x.nome === p.nome)
         return [
           { label: `Clientes do parceiro ${p.nome}: comissão`, valores: col(m => (m ? de(m)?.comissao ?? 0 : null)), fmt: rr, total: true },

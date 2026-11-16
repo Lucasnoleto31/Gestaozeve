@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { comissaoCarteiraMes, comissaoContasMes, comissaoItens, comissaoMensal, comissaoPagamentos, comissaoRegras } from '@/lib/gestao/consultas'
 import type { RegrasCorretora } from '@/lib/gestao/consultasParticipacao'
+import type { ParceiroRepasse } from '@/lib/gestao/btg'
 import { textoDaRegra } from '@/lib/gestao/participacao'
 import { linhasPlanilha, nomeArquivoExtrato, totaisExtrato } from '@/lib/gestao/extrato'
 import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
@@ -51,7 +52,8 @@ export async function AbaExtrato({ parceiro, corretora, mesRef }: FiltroAba) {
 // ── Pagamentos e regras ──────────────────────────────────────────────────────
 // receita = regras de participação em corretagem, zeragem e incentivo do parceiro (parceiros_receita), por
 // corretora. Quem só recebe assim não tem regra por conta: o bloco de regras de abertura e ativação some.
-export async function AbaPagamentos({ parceiro, admin, comissionado = true, receita = [] }: { parceiro: string; admin: boolean; comissionado?: boolean; receita?: RegrasCorretora[] }) {
+// btg = a regra do mesmo parceiro na divisão da comissão do BTG (repasse_parceiros), quando ele tem.
+export async function AbaPagamentos({ parceiro, admin, comissionado = true, receita = [], btg = null }: { parceiro: string; admin: boolean; comissionado?: boolean; receita?: RegrasCorretora[]; btg?: ParceiroRepasse | null }) {
   const [pagamentos, regras] = await Promise.all([comissaoPagamentos(parceiro), comissaoRegras(parceiro)])
   const prazo = regras[0]?.prazo_ativacao_dias ?? 60
   const mesesReativacao = regras[0]?.reativacao_meses ?? 4
@@ -68,7 +70,10 @@ export async function AbaPagamentos({ parceiro, admin, comissionado = true, rece
             {receita.flatMap(r => r.regras.map(x => (
               <li key={`${r.corretora}:${x.desde}`}><span className="text-fg">{CORRETORA_LABEL[r.corretora]}, desde {mesLongo(x.desde)}</span>: {textoDaRegra(x)} dos clientes dos códigos de assessor ligados a ele.</li>
             )))}
-            <li>Os percentuais ficam nos Parâmetros da corretora (Parceiros com participação na receita) e o código do parceiro, em Parâmetros › Assessores, coluna Parceiro.</li>
+            {btg && (
+              <li><span className="text-fg">BTG</span>: {btg.pctParceiro.toLocaleString('pt-BR')} % da comissão que o BTG paga sobre os clientes dele (corretagem e zeragem), depois do imposto; clientes dele são os que têm {parceiro} no campo Parceiro da ficha. O valor segue o fechamento mensal do BTG e não entra no saldo dos pagamentos acima.</li>
+            )}
+            <li>Os percentuais ficam nos Parâmetros da corretora (Parceiros com participação na receita{btg ? '; no BTG, em Repasse' : ''}) e o código do parceiro, em Parâmetros › Assessores, coluna Parceiro.</li>
           </ul>
         </Panel>
       )}

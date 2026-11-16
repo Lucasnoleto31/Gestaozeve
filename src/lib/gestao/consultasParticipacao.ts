@@ -1,5 +1,6 @@
 // Participação de parceiros na receita (parâmetro parceiros_receita): as leituras do banco.
-// Só servidor (páginas). O cálculo e o formato da regra ficam em participacao.ts.
+// Só servidor (páginas). O cálculo e o formato da regra ficam em participacao.ts. No fim, a parte de um
+// parceiro na comissão do BTG (repasse_parceiros), para a página dele em Comissões.
 //
 // Não há função no banco para isto: os lançamentos dos códigos do parceiro saem direto da tabela lotes
 // (poucas centenas de linhas por mês) e são medidos com a mesma conta do resumo mensal; o incentivo de
@@ -7,11 +8,13 @@
 import type { Corretora } from '@/lib/corretoras'
 import { normTexto } from '@/lib/texto'
 import { equipe, falha, num, str } from './guard'
-import { incentivoMes, todasAsLinhas, ultimaData } from './consultas'
+import { comissaoCarteiraMes, comissaoMensal, incentivoMes, painelMensal, todasAsLinhas, ultimaData } from './consultas'
+import { calcularRepasse, configBtg, type ParceiroRepasse } from './btg'
 import {
   CHAVE_PARCEIROS_RECEITA, lerParceirosReceita, medirLote, receitaDoMes, regraDoMes, regrasDoParceiro,
   type LoteMedido, type MesReceita, type RegraReceita,
 } from './participacao'
+import type { Parametro } from './tipos'
 
 type Row = Record<string, unknown>
 
@@ -86,5 +89,56 @@ export async function participacaoReceita(corretora: Corretora, regrasDaCorretor
     ...base, assessores: meus.map(a => String(a.nome)).sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })),
     clientes: new Set(((contas.data ?? []) as Row[]).map(c => str(c.cliente_id)).filter(Boolean)).size,
     meses: meses.filter((m): m is MesReceita => m != null), ultimaData: ultima,
+  }
+}
+
+// ── Participação na comissão do BTG (parâmetro repasse_parceiros) ──────────────
+// No BTG o parceiro segue a cadeia do fechamento, como a Atual Capital: a comissão que o BTG paga sobre os
+// clientes dele (os que têm o nome dele no campo Parceiro da ficha) paga o imposto do escritório, o parceiro
+// leva a parte dele e o escritório fica com a sua parte do restante. Lucas, 16/11/2026, sobre o Fabio PTAX:
+// "BTG: corretagem | zeragem | igual foi com a Atual Capital mês passado".
+async function configDoBtg() {
+  const { db } = await equipe()
+  const { data, error } = await db.from('parametros').select('chave, valor, descricao').eq('corretora', 'BTG')
+  if (error) falha(error, 'parametros')
+  return configBtg(((data ?? []) as Row[]).map<Parametro>(r => ({ chave: String(r.chave), valor: String(r.valor ?? ''), descricao: str(r.descricao) })))
+}
+
+// Os parceiros com participação na comissão do BTG e os percentuais de cada um
+export async function repasseBtg(): Promise<ParceiroRepasse[]> {
+  return (await configDoBtg()).parceiros
+}
+
+export type ParticipacaoBtg = {
+  regra: ParceiroRepasse
+  impostoPct: number         // imposto do escritório sobre a comissão
+  pctComissao: number        // % de comissão do BTG no mês: o do fechamento, quando registrado; senão o efetivo pelas faixas
+  fechado: boolean           // o mês já tem o percentual do fechamento
+  contas: number             // contas do BTG na carteira do parceiro
+  receita: number            // receita (corretagem e zeragem) dos clientes dele no mês
+  comissao: number           // comissão do BTG sobre eles
+  imposto: number
+  parte: number              // o que vai para o parceiro
+  clientes: { cliente_id: string; nome: string; lotes: number; receita: number; parte: number }[]   // quem gerou receita no mês
+}
+
+// A parte de um parceiro no BTG num mês, com a mesma conta do Painel do BTG e da visão geral de Comissões
+// (calcularRepasse sobre a receita do mês); null quando ele não está em repasse_parceiros. A cadeia é
+// proporcional à receita, então a parte por cliente segue a receita de cada um.
+export async function participacaoBtg(parceiro: string, mesRef: string): Promise<ParticipacaoBtg | null> {
+  const cfg = await configDoBtg()
+  const regra = cfg.parceiros.find(p => normTexto(p.nome) === normTexto(parceiro))
+  if (!regra) return null
+  const [mensal, livro, carteira] = await Promise.all([painelMensal('BTG', mesRef, 1), comissaoMensal(mesRef, 1, regra.nome, 'BTG'), comissaoCarteiraMes(regra.nome, 'BTG', mesRef)])
+  const receitaBtg = mensal.find(m => m.mes_ref === mesRef)?.receita ?? 0
+  const dele = livro.find(x => x.mes_ref === mesRef)?.receita_carteira ?? 0
+  const r = calcularRepasse(receitaBtg, cfg, mesRef, { [regra.nome]: dele })
+  const p = r.parceiros.find(x => x.nome === regra.nome)
+  const comReceita = carteira.filter(c => c.receita_mes > 0)
+  const soma = comReceita.reduce((s, c) => s + c.receita_mes, 0)
+  return {
+    regra, impostoPct: cfg.impostoPct, pctComissao: r.pctEfetivo, fechado: cfg.pctMes[mesRef.slice(0, 7)] != null, contas: carteira.length,
+    receita: p?.receita ?? 0, comissao: p?.comissao ?? 0, imposto: p?.imposto ?? 0, parte: p?.parceiro ?? 0,
+    clientes: comReceita.map(c => ({ cliente_id: c.cliente_id, nome: c.nome, lotes: c.lotes_mes, receita: c.receita_mes, parte: soma > 0 ? Math.round(((p?.parceiro ?? 0) * c.receita_mes / soma) * 100) / 100 : 0 })),
   }
 }

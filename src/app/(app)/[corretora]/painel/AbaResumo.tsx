@@ -13,7 +13,7 @@ import { DeltaText, KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { TRACO, dataCurta, n0, r0, rCurto } from '@/components/gestao/Celulas'
 import { ContaDoMes } from '@/components/gestao/ContaDoMes'
-import { economiaDoPainel } from './economia'
+import { economiaDoPainel } from '@/lib/gestao/economiaPainel'
 
 // Projeção: meses de histórico que entram no perfil intra-mês
 const MESES_PROJECAO = 24

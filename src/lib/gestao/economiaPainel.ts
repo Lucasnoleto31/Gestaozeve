@@ -1,12 +1,12 @@
-// O dinheiro do Painel, comum às abas Resumo e Mês a mês: os parâmetros da corretora, a série mensal e,
+// O dinheiro de uma corretora no mês, comum ao Painel (abas Resumo e Mês a mês) e ao Início: os parâmetros da corretora, a série mensal e,
 // no BTG, a cadeia de repasse (faixas ou o % do fechamento, Delta, imposto, parceiros com participação na
 // comissão) mais o que o BTG paga fora dos lotes (fora do giro do fechamento e Banking, gravados em
 // Importar). Cada aba chama isto uma vez e pede só as outras consultas que ela mostra.
-import { comissaoMensal, painelMensal, parametrosDaCorretora } from '@/lib/gestao/consultas'
-import { calcularRepasse, configBtg } from '@/lib/gestao/btg'
-import { extrasAplicados, extrasPorMes } from '@/lib/gestao/consultasBanking'
+import { comissaoMensal, painelMensal, parametrosDaCorretora } from './consultas'
+import { calcularRepasse, configBtg } from './btg'
+import { extrasAplicados, extrasPorMes } from './consultasBanking'
 import { temListaPropria, type Corretora } from '@/lib/corretoras'
-import type { PainelMensalRow } from '@/lib/gestao/tipos'
+import type { PainelMensalRow } from './tipos'
 
 export type Economia = Awaited<ReturnType<typeof economiaDoPainel>>
 

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { Panel } from '@/components/ui/Panel'
 import { TRACO, n0, n2, p1, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
-import { economiaDoPainel } from './economia'
+import { economiaDoPainel } from '@/lib/gestao/economiaPainel'
 
 type Linha = {
   label: string

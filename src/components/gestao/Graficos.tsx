@@ -2,7 +2,7 @@
 
 // Gráficos (recharts) com a paleta do tema. Dados já vêm prontos das páginas.
 import {
-  Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { useId } from 'react'
 import { useChartColors } from '@/lib/theme'
@@ -13,7 +13,10 @@ const FMT: Record<Formato, (v: number) => string> = { num: fmtNum, brl: fmtBRL, 
 const compacto = (v: number) => (Math.abs(v) >= 1_000_000 ? `${(v / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}M`
   : Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}k` : fmtNum(v))
 
-export type Serie = { key: string; nome: string; cor?: string; tipo?: 'bar' | 'line'; eixo?: 'esq' | 'dir'; empilhar?: string; formato?: Formato }
+export type Serie = { key: string; nome: string; cor?: string; tipo?: 'bar' | 'line'; eixo?: 'esq' | 'dir'; empilhar?: string; formato?: Formato; tracejada?: boolean }
+// Linha de referência horizontal (uma meta, um teto) no eixo da esquerda. `ate` = rótulo da categoria onde a
+// linha termina (o prazo da meta); sem ele, atravessa o gráfico inteiro.
+export type LinhaDeReferencia = { valor: number; rotulo: string; ate?: string }
 
 // Cores nomeadas (as páginas são Server Components e não enxergam a paleta do tema).
 // Padrão: série por valor (tinta → apagado). colorido: paleta de matizes (página Gráficos).
@@ -46,7 +49,7 @@ function useTooltipStyle() {
 }
 
 // Barras/linhas por categoria (meses, semanas, dias)
-export function GraficoSeries({ dados, series, altura = 260, formato = 'num', formatoDir, legenda = true, margemEsq, colorido = false, aoClicar }: {
+export function GraficoSeries({ dados, series, altura = 260, formato = 'num', formatoDir, legenda = true, margemEsq, colorido = false, aoClicar, linhas }: {
   dados: Record<string, string | number>[]
   series: Serie[]
   altura?: number
@@ -56,6 +59,7 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
   margemEsq?: number
   colorido?: boolean   // paleta de matizes em vez de série por valor
   aoClicar?: (indice: number) => void   // clique numa categoria (a coluna inteira, não só a barra): índice em `dados`
+  linhas?: LinhaDeReferencia[]          // metas: linhas horizontais com rótulo, no eixo da esquerda
 }) {
   const c = useChartColors()
   const tt = useTooltipStyle()
@@ -82,7 +86,8 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
         </defs>
         <CartesianGrid stroke={c.grid} strokeDasharray="2 4" vertical={false} />
         <XAxis dataKey="label" tick={{ fill: c.axis, fontSize: 11 }} axisLine={{ stroke: c.grid }} tickLine={false} interval="preserveStartEnd" />
-        <YAxis yAxisId="esq" tick={{ fill: c.axis, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={fmtEsq} width={54} />
+        {/* em reais o rótulo é mais largo ("R$ 500k"): com 54 px ele quebrava em duas linhas */}
+        <YAxis yAxisId="esq" tick={{ fill: c.axis, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={fmtEsq} width={formato === 'brl' ? 62 : 54} />
         {temDir && <YAxis yAxisId="dir" orientation="right" tick={{ fill: c.axis, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={fmtDirAxis} width={54} />}
         <Tooltip
           {...tt}
@@ -97,8 +102,16 @@ export function GraficoSeries({ dados, series, altura = 260, formato = 'num', fo
         {series.map((s, i) => {
           const cor = corDe(s.cor, c, i, colorido)
           return s.tipo === 'line'
-            ? <Line key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} type="monotone" dataKey={s.key} name={s.nome} stroke={cor} strokeWidth={2} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />
+            ? <Line key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} type="monotone" dataKey={s.key} name={s.nome} stroke={cor} strokeWidth={2} strokeDasharray={s.tracejada ? '5 5' : undefined} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />
             : <Bar key={s.key} yAxisId={s.eixo === 'dir' ? 'dir' : 'esq'} dataKey={s.key} name={s.nome} fill={`url(#${gradId(s.key)})`} stroke="none" background={s.empilhar ? undefined : { fill: c.track }} stackId={s.empilhar} radius={s.empilhar ? 0 : [4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+        })}
+        {linhas?.map(l => {
+          const fim = l.ate && dados.some(d => d.label === l.ate) ? l.ate : null
+          return (
+            <ReferenceLine key={l.rotulo} yAxisId="esq" ifOverflow="extendDomain" stroke={c.axis} strokeDasharray="3 4" strokeWidth={1}
+              {...(fim ? { segment: [{ x: String(dados[0].label), y: l.valor }, { x: fim, y: l.valor }] as const } : { y: l.valor })}
+              label={{ value: l.rotulo, position: 'insideBottomLeft', fill: c.axis, fontSize: 11 }} />
+          )
         })}
       </ComposedChart>
     </ResponsiveContainer>

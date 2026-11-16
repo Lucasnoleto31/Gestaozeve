@@ -1,38 +1,34 @@
-// Incentivo do BTG (ATP Turbo Receita): prêmios por comissão acumulada dentro de prazos
-// contados da assinatura do termo. Tudo vem dos parâmetros da corretora (atp_*).
-// A previsão projeta o acumulado no ritmo de receita escolhido (?ritmo=atual|3m|ultimo|tudo).
+// Incentivo do BTG (ATP Turbo Receita): prêmios por comissão acumulada dentro de prazos contados da
+// assinatura do termo. Tudo vem dos parâmetros da corretora (atp_*). A previsão projeta o acumulado no
+// ritmo de receita escolhido (?ritmo=atual|3m|ultimo|tudo).
+// Redesenho de nov/26: a tela responde "quanto falta para a próxima meta, quando bate e quanto de prêmio
+// está em jogo" numa frase; as metas viram uma trilha com a situação em palavra (com folga, apertado, fora
+// do prazo); o gráfico tem um eixo só (acumulado, projeção e a linha de cada meta até o prazo dela); as
+// regras e o histórico mensal ficam recolhidos. As contas são as de antes (btg.ts).
 import Link from 'next/link'
 import { Panel } from '@/components/ui/Panel'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Badge } from '@/components/ui/Badge'
 import { Alert } from '@/components/ui/Alert'
+import { Dica } from '@/components/ui/Dica'
+import { Recolhido } from '@/components/ui/Recolhido'
 import { GraficoSeries } from '@/components/gestao/Graficos'
-import { SegParam } from '@/components/gestao/Filtros'
-import { BarraCelula, LinhaVazia, TRACO, dataPt, n0, r0, rCurto } from '@/components/gestao/Celulas'
+import { SelectParam } from '@/components/gestao/Filtros'
+import { Resumo } from '@/components/gestao/Resumo'
+import { LinhaVazia, dataPt, n0, r0, rCurto } from '@/components/gestao/Celulas'
 import { BASES_ATP, RITMOS, avaliarMetas, baseAtp, mesesEntre, preverMeta, ritmosReceita, somarMesesData, type ConfigBtg, type Previsao, type RitmoBase } from '@/lib/gestao/btg'
+import { FOLGA_MINIMA_MESES, SITUACAO_META, fraseDoAtp, situacaoDaMeta, textoDaFolga, textoDaPrevisao } from '@/lib/gestao/incentivoTela'
 import type { ReceitaMensalRow } from '@/lib/gestao/tipos'
+import type { Corretora } from '@/lib/corretoras'
 import { mesCurto } from '@/lib/gestao/meses'
 import { fmtNum, fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { InformarAssinatura } from './InformarAssinatura'
 
-const STATUS = {
-  atingida: { variant: 'gain', texto: 'Atingida' },
-  'em andamento': { variant: 'accent', texto: 'Em andamento' },
-  vencida: { variant: 'loss', texto: 'Vencida' },
-} as const
+const COR_DA_BARRA = { gain: 'var(--gain)', warn: 'var(--warn)', loss: 'var(--loss)', neutral: 'var(--fg-subtle)' } as const
+const milhares = (v: number) => (v >= 1000 ? `R$ ${fmtNum(Math.round(v / 1000))} mil` : rCurto(v))
 
-const mesesTxt = (n: number) => `${fmtNum(n)} ${n === 1 ? 'mês' : 'meses'}`
-// "3 meses antes do prazo" / "12 dias depois do prazo" / "10 meses depois do prazo"
-const folgaTxt = (folga: number | null) => {
-  const f = folga ?? 0
-  if (Math.abs(f) < 1) {
-    const d = Math.max(1, Math.round(Math.abs(f) * 30.4375))
-    return `${fmtNum(d)} ${d === 1 ? 'dia' : 'dias'} ${f >= 0 ? 'antes' : 'depois'} do prazo`
-  }
-  return f > 0 ? `${mesesTxt(Math.round(f))} antes do prazo` : `${mesesTxt(Math.round(-f))} depois do prazo`
-}
-
-export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, label, projecaoAtual = null }: {
+export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, label, corretora, admin, projecaoAtual = null }: {
   cfg: ConfigBtg
   serie: ReceitaMensalRow[]
   hoje: string
@@ -40,6 +36,8 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
   ritmoBase?: string          // ?ritmo= da URL
   base: string
   label: string
+  corretora: Corretora
+  admin: boolean              // só o administrador informa a data de assinatura
   projecaoAtual?: number | null   // receita do mês corrente prevista pelo perfil do histórico (Painel); null = ritmo linear
 }) {
   const primeiroMes = serie[0]?.mes_ref ?? null
@@ -54,6 +52,7 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
   const proxima = metas.find(m => m.status === 'em andamento')
   const conquistadas = metas.filter(m => m.status === 'atingida')
   const premios = conquistadas.reduce((s, m) => s + m.premio, 0)
+  const premiosPossiveis = metas.reduce((s, m) => s + m.premio, 0)
   const mediaMensal = desde.length ? acumulado / desde.length : 0
 
   // Previsão: no ritmo escolhido (padrão: mês atual projetado; cai para o próximo disponível)
@@ -73,7 +72,9 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
   const detalheRitmo = baseUsada === 'atual'
     ? `${rCurto(ritmo.receitaParcial ?? 0)} em ${fmtNum(ritmo.diasDecorridos ?? 0)} de ${fmtNum(ritmo.diasTotal ?? 0)} dias úteis de ${mesCurto(mesHoje)}${atualPeloHistorico ? ', pelo perfil do histórico' : ''}`
     : `média de ${ritmo.meses === 1 ? '1 mês completo' : `${fmtNum(ritmo.meses)} meses completos`}`
-  const alcancadas = metas.filter(m => m.status !== 'vencida' && previsoes.get(m.indice)?.alcanca).length
+  const noPrazo = metas.filter(m => m.status !== 'vencida' && previsoes.get(m.indice)?.alcanca).length
+  // o padrão é o mês atual projetado; com outro ritmo escolhido a tela diz "no ritmo escolhido"
+  const noRitmo = baseUsada === 'atual' ? 'No ritmo atual' : 'No ritmo escolhido'
 
   // acumulado mês a mês (poucos meses: somar o prefixo é mais simples que carregar estado)
   const prefixo = (i: number) => desde.slice(0, i + 1).reduce((s, x) => s + x.receita, 0)
@@ -82,121 +83,105 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
   const ultimoPrazo = metas.reduce((s, m) => (m.prazoFim > s ? m.prazoFim : s), hoje)
   const mesesAFrente = ritmo.valor > 0 ? Math.min(24, Math.max(0, Math.ceil(mesesEntre(hoje, ultimoPrazo)))) : 0
   const grafico: Record<string, string | number>[] = [
-    ...desde.map((m, i) => ({ label: mesCurto(m.mes_ref), receita: m.receita, acumulado: prefixo(i), ...(i === desde.length - 1 ? { projecao: prefixo(i) } : {}) })),
+    ...desde.map((m, i) => ({ label: mesCurto(m.mes_ref), acumulado: prefixo(i), ...(i === desde.length - 1 ? { projecao: prefixo(i) } : {}) })),
     ...Array.from({ length: mesesAFrente }, (_, k) => ({ label: mesCurto(somarMesesData(mesHoje, k + 1)), projecao: Math.round(acumulado + ritmo.valor * (k + 1)) })),
   ]
+  // a linha de cada meta vai até o mês do prazo dela: a projeção cruzar antes do fim da linha = dentro do prazo
+  const linhasDeMeta = metas.map(m => ({ valor: m.comissao, rotulo: `Meta ${m.indice} · ${milhares(m.comissao)}`, ate: mesCurto(`${m.prazoFim.slice(0, 7)}-01`) }))
 
   return (
     <>
+      <Resumo frase={fraseDoAtp(metas, proximaPrev, noRitmo)}
+        apoio={metas.length ? `Comissão acumulada de ${rCurto(acumulado)} desde ${dataPt(assinatura)}. A previsão usa o ritmo de ${rCurto(ritmo.valor)} por mês (${rotuloRitmo.toLowerCase()}).` : null} />
+
       {!cfg.atpAssinatura && (
         <Alert tone="warn" title="Data de assinatura do termo não informada">
-          Os prazos estão sendo contados a partir de {primeiroMes ? `${mesCurto(primeiroMes)}, o primeiro mês com lotes` : 'hoje'}. Informe a data em <Link href={`${base}/parametros`} className="link">Parâmetros</Link>.
+          <p>Os prazos estão sendo contados a partir de {primeiroMes ? `${mesCurto(primeiroMes)}, o primeiro mês com lotes` : 'hoje'}. Com a data certa, os prazos e a situação de cada meta podem mudar.</p>
+          {admin ? <InformarAssinatura corretora={corretora} /> : <p>Peça a um administrador para informar a data.</p>}
         </Alert>
       )}
 
-      <KpiRow cols={6}>
-        <KpiCard label="Comissão acumulada" value={rCurto(acumulado)} sub={cfg.atpBase === 'receita' ? `corretagem ${rCurto(corretagem)} · zeragem ${rCurto(zeragem)}` : `base: ${rotuloBase}`} />
-        <KpiCard label="Próxima meta" value={proxima ? rCurto(proxima.comissao) : TRACO} sub={proxima ? `prêmio ${rCurto(proxima.premio)} · até ${dataPt(proxima.prazoFim)}` : metas.length ? 'nenhuma meta em aberto' : 'sem metas cadastradas'} />
-        <KpiCard label="Faltam" value={proxima ? rCurto(proxima.faltam) : TRACO} sub={proxima ? `${rCurto(proxima.ritmoMensal)} por mês em ${fmtNum(Math.ceil(proxima.mesesRestantes))} meses` : undefined} tone={proxima && proxima.ritmoMensal > mediaMensal * 1.5 ? 'warn' : 'neutral'} />
-        <KpiCard
-          label="Previsão da próxima meta"
-          value={proximaPrev?.dataPrevista ? mesCurto(`${proximaPrev.dataPrevista.slice(0, 7)}-01`) : proxima ? 'não atinge' : TRACO}
-          sub={proximaPrev?.dataPrevista ? `${folgaTxt(proximaPrev.folgaMeses)} · ritmo ${rCurto(ritmo.valor)}/mês` : proxima ? 'sem receita no ritmo escolhido' : undefined}
-          tone={!proxima ? 'neutral' : proximaPrev?.alcanca ? 'gain' : 'loss'}
-        />
-        <KpiCard label="Prêmios conquistados" value={rCurto(premios)} sub={`${fmtNum(conquistadas.length)} de ${fmtNum(metas.length)} metas`} tone={premios ? 'gain' : 'neutral'} />
-        <KpiCard label="Média mensal" value={rCurto(mediaMensal)} sub={`${fmtNum(desde.length)} ${desde.length === 1 ? 'mês' : 'meses'} desde ${dataPt(assinatura)}`} />
+      <KpiRow cols={4}>
+        <KpiCard destaque label="Comissão acumulada" value={rCurto(acumulado)}
+          sub={proxima ? `${fmtPct(proxima.comissao ? Math.min(100, (acumulado / proxima.comissao) * 100) : 100, 0)} da próxima meta (${rCurto(proxima.comissao)})` : `desde ${dataPt(assinatura)}`}
+          dica={cfg.atpBase === 'receita' ? `Receita desde a assinatura: corretagem ${rCurto(corretagem)} e zeragem ${rCurto(zeragem)}.` : `Base das metas: ${rotuloBase} desde a assinatura (escolhida em Parâmetros).`} />
+        <KpiCard label="Ritmo por mês" value={rCurto(ritmo.valor)}
+          sub={proxima ? `a próxima meta pede ${rCurto(proxima.ritmoMensal)} por mês` : rotuloRitmo.toLowerCase()}
+          tone={proxima && ritmo.valor < proxima.ritmoMensal ? 'warn' : 'neutral'}
+          dica={`${rotuloRitmo}: ${detalheRitmo}. A previsão supõe essa receita constante a partir de hoje.`} />
+        <KpiCard label="Prêmios possíveis" value={rCurto(premiosPossiveis)} sub={`${fmtNum(noPrazo)} de ${fmtNum(metas.length)} metas dentro do prazo ${noRitmo.toLowerCase()}`} />
+        <KpiCard label="Já conquistado" value={premios ? rCurto(premios) : 'R$ 0'} sub={`${fmtNum(conquistadas.length)} de ${fmtNum(metas.length)} metas atingidas`} tone={premios ? 'gain' : 'neutral'} />
       </KpiRow>
 
-      <div className="grid gap-8 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="Comissão acumulada" subtitle={`Receita bruta de cada mês (corretagem + zeragem), o acumulado desde ${dataPt(assinatura)} e a projeção no ritmo de ${rCurto(ritmo.valor)}/mês.`}>
-          {grafico.length === 0 ? (
-            <p className="py-10 text-center text-dense text-fg-subtle">Sem lotes desde a assinatura.</p>
-          ) : (
-            <GraficoSeries
-              dados={grafico}
-              series={[
-                { key: 'receita', nome: 'Receita do mês', tipo: 'bar', formato: 'brl' },
-                { key: 'acumulado', nome: 'Comissão acumulada', tipo: 'line', eixo: 'dir', formato: 'brl' },
-                { key: 'projecao', nome: 'Projeção', tipo: 'line', eixo: 'dir', formato: 'brl', cor: 'violet' },
-              ]}
-              formato="brl" formatoDir="brl" altura={240}
-            />
-          )}
-        </Panel>
-        <Panel title="Regras do programa" subtitle={<Link href={`${base}/parametros`} className="link">editar metas e assinatura em Parâmetros</Link>}>
-          <ul className="space-y-2 text-dense text-fg-muted">
-            <li>Permanência mínima de <span className="text-fg">48 meses</span>: saindo antes, devolve os prêmios recebidos corrigidos pelo CDI desde a assinatura.</li>
-            <li>O {label} paga todos os prêmios, inclusive o upfront.</li>
-            <li>Mínimo de <span className="text-fg">{rCurto(metas[0]?.comissao ?? 50000)}</span> de comissão acumulada em {fmtNum(metas[0]?.prazoMeses ?? 18)} meses; abaixo disso o upfront é devolvido proporcionalmente.</li>
-            <li>Comissão acumulada = {rotuloBase} desde a assinatura (base escolhida em Parâmetros, atp_base).</li>
-          </ul>
-        </Panel>
-      </div>
-
-      <Panel
-        title="Metas e previsão"
-        subtitle={`Cada meta é um prêmio por comissão acumulada dentro do prazo contado da assinatura. Previsão no ritmo "${rotuloRitmo}": ${rCurto(ritmo.valor)}/mês (${detalheRitmo}) · ${fmtNum(alcancadas)} de ${fmtNum(metas.length)} metas dentro do prazo.`}
-        action={<SegParam param="ritmo" valor={baseUsada} opcoes={RITMOS.map(r => ({ valor: r.base, label: r.label }))} />}
-      >
-        <div className="tbl-wrap">
-          <table className="tbl tbl-dense">
-            <thead>
-              <tr>
-                <th className="num">#</th><th>Prazo</th><th className="num">Comissão acumulada</th><th className="num">Prêmio</th>
-                <th className="num col-p2">Progresso</th><th>Status</th><th>Previsão<span className="hidden md:inline"> no ritmo atual</span></th><th className="col-p2">Observação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {metas.length === 0 && <LinhaVazia colunas={8}>Sem metas cadastradas.</LinhaVazia>}
-              {metas.map(m => {
-                const pct = m.comissao ? Math.min(100, (m.acumulado / m.comissao) * 100) : 100
-                const st = STATUS[m.status]
-                const p = previsoes.get(m.indice)
-                return (
-                  <tr key={m.indice} className={cn(m.status === 'vencida' && 'text-fg-muted')}>
-                    <td className="num">{m.indice}</td>
-                    <td className="whitespace-nowrap"><span className="tabular-nums">{fmtNum(m.prazoMeses)} meses</span><span className="ml-1.5 hidden text-micro text-fg-subtle md:inline">até {dataPt(m.prazoFim)}</span></td>
-                    <td className="num">{r0(m.comissao)}</td>
-                    <td className="num font-semibold">{r0(m.premio)}</td>
-                    <td className="num col-p2"><BarraCelula valor={Math.min(m.acumulado, m.comissao)} max={m.comissao} tom={m.status === 'atingida' ? 'gain' : m.status === 'vencida' ? 'neutral' : 'accent'} fmt={() => fmtPct(pct, 0)} largura={80} /></td>
-                    <td>
-                      <span className="inline-flex flex-wrap items-center gap-2">
-                        <Badge variant={st.variant}>{st.texto}</Badge>
-                        <span className="hidden text-micro text-fg-muted md:inline">
-                          {m.status === 'atingida' && m.atingidaEm ? `em ${mesCurto(m.atingidaEm)}` : m.status === 'em andamento' ? `faltam ${rCurto(m.faltam)} · precisa de ${rCurto(m.ritmoMensal)}/mês` : `fechou em ${rCurto(m.acumulado)}`}
-                        </span>
-                      </span>
-                    </td>
-                    <td>
-                      {m.status === 'atingida' ? (
-                        <span className="text-gain">atingida{m.atingidaEm ? ` em ${mesCurto(m.atingidaEm)}` : ''}</span>
-                      ) : m.status === 'vencida' ? (
-                        <span className="text-fg-subtle">{TRACO}</span>
-                      ) : !p?.dataPrevista ? (
-                        <span className="text-loss">não atinge sem receita</span>
-                      ) : (p.mesesParaAtingir ?? 0) > 120 ? (
-                        <span className="whitespace-nowrap text-loss">mais de 10 anos<span className="ml-1.5 hidden text-micro font-normal text-fg-muted md:inline">no ritmo escolhido</span></span>
-                      ) : (
-                        <span className={cn('whitespace-nowrap font-semibold', p.alcanca ? 'text-gain' : 'text-loss')}>
-                          {mesCurto(`${p.dataPrevista.slice(0, 7)}-01`)}
-                          <span className="ml-1.5 hidden text-micro font-normal text-fg-muted md:inline">em {mesesTxt(Math.ceil(p.mesesParaAtingir ?? 0))} · {folgaTxt(p.folgaMeses)}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="muted col-p2">{m.observacao || TRACO}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-3 text-micro text-fg-subtle">
-          Ritmos possíveis: {RITMOS.map(r => `${r.label} ${ritmos[r.base].disponivel ? rCurto(ritmos[r.base].valor) + '/mês' : 'sem dados'}`).join(' · ')}. A previsão supõe a receita constante a partir de hoje.
-        </p>
+      <Panel title="As metas, em ordem"
+        subtitle={<span className="inline-flex items-center gap-1.5">Cada meta paga um prêmio quando a comissão acumulada chega ao valor dentro do prazo.<Dica texto={`Com folga: bate com ${FOLGA_MINIMA_MESES} meses ou mais de sobra no ritmo escolhido. Apertado: bate dentro do prazo, com menos de ${FOLGA_MINIMA_MESES} meses de sobra. Fora do prazo: no ritmo escolhido só bate depois do prazo.`} /></span>}
+        action={<SelectParam param="ritmo" valor={baseUsada} label="Ritmo da previsão" todos={null}
+          opcoes={RITMOS.map(r => ({ valor: r.base, label: `${r.label}${ritmos[r.base].disponivel ? ` · ${rCurto(ritmos[r.base].valor)}/mês` : ' · sem dados'}` }))} />}>
+        {metas.length === 0 ? <p className="py-10 text-center text-dense text-fg-subtle">Sem metas cadastradas. <Link href={`${base}/parametros`} className="link">Cadastrar em Parâmetros</Link></p> : (
+          <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {metas.map(m => {
+              const p = previsoes.get(m.indice)
+              const sit = situacaoDaMeta(m, p)
+              const { texto, tom } = SITUACAO_META[sit]
+              const pct = m.comissao ? Math.min(100, (m.acumulado / m.comissao) * 100) : 100
+              return (
+                <li key={m.indice} className={cn('panel flex min-w-0 flex-col gap-2 p-4', m === proxima && 'ring-2 ring-fg')}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="label">Meta {m.indice}{m === proxima ? ' · a próxima' : ''}</span>
+                    <Badge variant={tom}>{texto}</Badge>
+                  </div>
+                  <div>
+                    <p className="text-kpi font-bold tabular-nums tracking-tight text-fg">{rCurto(m.comissao)}</p>
+                    <p className="text-micro text-fg-muted">de comissão acumulada</p>
+                  </div>
+                  <div className="bar-track" role="img" aria-label={`${fmtPct(pct, 0)} da meta`}><div className="bar-fill" style={{ width: `${pct}%`, background: COR_DA_BARRA[tom] }} /></div>
+                  <dl className="space-y-1.5 text-dense">
+                    <div className="flex items-baseline justify-between gap-2"><dt className="text-fg-muted">Prêmio</dt><dd className="font-semibold tabular-nums text-fg">{rCurto(m.premio)}</dd></div>
+                    <div className="flex items-baseline justify-between gap-2"><dt className="text-fg-muted">Prazo</dt><dd className="tabular-nums text-fg">{dataPt(m.prazoFim)} <span className="text-micro text-fg-subtle">({fmtNum(m.prazoMeses)} meses)</span></dd></div>
+                    {m.status === 'em andamento' && <>
+                      <div className="flex items-baseline justify-between gap-2"><dt className="text-fg-muted">Faltam</dt><dd className="tabular-nums text-fg">{rCurto(m.faltam)} <span className="text-micro text-fg-subtle">({fmtPct(pct, 0)} feito)</span></dd></div>
+                      <div className="flex items-baseline justify-between gap-2"><dt className="text-fg-muted">Precisa de</dt><dd className="tabular-nums text-fg">{rCurto(m.ritmoMensal)} <span className="text-micro text-fg-subtle">por mês</span></dd></div>
+                    </>}
+                  </dl>
+                  <p className={cn('mt-auto border-t border-line pt-2 text-label', tom === 'gain' ? 'text-gain' : tom === 'warn' ? 'text-warn' : tom === 'loss' ? 'text-loss' : 'text-fg-muted')}>
+                    {m.status === 'atingida' ? `Atingida${m.atingidaEm ? ` em ${mesCurto(m.atingidaEm)}` : ''}${p?.folgaMeses != null ? `, ${textoDaFolga(p.folgaMeses)}` : ''}.`
+                      : m.status === 'vencida' ? `Venceu com ${rCurto(m.acumulado)} acumulados.`
+                      : `${noRitmo} ${textoDaPrevisao(p)}.`}
+                  </p>
+                  {m.observacao && <p className="text-micro text-fg-subtle">{m.observacao}</p>}
+                </li>
+              )
+            })}
+          </ol>
+        )}
       </Panel>
 
-      <Panel title="Histórico mensal" subtitle="Meses desde a assinatura do termo.">
+      <Panel title="Acumulado, projeção e metas" subtitle={`O que já foi acumulado desde ${dataPt(assinatura)} e para onde vai no ritmo de ${rCurto(ritmo.valor)} por mês. A linha de cada meta termina no prazo dela.`}>
+        {grafico.length === 0 ? <p className="py-10 text-center text-dense text-fg-subtle">Sem lotes desde a assinatura.</p> : (
+          <GraficoSeries
+            dados={grafico}
+            series={[
+              { key: 'acumulado', nome: 'Comissão acumulada', tipo: 'line', formato: 'brl' },
+              { key: 'projecao', nome: `Projeção ${noRitmo.toLowerCase()}`, tipo: 'line', formato: 'brl', tracejada: true },
+            ]}
+            linhas={linhasDeMeta}
+            formato="brl" altura={320}
+          />
+        )}
+      </Panel>
+
+      <Recolhido titulo="Regras do programa" resumo={`os prêmios voltam se sair antes de 48 meses ou não chegar a ${rCurto(metas[0]?.comissao ?? 50000)} em ${fmtNum(metas[0]?.prazoMeses ?? 18)} meses`}>
+        <div>
+          <ul className="max-w-3xl space-y-2 text-dense text-fg-muted">
+            <li><span className="font-medium text-fg">O que faz devolver prêmio:</span> sair antes de <span className="text-fg">48 meses</span> de permanência (devolve os prêmios recebidos, corrigidos pelo CDI desde a assinatura) ou ficar abaixo de <span className="text-fg">{rCurto(metas[0]?.comissao ?? 50000)}</span> de comissão acumulada em {fmtNum(metas[0]?.prazoMeses ?? 18)} meses (o upfront é devolvido proporcionalmente).</li>
+            <li>O {label} paga todos os prêmios, inclusive o upfront.</li>
+            <li>Comissão acumulada = {rotuloBase} desde a assinatura (base escolhida em Parâmetros, atp_base).</li>
+          </ul>
+          <p className="mt-3 text-dense"><Link href={`${base}/parametros`} className="link">Editar metas e assinatura em Parâmetros</Link></p>
+        </div>
+      </Recolhido>
+
+      <Recolhido titulo="Histórico mensal" resumo={`${fmtNum(desde.length)} ${desde.length === 1 ? 'mês' : 'meses'} desde ${dataPt(assinatura)} · média de ${rCurto(mediaMensal)} por mês`}>
         <div className="tbl-wrap">
           <table className="tbl tbl-dense">
             <thead><tr><th>Mês</th><th className="num col-p2">Lotes</th><th className="num col-p3">Zerados</th><th className="num col-p2">Corretagem</th><th className="num col-p2">Zeragem</th><th className="num">Receita</th><th className="num">Acumulado</th></tr></thead>
@@ -217,7 +202,7 @@ export function IncentivoAtp({ cfg, serie, hoje, ultimaData, ritmoBase, base, la
             </tbody>
           </table>
         </div>
-      </Panel>
+      </Recolhido>
     </>
   )
 }

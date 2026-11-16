@@ -984,6 +984,18 @@ export async function leadsGanhosDoMes(mes: string): Promise<GanhoDia[]> {
   return linhas(data, r => ({ id: String(r.id), dia: String(r.data_fechamento).slice(0, 10), nome: String(r.nome ?? ''), whatsapp: str(r.whatsapp), responsavel: str(r.responsavel) }))
 }
 
+// Motivos de perda dos leads fechados como Perdido no mês, do mais comum para o menos comum (Funil › Mês;
+// até nov/26 o motivo mais comum aparecia num cartão da tela Leads). `mes` = 'AAAA-MM-01'.
+export async function motivosDePerdaDoMes(mes: string): Promise<{ motivo: string; leads: number }[]> {
+  const { db } = await equipe()
+  const { data, error } = await db.from('leads').select('motivo_perda')
+    .eq('status', 'Perdido').gte('data_fechamento', mes).lt('data_fechamento', somarMeses(mes, 1)).range(0, PAGINA - 1)
+  if (error) falha(error, 'leads')
+  const por = new Map<string, number>()
+  for (const r of (data ?? []) as Row[]) { const m = str(r.motivo_perda); if (m) por.set(m, (por.get(m) ?? 0) + 1) }
+  return [...por.entries()].map(([motivo, leads]) => ({ motivo, leads })).sort((a, b) => b.leads - a.leads || a.motivo.localeCompare(b.motivo, 'pt-BR'))
+}
+
 // Contatos com clientes (cliente_contatos, S52) no formato leve do Funil: data, corretora, nota e login de
 // quem registrou, para agrupar por quem atendeu. Antes da S52 (tabela ausente) volta vazio.
 export async function contatosClientesParaResumo(): Promise<ContatoClienteLeve[]> {

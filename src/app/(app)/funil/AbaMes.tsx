@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { Fragment } from 'react'
 import { CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
-import { funilMensal, funilResultado, funilResultadoPorCorretora, funilSafra, leadsDiario, leadsGanhosDoMes, leadsResumo } from '@/lib/gestao/consultas'
+import { funilMensal, funilResultado, funilResultadoPorCorretora, funilSafra, leadsDiario, leadsGanhosDoMes, leadsResumo, motivosDePerdaDoMes } from '@/lib/gestao/consultas'
 import { diasDoMes, fmtMedia } from '@/lib/gestao/contatos'
 import { diasEntre, mesCurto, mesInput, mesLongo } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
@@ -19,10 +19,12 @@ import type { FunilResultadoRow } from '@/lib/gestao/tipos'
 export async function AbaMes({ mesRef, corretoras }: { mesRef: string; corretoras: Corretora[] }) {
   const hoje = fmtDate(hojeBrasil())
   const diasSerie = Math.max(1, Math.min(366, diasEntre(mesRef, hoje) + 1))   // a série diária vai de hoje para trás
-  const [resultado, porCorretora, safra, mensal, diario, ganhosMes, leads] = await Promise.all([
+  const [resultado, porCorretora, safra, mensal, diario, ganhosMes, leads, motivos] = await Promise.all([
     funilResultado(mesRef, 1, MESES_INATIVO), funilResultadoPorCorretora(mesRef, corretoras, MESES_INATIVO), funilSafra(mesRef, 1), funilMensal(mesRef, 1),
-    leadsDiario(diasSerie), leadsGanhosDoMes(mesRef), leadsResumo(0),
+    leadsDiario(diasSerie), leadsGanhosDoMes(mesRef), leadsResumo(0), motivosDePerdaDoMes(mesRef),
   ])
+  // motivo mais comum de perda no mês (até nov/26 ficava num cartão da tela Leads)
+  const motivoComum = motivos[0] ?? null
   const mes = mesCurto(mesRef)
   const r = resultado.find(x => x.mes_ref === mesRef) ?? RESULTADO_VAZIO
   const t = somaSafra(safra.filter(x => x.mes_ref === mesRef))
@@ -67,7 +69,8 @@ export async function AbaMes({ mesRef, corretoras }: { mesRef: string; corretora
       <KpiRow cols={6}>
         <KpiCard label="Leads que entraram" value={fmtNum(t.recebidos)} sub={jaClientes ? `${fmtNum(jaClientes)} já eram clientes` : `em ${mes}`} />
         <KpiCard label="Ganhos" value={fmtNum(r.ganhos)} sub="leads fechados como Ganho" tone={r.ganhos ? 'gain' : 'neutral'} />
-        <KpiCard label="Perdidos" value={fmtNum(r.perdidos)} sub="leads fechados como Perdido" tone={r.perdidos ? 'loss' : 'neutral'} />
+        <KpiCard label="Perdidos" value={fmtNum(r.perdidos)} tone={r.perdidos ? 'loss' : 'neutral'}
+          sub={motivoComum ? <span title={motivos.map(m => `${m.motivo}: ${fmtNum(m.leads)}`).join(' · ')}>motivo mais comum: {motivoComum.motivo} ({fmtNum(motivoComum.leads)})</span> : 'leads fechados como Perdido'} />
         <KpiCard label="Contas novas" value={fmtNum(r.contas_novas)} sub={`${porCorretoraTexto('contas_novas') || 'abertas no mês'} · ${fmtNum(r.novos_operaram)} já operaram`} />
         <KpiCard label="Ativados · reativados" value={`${fmtNum(r.ativados)} · ${fmtNum(r.reativados)}`} sub={`1ª operação · voltaram após ${MESES_INATIVO} meses`} />
         <KpiCard destaque label="Receita nova no mês" value={receitaNova ? rCurto(receitaNova) : 'R$ 0'}

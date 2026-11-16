@@ -13,7 +13,7 @@ import type { Role } from '@/types'
 import { Marca } from '@/components/ui/Marca'
 import { ThemeToggle } from '@/lib/theme'
 import { sair } from '@/lib/auth/sair'
-import { CORRETORA_LABEL, CORRETORA_SLUG, termosDaCorretora, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_LABEL, CORRETORA_SLUG, type Corretora } from '@/lib/corretoras'
 import { PAGINAS, isActivePath } from './Sidebar'
 import { seletorCorretora } from './seletorCorretora'
 
@@ -42,18 +42,16 @@ export function Header({ role, nome, corretoraPadrao, corretoras, dataHoje }: {
   const sel = seletorCorretora(pathname, busca, corretoraPadrao, id => PAGINAS.some(p => p.id === id))
   const corretora = sel.atual
   const slug = CORRETORA_SLUG[corretora]
-  const termos = termosDaCorretora(corretora)
   const equipe = EQUIPE.includes(role)
   const paginas = PAGINAS.filter(p => p.roles.includes(role))
-  const rotulo = (id: string, label: string) => (id === 'assessores' ? termos.assessores : label)
 
   const capsula: Item[] = role === 'atendente' ? [{ label: 'Minha fila', href: '/fila', icon: ListChecks }, { label: 'Meus leads', href: '/leads', icon: Filter }] : [
     { label: 'Início', href: '/dashboard', icon: Home, exact: true },
-    ...paginas.filter(p => NA_CAPSULA.includes(p.id)).map(p => ({ label: rotulo(p.id, p.label), href: `/${slug}/${p.id}`, icon: p.icon })),
+    ...paginas.filter(p => NA_CAPSULA.includes(p.id)).map(p => ({ label: p.label, href: `/${slug}/${p.id}`, icon: p.icon })),
     ...(equipe ? [{ label: 'Leads', href: '/leads', icon: Filter }, { label: 'Fila', href: '/fila', icon: ListChecks }] : []),
   ]
   const mais: Item[] = [
-    ...paginas.filter(p => !NA_CAPSULA.includes(p.id)).map(p => ({ label: rotulo(p.id, p.label), href: `/${slug}/${p.id}`, icon: p.icon })),
+    ...paginas.filter(p => !NA_CAPSULA.includes(p.id)).map(p => ({ label: p.label, href: `/${slug}/${p.id}`, icon: p.icon })),
     ...(equipe ? [{ label: 'Funil', href: '/funil', icon: LineChart }, { label: 'Comissões', href: '/comissoes', icon: Coins }] : []),
     ...(role === 'admin' ? [{ label: 'Usuários', href: '/admin/usuarios', icon: KeyRound }] : []),
     { label: 'Meu perfil', href: '/perfil', icon: UserRound },

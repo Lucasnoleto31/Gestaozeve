@@ -33,7 +33,7 @@ export function Dica({ texto, destaque, className }: { texto: string; destaque?:
       </button>
       {pos && (
         <span role="tooltip" style={pos}
-          className="pointer-events-none fixed z-50 rounded-md border border-line bg-surface-2 px-2.5 py-2 text-left text-micro font-normal normal-case leading-snug tracking-normal text-fg shadow-float">
+          className="pointer-events-none fixed z-50 whitespace-normal rounded-md border border-line bg-surface-2 px-2.5 py-2 text-left text-micro font-normal normal-case leading-snug tracking-normal text-fg shadow-float">
           {texto}
         </span>
       )}

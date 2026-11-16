@@ -59,9 +59,10 @@ export function temListaPropria(corretora: Corretora): boolean {
 }
 
 // Vocabulário por corretora: no BTG quem cuida do cliente é o responsável interno
-// (Artur / Lucas), não um assessor da corretora.
-export function termosDaCorretora(corretora: Corretora): { assessor: string; assessores: string } {
-  return corretora === 'BTG' ? { assessor: 'Responsável', assessores: 'Responsáveis' } : { assessor: 'Assessor', assessores: 'Assessores' }
+// (Artur / Lucas), não um assessor da corretora. Vale para o campo do cliente; a tela e o item do menu
+// se chamam "Responsáveis" nas duas corretoras (um nome só para a mesma coisa, pedido do Lucas em nov/26).
+export function termosDaCorretora(corretora: Corretora): { assessor: string } {
+  return corretora === 'BTG' ? { assessor: 'Responsável' } : { assessor: 'Assessor' }
 }
 
 // Páginas do controle de cada corretora (ordem do menu)
@@ -70,7 +71,7 @@ export const PAGINAS_CORRETORA: { id: string; label: string; hint: string }[] = 
   { id: 'clientes',   label: 'Clientes',   hint: 'Cadastro mestre: contas, status, tarifa, giro e situação' },
   { id: 'oportunidades', label: 'Oportunidades', hint: 'Base parada: quem reativar, quem ativar e contas em abertura' },
   { id: 'lotes',      label: 'Diário',     hint: 'Giro por dia, média móvel e tendência' },
-  { id: 'assessores', label: 'Assessores', hint: 'Resumo, mapa de calor mensal e top clientes por assessor' },
+  { id: 'assessores', label: 'Responsáveis', hint: 'Como está cada pessoa do time no mês e os maiores clientes de cada uma' },
   { id: 'receita',    label: 'Receita',    hint: 'Receita por cliente e situação (ativo, inativo, nunca girou)' },
   { id: 'incentivo',  label: 'Incentivo',  hint: 'Pontos, faixas e bônus pago pela corretora' },
   { id: 'leads',      label: 'Leads',      hint: 'Leads do formulário e trabalho da equipe' },

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { Marca } from '@/components/ui/Marca'
 import type { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
-import { CORRETORA_COLOR, CORRETORA_LABEL, CORRETORA_SLUG, termosDaCorretora, type Corretora } from '@/lib/corretoras'
+import { CORRETORA_COLOR, CORRETORA_LABEL, CORRETORA_SLUG, type Corretora } from '@/lib/corretoras'
 import { seletorCorretora } from './seletorCorretora'
 
 type NavItem = { label: string; href: string; icon: React.ElementType; exact?: boolean }
@@ -25,7 +25,7 @@ export const PAGINAS: { id: string; label: string; icon: React.ElementType; role
   { id: 'clientes', label: 'Clientes', icon: Users, roles: EQUIPE },
   { id: 'oportunidades', label: 'Oportunidades', icon: Target, roles: EQUIPE },
   { id: 'lotes', label: 'Giro diário', icon: BarChart3, roles: EQUIPE },
-  { id: 'assessores', label: 'Assessores', icon: UserSearch, roles: EQUIPE },
+  { id: 'assessores', label: 'Responsáveis', icon: UserSearch, roles: EQUIPE },
   { id: 'receita', label: 'Receita', icon: Wallet, roles: EQUIPE },
   { id: 'incentivo', label: 'Incentivo', icon: Gift, roles: EQUIPE },
   { id: 'graficos', label: 'Gráficos', icon: LineChart, roles: EQUIPE },
@@ -64,7 +64,6 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
   const sel = seletorCorretora(pathname, busca, corretoraPadrao, id => PAGINAS.some(p => p.id === id))
   const corretora = sel.atual
   const slug = CORRETORA_SLUG[corretora]
-  const termos = termosDaCorretora(corretora)
 
   const sections: NavSection[] = [
     { label: 'Visão geral', roles: TODOS, items: [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }] },
@@ -156,7 +155,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
               })}
             </div>
             <ul className="space-y-0.5">
-              {paginas.map(p => renderItem({ label: p.id === 'assessores' ? termos.assessores : p.label, href: `/${slug}/${p.id}`, icon: p.icon }))}
+              {paginas.map(p => renderItem({ label: p.label, href: `/${slug}/${p.id}`, icon: p.icon }))}
             </ul>
           </div>
         )}

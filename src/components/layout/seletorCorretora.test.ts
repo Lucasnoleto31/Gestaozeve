@@ -39,6 +39,14 @@ describe('seletorCorretora', () => {
       expect(s.href('BTG')).toBe('/btg/painel')
     }
   })
+  it('na aba Distribuir da Fila, marca a corretora do endereço e troca sem sair da aba, mantendo o grupo', () => {
+    const s = seletorCorretora('/fila', 'aba=distribuir&corretora=BTG&grupo=reativar', 'GENIAL', ehPagina)
+    expect(s).toMatchObject({ filtro: false, marcada: 'BTG', atual: 'BTG' })
+    expect(s.href('GENIAL')).toBe('/fila?aba=distribuir&corretora=GENIAL&grupo=reativar')
+    // sem corretora no endereço vale a última aberta; minúsculas também servem (endereço antigo redirecionado)
+    expect(seletorCorretora('/fila', 'aba=distribuir', 'GENIAL', ehPagina)).toMatchObject({ marcada: 'GENIAL' })
+    expect(seletorCorretora('/fila', 'aba=distribuir&corretora=btg', 'GENIAL', ehPagina)).toMatchObject({ marcada: 'BTG' })
+  })
   it('uma rota que só começa com o mesmo texto não vira filtro', () => {
     expect(seletorCorretora('/comissoes-antigas', '', 'GENIAL', ehPagina).filtro).toBe(false)
   })

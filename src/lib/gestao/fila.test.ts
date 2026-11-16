@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { comContatos, linkTelefone, montarFila, totalDaFila, type ClienteFila, type LeadFila } from './fila'
+import { comContatos, feitasHoje, fraseDaFila, linkTelefone, montarFila, totalDaFila, type ClienteFila, type LeadFila } from './fila'
 
 const HOJE = '2026-11-10'
 const lead = (p: Partial<LeadFila> & { id: string }): LeadFila => ({
@@ -8,7 +8,7 @@ const lead = (p: Partial<LeadFila> & { id: string }): LeadFila => ({
 })
 const cliente = (p: Partial<ClienteFila> & { cliente_id: string }): ClienteFila => ({
   corretora: 'BTG', nome: `Cliente ${p.cliente_id}`, telefone: null, responsavel: 'Artur', ativador: null, situacao: 'Ativo', risco: null, nivel: null,
-  dias_sem_giro: null, lotes_media_3m: 0, contatos: 0, ultimo_contato: null, proximo_contato: null, ...p,
+  dias_sem_giro: null, lotes_media_3m: 0, rendia: 0, contatos: 0, ultimo_contato: null, proximo_contato: null, ...p,
 })
 const secao = (s: ReturnType<typeof montarFila>, chave: string) => s.find(x => x.chave === chave)!
 
@@ -21,7 +21,8 @@ describe('montarFila', () => {
     ], [cliente({ cliente_id: 'x', proximo_contato: '2026-11-09', ativador: 'Milena' })], { hoje: HOJE, diasAlerta: 7 })
     const ag = secao(s, 'agendados')
     expect(ag.itens.map(i => [i.id, i.motivo, i.dias])).toEqual([['b', 'atrasado', 3], ['x', 'atrasado', 1], ['a', 'hoje', 0]])
-    expect(ag.itens[0].detalhe).toBe('marcado para 07/11, há 3 dias')
+    expect(ag.itens[0].detalhe).toBe('retorno marcado para 07/11, há 3 dias')
+    expect(ag.itens[2].detalhe).toBe('retorno marcado para hoje')
     expect(ag.itens[1].quem).toBe('Milena')
     expect(totalDaFila(s)).toBe(3)
   })
@@ -35,25 +36,30 @@ describe('montarFila', () => {
       lead({ id: 'marcado', ultimo_contato: '2026-10-20', proximo_contato: '2026-11-15' }),   // parado, mas com retorno combinado
     ], [], { hoje: HOJE, diasAlerta: 7 })
     expect(secao(s, 'novos').itens.map(i => i.id)).toEqual(['novo'])
-    expect(secao(s, 'novos').itens[0].detalhe).toBe('entrou há 2 dias · nenhum contato registrado')
+    expect(secao(s, 'novos').itens[0].detalhe).toBe('entrou há 2 dias e ninguém fez contato')
     expect(secao(s, 'parados').itens.map(i => i.id)).toEqual(['parado'])
-    expect(secao(s, 'parados').itens[0].detalhe).toBe('último contato há 9 dias')
+    expect(secao(s, 'parados').itens[0].detalhe).toBe('em aberto, último contato há 9 dias')
   })
 
-  it('clientes: campanha sem contato e risco sem contato recente, por nível', () => {
+  it('clientes: campanha sem contato e risco sem contato recente, do que mais rendia para o que menos rendia', () => {
     const s = montarFila([], [
       cliente({ cliente_id: 'camp', ativador: 'Milena', contatos: 0 }),
       cliente({ cliente_id: 'camp2', ativador: 'Milena', contatos: 2, ultimo_contato: '2026-11-09' }),   // já chamada: fora
-      cliente({ cliente_id: 'baixo', risco: 'parou', nivel: 'Baixo', dias_sem_giro: 15, lotes_media_3m: 30 }),
-      cliente({ cliente_id: 'alto', risco: 'em queda', nivel: 'Alto', lotes_media_3m: 1500, ultimo_contato: '2026-10-01', contatos: 1 }),
+      cliente({ cliente_id: 'baixo', risco: 'parou', nivel: 'Baixo', dias_sem_giro: 15, lotes_media_3m: 30, rendia: 40 }),
+      cliente({ cliente_id: 'semhistorico', risco: 'parou', dias_sem_giro: 3, lotes_media_3m: 5 }),
+      cliente({ cliente_id: 'alto', risco: 'em queda', nivel: 'Alto', lotes_media_3m: 1500, rendia: 1200.4, ultimo_contato: '2026-10-01', contatos: 1 }),
       cliente({ cliente_id: 'ok', risco: 'parou', nivel: 'Alto', ultimo_contato: '2026-11-05', contatos: 1 }),    // contato recente: fora
       cliente({ cliente_id: 'semrisco' }),
     ], { hoje: HOJE, diasAlerta: 7 })
     expect(secao(s, 'campanha').itens.map(i => i.id)).toEqual(['camp'])
-    expect(secao(s, 'campanha').itens[0].detalhe).toBe('campanha de ativação com Milena · ainda sem contato')
-    expect(secao(s, 'risco').itens.map(i => i.id)).toEqual(['alto', 'baixo'])
-    expect(secao(s, 'risco').itens[0].detalhe).toBe('giro em queda · nível Alto · último contato há 40 dias')
-    expect(secao(s, 'risco').itens[1].detalhe).toBe('parou de girar há 15 dias · nível Baixo · nenhum contato registrado')
+    expect(secao(s, 'campanha').itens[0].detalhe).toBe('conta da campanha de ativação, ainda sem contato')
+    expect(secao(s, 'risco').itens.map(i => i.id)).toEqual(['alto', 'baixo', 'semhistorico'])
+    expect(secao(s, 'risco').itens[0].detalhe).toBe('está girando bem menos, rendia R$ 1.200 por mês; último contato há 40 dias')
+    expect(secao(s, 'risco').itens[1].detalhe).toBe('parou de girar há 15 dias, rendia R$ 40 por mês; nenhum contato registrado')
+    // sem histórico de receita a frase não inventa valor
+    expect(secao(s, 'risco').itens[2].detalhe).toBe('parou de girar há 3 dias; nenhum contato registrado')
+    // a ordem dos grupos é a prioridade do dia: clientes em risco vêm antes dos leads parados
+    expect(s.map(x => x.chave)).toEqual(['agendados', 'novos', 'risco', 'parados', 'campanha'])
   })
 
   it('filtra pelas tarefas de uma pessoa (responsável do lead, ativador ou responsável do cliente)', () => {
@@ -69,6 +75,26 @@ describe('montarFila', () => {
     const artur = montarFila(leads, clientes, { hoje: HOJE, diasAlerta: 7, quem: 'Artur' })
     expect(secao(artur, 'risco').itens.map(i => i.id)).toEqual(['c2'])
     expect(totalDaFila(artur)).toBe(1)
+  })
+})
+
+describe('feitasHoje e fraseDaFila', () => {
+  const contatos = [
+    { autor: 'MILENA SOUZA', alvo: 'lead:1' }, { autor: 'MILENA SOUZA', alvo: 'lead:1' },   // dois contatos com o mesmo lead contam um
+    { autor: 'MILENA SOUZA', alvo: 'cliente:BTG:9' }, { autor: 'Lucas Gomes', alvo: 'lead:2' }, { autor: null, alvo: 'lead:3' },
+  ]
+  it('conta em quantos leads e clientes a pessoa registrou contato hoje', () => {
+    expect(feitasHoje(contatos, 'Milena')).toBe(2)
+    expect(feitasHoje(contatos, 'Lucas')).toBe(1)
+    expect(feitasHoje(contatos, 'Artur')).toBe(0)
+    expect(feitasHoje(contatos, null)).toBe(4)   // a equipe inteira, inclusive contato sem autor
+  })
+  it('diz quantas tarefas há para hoje e quantas já foram feitas', () => {
+    expect(fraseDaFila({ total: 23, feitas: 5, quem: 'Lucas', souEu: true })).toBe('Você tem 23 tarefas para hoje, 5 já feitas.')
+    expect(fraseDaFila({ total: 1, feitas: 1, quem: 'Milena', souEu: false })).toBe('Milena tem 1 tarefa para hoje, 1 já feita.')
+    expect(fraseDaFila({ total: 1240, feitas: 0, quem: null, souEu: false })).toBe('A equipe tem 1.240 tarefas para hoje, nenhuma feita ainda.')
+    expect(fraseDaFila({ total: 0, feitas: 0, quem: null, souEu: false })).toBe('Nada pendente para hoje.')
+    expect(fraseDaFila({ total: 0, feitas: 7, quem: 'Lucas', souEu: true })).toBe('Tudo em dia: nenhuma tarefa pendente, e você já fez 7 hoje.')
   })
 })
 

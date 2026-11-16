@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { TRACO, n0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { diaCurto, momentoDoUltimoDia } from '../[corretora]/lotes/comum'
+import { hrefDistribuir } from '@/lib/gestao/oportunidades'
 
 // Projeção: meses de histórico que entram no perfil intra-mês
 const MESES_PROJECAO = 24
@@ -110,12 +111,12 @@ export default async function DashboardPage() {
 
   // o que pede atenção: uma linha por assunto, com cada corretora levando direto à lista
   type Atencao = { rotulo: string; itens: { texto: string; href: string }[] }
-  const porCorretoraCom = (valor: (l: (typeof comDados)[number]) => number, href: (slug: string) => string, sufixo = '') =>
-    comDados.filter(l => valor(l) > 0).map(l => ({ texto: `${CORRETORA_LABEL[l.corretora]} ${fmtNum(valor(l))}${sufixo}`, href: href(CORRETORA_SLUG[l.corretora]) }))
+  const porCorretoraCom = (valor: (l: (typeof comDados)[number]) => number, href: (slug: string, corretora: string) => string, sufixo = '') =>
+    comDados.filter(l => valor(l) > 0).map(l => ({ texto: `${CORRETORA_LABEL[l.corretora]} ${fmtNum(valor(l))}${sufixo}`, href: href(CORRETORA_SLUG[l.corretora], l.corretora) }))
   const atencao: Atencao[] = [
     { rotulo: 'Leads em aberto que pedem contato', itens: comAlerta ? [{ texto: `${fmtNum(comAlerta)} de ${fmtNum(leads.abertos)} em aberto`, href: '/leads' }] : [] },
     { rotulo: 'Clientes em risco de parar', itens: porCorretoraCom(l => l.emRisco, s => `/${s}/clientes?momento=risco`) },
-    { rotulo: 'Clientes que nunca operaram', itens: porCorretoraCom(l => l.nuncaGiraram, s => `/${s}/oportunidades?aba=ativar`) },
+    { rotulo: 'Clientes que nunca operaram', itens: porCorretoraCom(l => l.nuncaGiraram, (_, corretora) => hrefDistribuir(corretora, 'ativar')) },
     { rotulo: 'Lançamentos sem cliente cadastrado', itens: admin ? porCorretoraCom(l => l.pendencias, s => `/${s}/importar#nao-cadastrados`, ' linhas') : [] },
   ].filter(a => a.itens.length > 0)
 

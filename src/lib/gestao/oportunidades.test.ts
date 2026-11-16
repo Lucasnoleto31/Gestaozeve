@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classificar, mediaAtiva, type ClienteBase } from './oportunidades'
+import { classificar, fraseDeDistribuir, mediaAtiva, type ClienteBase, type ResumoOportunidades } from './oportunidades'
 import type { GiroFora } from './giroFora'
 
 const HOJE = '2026-11-10'
@@ -107,5 +107,21 @@ describe('classificar', () => {
     expect(r.abertura.map(o => o.cliente_id)).toEqual(['giraAqui', 'giraLa', 'antigo'])
     expect(r.abertura[1].motivos).toEqual(['gira na Genial (700 lotes em nov/26)'])
     expect(r.resumo.abertura.giramFora).toBe(1)
+  })
+})
+
+describe('fraseDeDistribuir', () => {
+  const r: ResumoOportunidades = {
+    risco: { contas: 18, potencialMes: 5628.4, pararam: 12, emQueda: 6, foraDaCampanha: 12, contatados: 3, giramFora: 2 },
+    reativar: { contas: 1, potencialMes: 300, recentes: 1, potencialRecentes: 300, foraDaCampanha: 0, contatados: 1, giramFora: 0, potencialGiramFora: 0 },
+    ativar: { contas: 77, recentes: 40, jaOperam: 5, prioridade: 1, foraDaCampanha: 1, contatados: 9, giramFora: 10 },
+    abertura: { contas: 0, jaGiram: 0, lotes12m: 0, semContato: 0, giramFora: 0 },
+  }
+  it('diz quantos são, o que está em jogo e quantos ainda estão sem atendente', () => {
+    expect(fraseDeDistribuir('risco', r, 'BTG')).toBe('18 clientes em risco no BTG, que rendiam R$ 5.628 por mês. 12 ainda não estão com nenhum atendente.')
+    expect(fraseDeDistribuir('reativar', r, 'Genial')).toBe('1 cliente inativo na Genial, que rendia R$ 300 por mês quando girava. Todos já estão com um atendente.')
+    expect(fraseDeDistribuir('ativar', r, 'BTG')).toBe('77 contas migraram e nunca operaram no BTG; 1 tem prioridade alta. 1 ainda não está com nenhum atendente.')
+    expect(fraseDeDistribuir('abertura', r, 'Genial')).toBe('Nenhuma conta em abertura na Genial.')
+    expect(fraseDeDistribuir('abertura', { ...r, abertura: { contas: 10, jaGiram: 1, lotes12m: 500, semContato: 8, giramFora: 0 } }, 'BTG')).toBe('10 contas em abertura no BTG; 1 já gira e 8 não têm contato registrado.')
   })
 })

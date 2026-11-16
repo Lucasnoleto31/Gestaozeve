@@ -178,3 +178,38 @@ export function classificar(clientes: ClienteBase[], hoje: string): { risco: Opo
     },
   }
 }
+
+// A aba Distribuir da Fila (o que era a tela Oportunidades de cada corretora): os grupos, na ordem das abas
+// antigas, e o endereço de cada um. O grupo padrão (Em risco) não vai para o endereço.
+export const GRUPOS_DISTRIBUIR: TipoOportunidade[] = ['risco', 'reativar', 'ativar', 'abertura']
+export const hrefDistribuir = (corretora: string, grupo: TipoOportunidade = 'risco') =>
+  `/fila?aba=distribuir&corretora=${corretora}${grupo === 'risco' ? '' : `&grupo=${grupo}`}`
+
+// A frase do topo de cada grupo na aba Distribuir da Fila: quantos são, o que está em jogo e quantos
+// ainda não estão com nenhum atendente
+export function fraseDeDistribuir(tipo: TipoOportunidade, r: ResumoOportunidades, corretora: string): string {
+  const n = (v: number) => v.toLocaleString('pt-BR')
+  const rs = (v: number) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`
+  const em = corretora === 'BTG' ? 'no BTG' : `na ${corretora}`
+  const semAtendente = (v: number) => (v === 0 ? 'Todos já estão com um atendente.' : v === 1 ? '1 ainda não está com nenhum atendente.' : `${n(v)} ainda não estão com nenhum atendente.`)
+  if (tipo === 'risco') {
+    const x = r.risco
+    if (!x.contas) return `Nenhum cliente em risco ${em}.`
+    const rendiam = x.potencialMes >= 1 ? `, que ${x.contas === 1 ? 'rendia' : 'rendiam'} ${rs(x.potencialMes)} por mês` : ''
+    return `${x.contas === 1 ? '1 cliente em risco' : `${n(x.contas)} clientes em risco`} ${em}${rendiam}. ${semAtendente(x.foraDaCampanha)}`
+  }
+  if (tipo === 'reativar') {
+    const x = r.reativar
+    if (!x.contas) return `Nenhum cliente inativo ${em}.`
+    const rendiam = x.potencialMes >= 1 ? `, que ${x.contas === 1 ? 'rendia' : 'rendiam'} ${rs(x.potencialMes)} por mês quando ${x.contas === 1 ? 'girava' : 'giravam'}` : ''
+    return `${x.contas === 1 ? '1 cliente inativo' : `${n(x.contas)} clientes inativos`} ${em}${rendiam}. ${semAtendente(x.foraDaCampanha)}`
+  }
+  if (tipo === 'ativar') {
+    const x = r.ativar
+    if (!x.contas) return `Nenhuma conta migrada sem operar ${em}.`
+    return `${x.contas === 1 ? '1 conta migrou e nunca operou' : `${n(x.contas)} contas migraram e nunca operaram`} ${em}; ${x.prioridade === 1 ? '1 tem' : `${n(x.prioridade)} têm`} prioridade alta. ${semAtendente(x.foraDaCampanha)}`
+  }
+  const x = r.abertura
+  if (!x.contas) return `Nenhuma conta em abertura ${em}.`
+  return `${x.contas === 1 ? '1 conta em abertura' : `${n(x.contas)} contas em abertura`} ${em}; ${x.jaGiram === 1 ? '1 já gira' : `${n(x.jaGiram)} já giram`} e ${x.semContato === 1 ? '1 não tem' : `${n(x.semContato)} não têm`} contato registrado.`
+}

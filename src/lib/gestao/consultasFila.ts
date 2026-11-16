@@ -6,7 +6,9 @@ import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { mesmaPessoa } from '@/lib/texto'
 import { clientesLista, contatosClientesResumo, parametroGeral, responsaveisAtivos, statusLeadLista } from './consultas'
 import { equipeLeads, falha, str } from './guard'
-import { comContatos, type ClienteFila, type LeadFila } from './fila'
+import { comContatos, type ClienteFila, type ContatoDeHoje, type LeadFila } from './fila'
+import { mediaAtiva } from './oportunidades'
+import { atendenteDoContato } from './contatos'
 
 type Row = Record<string, unknown>
 type Erro = { code?: string; message: string } | null
@@ -21,6 +23,7 @@ export type DadosFila = {
   diasAlerta: number
   hoje: string
   corretoras: Corretora[]
+  contatosHoje: ContatoDeHoje[]   // contatos registrados com a data de hoje (o "já feitas" do topo da fila)
 }
 
 const colunaAusente = (e: Erro) => !!e && (e.code === '42703' || /proximo_contato/i.test(e.message))
@@ -81,12 +84,29 @@ export async function dadosDaFila(): Promise<DadosFila> {
     clientes = listas.flatMap((lista, i) => lista.map<ClienteFila>(c => ({
       cliente_id: c.cliente_id, corretora: corretoras[i], nome: c.nome, telefone: c.telefone, responsavel: c.responsavel, ativador: c.ativador,
       situacao: c.situacao, risco: c.risco, nivel: c.nivel, dias_sem_giro: c.dias_sem_giro, lotes_media_3m: c.lotes_media_3m,
+      rendia: c.meses_ativos > 0 ? mediaAtiva(c) : 0,
       contatos: c.contatos, ultimo_contato: c.ultimo_contato, proximo_contato: proximos.get(`${corretoras[i]}:${c.cliente_id}`) ?? null,
     }))).filter(c => c.risco || c.ativador || c.proximo_contato)
   }
 
+  // O que já foi feito hoje: contatos com a data de hoje, de leads e de clientes, creditados pela mesma regra
+  // do Funil › Equipe. Contato com lead conta para o responsável do lead (a tarefa era dele, mesmo que outro
+  // login tenha registrado); contato com cliente conta para quem atendeu: o nome entre parênteses na nota
+  // ("WhatsApp (Milena)") ou, sem ele, o login. O atendente vê só os dele.
+  // Tabela ausente (antes da S47/S52) não derruba a fila: o contador fica em zero.
+  const [cl, cc] = await Promise.all([
+    db.from('lead_contatos').select('lead_id').eq('data', hoje).range(0, 9999),
+    restrito ? Promise.resolve({ data: [], error: null }) : db.from('cliente_contatos').select('cliente_id, corretora, nota, criado_por_nome').eq('data', hoje).range(0, 9999),
+  ])
+  const responsavelDoLead = new Map(r.rows.map(l => [String(l.id), str(l.responsavel)]))
+  const equipe = responsaveis.map(x => x.nome)
+  const contatosHoje: ContatoDeHoje[] = [
+    ...((cl.error ? [] : cl.data ?? []) as Row[]).map(c => ({ autor: responsavelDoLead.get(String(c.lead_id)) ?? null, alvo: `lead:${c.lead_id}` })),
+    ...((cc.error ? [] : cc.data ?? []) as Row[]).map(c => ({ autor: atendenteDoContato({ nota: str(c.nota), criado_por_nome: str(c.criado_por_nome) }, equipe), alvo: `cliente:${c.corretora}:${c.cliente_id}` })),
+  ].filter(c => !restrito || mesmaPessoa(c.autor, profile.nome))
+
   return {
-    leads, clientes, semS59, restrito, usuario: profile.nome, hoje, diasAlerta, corretoras,
+    leads, clientes, semS59, restrito, usuario: profile.nome, hoje, diasAlerta, corretoras, contatosHoje,
     responsaveis: restrito ? responsaveis.filter(x => mesmaPessoa(x.nome, profile.nome)).map(x => x.nome) : responsaveis.map(x => x.nome),
   }
 }

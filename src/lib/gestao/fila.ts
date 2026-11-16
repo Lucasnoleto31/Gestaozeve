@@ -1,7 +1,10 @@
-// Fila do dia: o que cada atendente tem para fazer hoje, a partir dos leads e dos clientes —
-// próximo contato marcado (hoje ou atrasado), lead novo sem contato, lead parado, cliente em risco
-// sem contato recente e conta da campanha de ativação ainda não chamada.
-// Só funções puras (testes em fila.test.ts); quem lê o banco é consultasFila.ts.
+// Fila do dia: o que cada atendente tem para fazer hoje, em ordem de prioridade, a partir dos leads e dos
+// clientes: retorno combinado (para hoje ou atrasado), lead novo sem contato, cliente em risco sem contato
+// recente (do que mais rendia para o que menos rendia), lead parado e conta da campanha de ativação ainda
+// não chamada. Cada item traz o motivo em uma frase ("parou de girar há 19 dias, rendia R$ 1.200 por mês").
+// Redesenho de nov/26 (Lucas: Fila e Oportunidades "parecem 2 páginas pra fazer a mesma coisa"): a ordem
+// dos grupos mudou (clientes em risco antes dos leads parados), o risco ordena pelo que o cliente rendia e a
+// tela conta o que já foi feito hoje. Só funções puras (testes em fila.test.ts); o banco é consultasFila.ts.
 import { diasEntre } from './meses'
 import { diaBrasil } from '@/lib/periodo'
 import { mesmaPessoa } from '@/lib/texto'
@@ -32,6 +35,7 @@ export type ClienteFila = {
   nivel: Nivel | null
   dias_sem_giro: number | null
   lotes_media_3m: number
+  rendia: number                   // receita média dos meses em que girou (receita de todo o histórico ÷ meses com lotes)
   contatos: number                 // contatos registrados na corretora
   ultimo_contato: string | null
   proximo_contato: string | null   // S59
@@ -46,7 +50,7 @@ export type ItemFila = {
   telefone: string | null
   quem: string | null              // de quem é a tarefa: responsável do lead · ativador ou responsável do cliente
   motivo: MotivoFila
-  detalhe: string                  // por que está na fila ("marcado para 08/11, há 2 dias", "parou de girar há 15 dias · nível Alto…")
+  detalhe: string                  // por que está na fila, em uma frase ("parou de girar há 15 dias, rendia R$ 1.200 por mês; nenhum contato registrado")
   dias: number                     // atraso ou dias sem contato (ordenação)
   ultimo_contato: string | null
   proximo_contato: string | null
@@ -61,7 +65,7 @@ export type OpcoesFila = {
   quem?: string | null             // só as tarefas dessa pessoa (null = todas)
 }
 
-const ORDEM_NIVEL: Record<string, number> = { Alto: 0, 'Médio': 1, Baixo: 2 }
+const reais = (v: number) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 export const haDias = (n: number) => (n <= 0 ? 'hoje' : n === 1 ? 'ontem' : `há ${n} dias`)
 const porNome = (a: ItemFila, b: ItemFila) => a.nome.localeCompare(b.nome, 'pt-BR')
@@ -88,7 +92,7 @@ export function montarFila(leads: LeadFila[], clientes: ClienteFila[], o: Opcoes
   const agendados: ItemFila[] = [], novos: ItemFila[] = [], parados: ItemFila[] = [], risco: ItemFila[] = [], campanha: ItemFila[] = []
   const agendado = (base: Omit<ItemFila, 'motivo' | 'detalhe' | 'dias'>, proximo: string) => {
     const atraso = diasEntre(proximo, o.hoje)
-    agendados.push({ ...base, motivo: atraso > 0 ? 'atrasado' : 'hoje', dias: atraso, detalhe: atraso > 0 ? `marcado para ${ddmm(proximo)}, ${haDias(atraso)}` : 'marcado para hoje' })
+    agendados.push({ ...base, motivo: atraso > 0 ? 'atrasado' : 'hoje', dias: atraso, detalhe: atraso > 0 ? `retorno marcado para ${ddmm(proximo)}, ${haDias(atraso)}` : 'retorno marcado para hoje' })
   }
 
   for (const l of leads) {
@@ -100,11 +104,11 @@ export function montarFila(leads: LeadFila[], clientes: ClienteFila[], o: Opcoes
     if (!l.aberto || futuro(l.proximo_contato)) continue
     if (!l.ultimo_contato) {
       const dias = diasEntre(diaBrasil(l.data_hora), o.hoje)
-      novos.push({ ...base, motivo: 'novo', dias, detalhe: `entrou ${haDias(dias)} · nenhum contato registrado` })
+      novos.push({ ...base, motivo: 'novo', dias, detalhe: `entrou ${haDias(dias)} e ninguém fez contato` })
       continue
     }
     const dias = diasEntre(l.ultimo_contato, o.hoje)
-    if (dias >= o.diasAlerta) parados.push({ ...base, motivo: 'parado', dias, detalhe: `último contato ${haDias(dias)}` })
+    if (dias >= o.diasAlerta) parados.push({ ...base, motivo: 'parado', dias, detalhe: `em aberto, último contato ${haDias(dias)}` })
   }
 
   for (const c of clientes) {
@@ -116,30 +120,52 @@ export function montarFila(leads: LeadFila[], clientes: ClienteFila[], o: Opcoes
     if (futuro(c.proximo_contato)) continue
     const semContato = c.ultimo_contato ? diasEntre(c.ultimo_contato, o.hoje) : null
     if (c.ativador && c.contatos === 0) {
-      campanha.push({ ...base, quem: c.ativador, motivo: 'campanha', dias: 0, detalhe: `campanha de ativação com ${c.ativador} · ainda sem contato` })
+      campanha.push({ ...base, quem: c.ativador, motivo: 'campanha', dias: 0, detalhe: 'conta da campanha de ativação, ainda sem contato' })
       continue
     }
     if (c.risco && (semContato == null || semContato >= diasRisco)) {
-      const giro = c.risco === 'parou' ? `parou de girar${c.dias_sem_giro != null ? ` ${haDias(c.dias_sem_giro)}` : ''}` : 'giro em queda'
+      const giro = c.risco === 'parou' ? `parou de girar${c.dias_sem_giro != null ? ` ${haDias(c.dias_sem_giro)}` : ''}` : 'está girando bem menos'
       const contato = semContato == null ? 'nenhum contato registrado' : `último contato ${haDias(semContato)}`
-      risco.push({ ...base, quem: c.responsavel, motivo: 'risco', dias: semContato ?? 9999, detalhe: `${giro}${c.nivel ? ` · nível ${c.nivel}` : ''} · ${contato}` })
+      risco.push({ ...base, quem: c.responsavel, motivo: 'risco', dias: semContato ?? 9999, detalhe: `${giro}${c.rendia >= 1 ? `, rendia ${reais(c.rendia)} por mês` : ''}; ${contato}` })
     }
   }
 
   const minhas = (itens: ItemFila[]) => (o.quem ? itens.filter(i => mesmaPessoa(i.quem, o.quem)) : itens)
   const porDias = (a: ItemFila, b: ItemFila) => b.dias - a.dias || porNome(a, b)
-  const nivelDe = new Map(clientes.map(c => [`cliente:${c.corretora}:${c.cliente_id}`, { nivel: c.nivel, media: c.lotes_media_3m }]))
-  const porNivel = (a: ItemFila, b: ItemFila) => {
-    const x = nivelDe.get(a.chave), y = nivelDe.get(b.chave)
-    return (ORDEM_NIVEL[x?.nivel ?? ''] ?? 3) - (ORDEM_NIVEL[y?.nivel ?? ''] ?? 3) || (y?.media ?? 0) - (x?.media ?? 0) || porNome(a, b)
+  // em risco: do que mais rendia para o que menos rendia; sem histórico de receita, pelos lotes que girava
+  const valorDe = new Map(clientes.map(c => [`cliente:${c.corretora}:${c.cliente_id}`, { rendia: c.rendia, media: c.lotes_media_3m }]))
+  const peloQueRendia = (a: ItemFila, b: ItemFila) => {
+    const x = valorDe.get(a.chave), y = valorDe.get(b.chave)
+    return (y?.rendia ?? 0) - (x?.rendia ?? 0) || (y?.media ?? 0) - (x?.media ?? 0) || porNome(a, b)
   }
+  // a ordem dos grupos é a ordem de prioridade do dia
   return [
-    { chave: 'agendados', titulo: 'Combinados', descricao: 'Próximo contato marcado para hoje ou já atrasado.', itens: minhas(agendados).sort(porDias) },
-    { chave: 'novos', titulo: 'Leads novos sem contato', descricao: 'Entraram pelo formulário e ninguém registrou contato ainda; os mais antigos primeiro.', itens: minhas(novos).sort(porDias) },
-    { chave: 'parados', titulo: 'Leads parados', descricao: `Em aberto e sem contato há ${o.diasAlerta} dias ou mais.`, itens: minhas(parados).sort(porDias) },
-    { chave: 'risco', titulo: 'Clientes em risco sem contato', descricao: `Pararam de girar ou caíram de ritmo e não têm contato registrado nos últimos ${diasRisco} dias; os maiores primeiro.`, itens: minhas(risco).sort(porNivel) },
-    { chave: 'campanha', titulo: 'Campanha: contas ainda não chamadas', descricao: 'Atribuídas na campanha de ativação e sem nenhum contato registrado.', itens: minhas(campanha).sort(porNome) },
+    { chave: 'agendados', titulo: 'Retornos combinados', descricao: 'Retorno marcado para hoje ou já atrasado; os mais atrasados primeiro.', itens: minhas(agendados).sort(porDias) },
+    { chave: 'novos', titulo: 'Leads novos sem contato', descricao: 'Entraram e ninguém registrou contato ainda; os mais antigos primeiro.', itens: minhas(novos).sort(porDias) },
+    { chave: 'risco', titulo: 'Clientes em risco', descricao: `Pararam de girar ou caíram de ritmo e estão sem contato há ${diasRisco} dias ou mais; do que mais rendia para o que menos rendia.`, itens: minhas(risco).sort(peloQueRendia) },
+    { chave: 'parados', titulo: 'Leads parados', descricao: `Em aberto e sem contato há ${o.diasAlerta} dias ou mais; os mais antigos primeiro.`, itens: minhas(parados).sort(porDias) },
+    { chave: 'campanha', titulo: 'Contas da campanha', descricao: 'Atribuídas na campanha de ativação e ainda sem nenhum contato registrado.', itens: minhas(campanha).sort(porNome) },
   ]
+}
+
+// O que já foi feito hoje: quantos leads e clientes tiveram contato registrado com a data de hoje.
+// `quem` = a pessoa escolhida no seletor (null = a equipe inteira). `autor` = a quem o contato é creditado,
+// pela regra do Funil › Equipe: o responsável do lead; no cliente, quem atendeu (consultasFila.ts).
+export type ContatoDeHoje = { autor: string | null; alvo: string }   // alvo = 'lead:<id>' ou 'cliente:<corretora>:<id>'
+export function feitasHoje(contatos: ContatoDeHoje[], quem: string | null): number {
+  const alvos = new Set<string>()
+  for (const c of contatos) if (!quem || mesmaPessoa(c.autor, quem)) alvos.add(c.alvo)
+  return alvos.size
+}
+
+// A frase do topo da fila: quantas tarefas há para hoje e quantas já foram feitas
+export function fraseDaFila(d: { total: number; feitas: number; quem: string | null; souEu: boolean }): string {
+  const n = (v: number) => v.toLocaleString('pt-BR')
+  const sujeito = d.souEu ? 'Você tem' : d.quem ? `${d.quem} tem` : 'A equipe tem'
+  const fez = d.souEu ? 'você já fez' : d.quem ? `${d.quem} já fez` : 'a equipe já fez'
+  if (d.total === 0) return d.feitas === 0 ? 'Nada pendente para hoje.' : `Tudo em dia: nenhuma tarefa pendente, e ${fez} ${n(d.feitas)} hoje.`
+  const feitas = d.feitas === 0 ? 'nenhuma feita ainda' : d.feitas === 1 ? '1 já feita' : `${n(d.feitas)} já feitas`
+  return `${sujeito} ${d.total === 1 ? '1 tarefa' : `${n(d.total)} tarefas`} para hoje, ${feitas}.`
 }
 
 export const totalDaFila = (secoes: SecaoFila[]) => secoes.reduce((s, x) => s + x.itens.length, 0)

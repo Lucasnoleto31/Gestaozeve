@@ -1,13 +1,17 @@
 'use client'
 
-// A lista de uma aba de Oportunidades (um grupo da tela Clientes), já ordenada pelo servidor: filtros
-// rápidos, busca por nome, "fora da campanha" e a seleção em lote para atribuir as contas a um atendente
-// (campanha de ativação). Quem gira em outra corretora do escritório vem marcado: não está parado, só não
-// gira aqui. No celular a caixa de seleção some, o nome fica preso à esquerda e sobra uma coluna ao lado.
+// A lista de um grupo da aba Distribuir (Em risco, Inativos, Nunca operaram, Em abertura), já ordenada
+// pelo servidor: filtros rápidos, busca por nome, "sem atendente" e a seleção em lote para atribuir as
+// contas a um atendente (campanha de ativação): elas caem na fila do dia dele. Quem gira em outra corretora
+// do escritório vem marcado: não está parado, só não gira aqui.
+// Redesenho de nov/26: no máximo 7 colunas. O estado ("Parou há 12 dias") e o responsável ficam embaixo do
+// nome; média de 3 meses, lotes do mês, último giro, receita total e patrimônio estão na ficha do cliente
+// (um clique no nome). A explicação de cada conta fica atrás do "i" do cabeçalho.
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { MessageCircle } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
+import { Dica } from '@/components/ui/Dica'
 import { LinhaVazia, MomentoBadge, TRACO, dataCurta, n0, rCurto } from '@/components/gestao/Celulas'
 import { linkTelefone } from '@/lib/gestao/fila'
 import { giraFora, rotuloGiroFora, textoGiroFora } from '@/lib/gestao/giroFora'
@@ -16,7 +20,7 @@ import type { Corretora } from '@/lib/corretoras'
 import { normTexto } from '@/lib/texto'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { AtribuirCampanha } from '../clientes/AtribuirCampanha'
+import { AtribuirCampanha } from '../[corretora]/clientes/AtribuirCampanha'
 
 const PASSO = 50
 type Filtro = { valor: string; label: string; passa: (o: Oportunidade) => boolean }
@@ -50,15 +54,17 @@ const FILTROS: Record<TipoOportunidade, Filtro[]> = {
   ],
 }
 const TITULO: Record<TipoOportunidade, string> = { risco: 'Em risco: para segurar', reativar: 'Inativos: para reativar', ativar: 'Nunca operaram: para ativar', abertura: 'Em abertura: para acompanhar' }
-const SUBTITULO: Record<TipoOportunidade, string> = {
-  risco: 'Rendia por mês = receita de todo o histórico dividida pelos meses em que girou. Média 3 meses = lotes por mês antes de cair ou parar. Clique no nome para abrir a ficha e registrar o contato.',
-  reativar: 'Rendia por mês = receita de todo o histórico dividida pelos meses em que girou. Quem gira em outra corretora não está perdido: só não gira aqui. Clique no nome para abrir a ficha e registrar o contato.',
-  ativar: 'A ordem soma os sinais: giro em outra corretora, migração recente, lead que já opera e patrimônio declarado. Clique no nome para abrir a ficha e registrar o contato.',
-  abertura: 'Quem já gira lotes com a conta ainda em abertura vem primeiro; depois, quem gira em outra corretora e quem espera há mais tempo.',
+const ORDEM: Record<TipoOportunidade, string> = {
+  risco: 'Do que mais rendia para o que menos rendia.',
+  reativar: 'Do que mais rendia para o que menos rendia.',
+  ativar: 'Das contas mais quentes para as mais frias; quem gira em outra corretora vem primeiro.',
+  abertura: 'Quem já gira vem primeiro; depois, quem gira em outra corretora e quem espera há mais tempo.',
 }
+const DICA_RENDIA = 'Receita de todo o histórico dividida pelos meses em que o cliente girou: o que ele rendia por mês quando operava.'
+const DICA_OUTRA = 'Lotes do cliente em outra corretora do escritório: no mês de lá, ou o último mês com lotes. Quem gira lá não está parado, só não gira aqui.'
+const DICA_PORQUE = 'A ordem soma os sinais: lotes em outra corretora, migração recente, lead que disse que já opera e patrimônio declarado.'
 const meses = (n: number | null) => (n == null ? TRACO : n <= 0 ? 'este mês' : `${fmtNum(n)} ${n === 1 ? 'mês' : 'meses'}`)
 const dias = (n: number | null) => (n == null ? TRACO : n <= 0 ? 'hoje' : `${fmtNum(n)} ${n === 1 ? 'dia' : 'dias'}`)
-const patrimonio = (v: number | null) => (v == null || v <= 0 ? TRACO : v >= 1_000_000 ? `R$ ${(v / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi` : v >= 1000 ? `R$ ${fmtNum(Math.round(v / 1000))} mil` : rCurto(v))
 
 export function TabelaOportunidades({ tipo, linhas, corretora, base, atendentes }: {
   tipo: TipoOportunidade
@@ -69,10 +75,9 @@ export function TabelaOportunidades({ tipo, linhas, corretora, base, atendentes 
 }) {
   const [filtro, setFiltro] = useState('')
   const [busca, setBusca] = useState('')
-  const [soFora, setSoFora] = useState(false)
+  const [soSemAtendente, setSoSemAtendente] = useState(false)
   // Em risco e Inativos: tira da lista quem gira em outra corretora (sobram os parados de verdade)
   const [semGiroFora, setSemGiroFora] = useState(false)
-  const comEstado = tipo === 'risco'   // só em "Em risco" o estado muda de uma linha para outra (Em queda / Parou há N dias)
   const temGiroFora = useMemo(() => linhas.some(o => giraFora(o.fora)), [linhas])
   const [limite, setLimite] = useState(PASSO)
   const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set())
@@ -81,23 +86,24 @@ export function TabelaOportunidades({ tipo, linhas, corretora, base, atendentes 
   const filtradas = useMemo(() => {
     const f = filtros.find(x => x.valor === filtro) ?? filtros[0]
     const termo = normTexto(busca)
-    return linhas.filter(o => f.passa(o) && (!soFora || !o.ativador) && (!semGiroFora || !giraFora(o.fora)) && (!termo || normTexto(o.nome).includes(termo)))
-  }, [linhas, filtros, filtro, busca, soFora, semGiroFora])
+    return linhas.filter(o => f.passa(o) && (!soSemAtendente || !o.ativador) && (!semGiroFora || !giraFora(o.fora)) && (!termo || normTexto(o.nome).includes(termo)))
+  }, [linhas, filtros, filtro, busca, soSemAtendente, semGiroFora])
   const visiveis = filtradas.slice(0, limite)
   const todosVisiveis = visiveis.length > 0 && visiveis.every(o => selecionados.has(o.cliente_id))
   const marcar = (ids: string[], sim: boolean) => setSelecionados(s => { const n = new Set(s); for (const id of ids) { if (sim) n.add(id); else n.delete(id) } return n })
-  const colunas = tipo === 'risco' ? 11 : tipo === 'reativar' ? 10 : 8
+  const colunas = tipo === 'risco' || tipo === 'ativar' ? 6 : 7
 
   return (
-    <Panel title={`${TITULO[tipo]} · ${fmtNum(filtradas.length)}`} subtitle={SUBTITULO[tipo]}>
+    <Panel title={<>{TITULO[tipo]}<span className="ml-2 text-dense font-normal tabular-nums text-fg-muted">{fmtNum(filtradas.length)}</span></>}
+      subtitle={`${ORDEM[tipo]} Marque as linhas e atribua a um atendente: as contas caem na fila dele.`}>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="seg">
           {filtros.map(f => <button key={f.valor} type="button" data-active={filtro === f.valor} onClick={() => { setFiltro(f.valor); setLimite(PASSO) }}>{f.label}</button>)}
         </div>
         <input type="search" className="field-sm w-full sm:w-56" placeholder="Buscar pelo nome…" value={busca} onChange={e => { setBusca(e.target.value); setLimite(PASSO) }} aria-label="Buscar pelo nome" />
         <label className="flex items-center gap-2 text-dense text-fg-muted">
-          <input type="checkbox" checked={soFora} onChange={e => { setSoFora(e.target.checked); setLimite(PASSO) }} />
-          só fora da campanha
+          <input type="checkbox" checked={soSemAtendente} onChange={e => { setSoSemAtendente(e.target.checked); setLimite(PASSO) }} />
+          só sem atendente
         </label>
         {(tipo === 'reativar' || tipo === 'risco') && temGiroFora && filtro !== 'fora' && (
           <label className="flex items-center gap-2 text-dense text-fg-muted" title="Quem gira em outra corretora do escritório não está parado: só não gira aqui">
@@ -124,16 +130,15 @@ export function TabelaOportunidades({ tipo, linhas, corretora, base, atendentes 
             <tr>
               <th className="col-p2 w-8">
                 <input type="checkbox" checked={todosVisiveis} disabled={visiveis.length === 0} onChange={e => marcar(visiveis.map(o => o.cliente_id), e.target.checked)}
-                  aria-label={todosVisiveis ? 'Desmarcar as linhas à mostra' : 'Marcar as linhas à mostra'} title="Marcar as linhas à mostra para atribuir à campanha" />
+                  aria-label={todosVisiveis ? 'Desmarcar as linhas à mostra' : 'Marcar as linhas à mostra'} title="Marcar as linhas à mostra para atribuir a um atendente" />
               </th>
               <th className="col-nome">Cliente</th>
-              {tipo === 'risco' && <><th className="col-p2">Como está</th><th className="num">Rendia por mês</th><th className="num col-p2">Média 3 meses</th><th className="num col-p2">Lotes no mês</th><th className="num col-p3">Último giro</th></>}
-              {tipo === 'reativar' && <><th className="num col-p2">Parou há</th><th className="num">Rendia por mês</th><th className="num col-p2">Receita total</th><th className="num col-p3">Último giro</th></>}
-              {tipo === 'ativar' && <><th className="num col-p2">Migrou há</th><th>Por que agora</th><th className="num col-p2">Patrimônio</th></>}
-              {tipo === 'abertura' && <><th className="num col-p2">Em abertura há</th><th className="num">Lotes 12 m</th></>}
-              {tipo !== 'ativar' && <th className="col-p2" title="Giro do cliente em outra corretora do escritório: lotes no mês de lá, ou o último mês com giro">Outra corretora</th>}
-              <th className="col-p3">Responsável</th>
-              <th className="col-p2">Campanha</th>
+              {tipo === 'reativar' && <th className="num col-p2">Parou há</th>}
+              {(tipo === 'risco' || tipo === 'reativar') && <th className="num"><span className="inline-flex items-center gap-1">Rendia por mês<Dica texto={DICA_RENDIA} /></span></th>}
+              {tipo === 'ativar' && <><th className="num col-p3">Migrou há</th><th><span className="inline-flex items-center gap-1">Por que agora<Dica texto={DICA_PORQUE} /></span></th></>}
+              {tipo === 'abertura' && <><th className="num col-p2">Em abertura há</th><th className="num">Lotes 12 meses</th></>}
+              {tipo !== 'ativar' && <th className="col-p2"><span className="inline-flex items-center gap-1">Outra corretora<Dica texto={DICA_OUTRA} /></span></th>}
+              <th className="col-p2">Atendente</th>
               <th className="num col-p2">Último contato</th>
             </tr>
           </thead>
@@ -144,34 +149,23 @@ export function TabelaOportunidades({ tipo, linhas, corretora, base, atendentes 
               return (
                 <tr key={o.cliente_id} className={cn(selecionados.has(o.cliente_id) && 'bg-accent-soft')}>
                   <td className="col-p2"><input type="checkbox" checked={selecionados.has(o.cliente_id)} onChange={e => marcar([o.cliente_id], e.target.checked)} aria-label={`Marcar ${o.nome}`} /></td>
-                  <td className="col-nome max-w-[190px] truncate md:max-w-[260px]">
-                    <Link href={`${base}/clientes/${o.cliente_id}`} className="link font-medium">{o.nome}</Link>
-                    {wa && <a href={wa} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex align-middle text-fg-subtle hover:text-fg" title={`WhatsApp ${o.telefone}`} aria-label={`WhatsApp de ${o.nome}`}><MessageCircle className="h-3.5 w-3.5" aria-hidden /></a>}
-                    {/* no celular a coluna do estado some: ele desce para baixo do nome, como na lista de Clientes */}
-                    {comEstado && <span className="mt-1 block md:hidden"><MomentoBadge cliente={{ situacao: o.situacao, risco: o.risco, dias_sem_giro: o.diasSemGiro }} /></span>}
+                  <td className="col-nome max-w-[190px] md:max-w-[220px] xl:max-w-[320px]">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Link href={`${base}/clientes/${o.cliente_id}`} className="link truncate font-medium">{o.nome}</Link>
+                      {wa && <a href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 text-fg-subtle hover:text-fg" title={`WhatsApp ${o.telefone}`} aria-label={`WhatsApp de ${o.nome}`}><MessageCircle className="h-3.5 w-3.5" aria-hidden /></a>}
+                    </span>
+                    {/* o estado e o responsável ficam embaixo do nome (antes eram duas colunas) */}
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-fg-subtle">
+                      {tipo === 'risco' && <MomentoBadge cliente={{ situacao: o.situacao, risco: o.risco, dias_sem_giro: o.diasSemGiro }} />}
+                      {o.responsavel && <span>resp. {o.responsavel}</span>}
+                    </span>
                   </td>
-                  {tipo === 'risco' && (
-                    <>
-                      <td className="col-p2 whitespace-nowrap"><MomentoBadge cliente={{ situacao: o.situacao, risco: o.risco, dias_sem_giro: o.diasSemGiro }} /></td>
-                      <td className={cn('num font-semibold', !o.mediaAtiva && 'subtle')}>{rCurto(o.mediaAtiva)}</td>
-                      <td className={cn('num col-p2', !o.media3m && 'subtle')}>{n0(Math.round(o.media3m))}</td>
-                      <td className={cn('num col-p2', !o.lotesMes && 'subtle')}>{n0(o.lotesMes)}</td>
-                      <td className="num col-p3">{dataCurta(o.ultimoGiro)}</td>
-                    </>
-                  )}
-                  {tipo === 'reativar' && (
-                    <>
-                      <td className="num col-p2">{meses(o.mesesSemGiro)}</td>
-                      <td className={cn('num font-semibold', !o.mediaAtiva && 'subtle')}>{rCurto(o.mediaAtiva)}</td>
-                      <td className={cn('num col-p2', !o.receitaTotal && 'subtle')}>{rCurto(o.receitaTotal)}</td>
-                      <td className="num col-p3">{dataCurta(o.ultimoGiro)}</td>
-                    </>
-                  )}
+                  {tipo === 'reativar' && <td className="num col-p2">{meses(o.mesesSemGiro)}</td>}
+                  {(tipo === 'risco' || tipo === 'reativar') && <td className={cn('num font-semibold', !o.mediaAtiva && 'subtle')}>{rCurto(o.mediaAtiva)}</td>}
                   {tipo === 'ativar' && (
                     <>
-                      <td className="num col-p2">{dias(o.diasMigrado)}</td>
-                      <td className={cn('whitespace-normal md:whitespace-nowrap', o.motivos.length ? 'text-fg' : 'subtle')}>{o.motivos.length ? o.motivos.join(' · ') : 'conta antiga, sem sinal recente'}</td>
-                      <td className="num col-p2">{patrimonio(o.patrimonio)}</td>
+                      <td className="num col-p3">{dias(o.diasMigrado)}</td>
+                      <td className={cn('!whitespace-normal md:min-w-[12rem]', o.motivos.length ? 'text-fg' : 'subtle')}>{o.motivos.length ? o.motivos.join(' · ') : 'conta antiga, sem sinal recente'}</td>
                     </>
                   )}
                   {tipo === 'abertura' && (
@@ -185,8 +179,7 @@ export function TabelaOportunidades({ tipo, linhas, corretora, base, atendentes 
                       {o.fora ? rotuloGiroFora(o.fora) : TRACO}
                     </td>
                   )}
-                  <td className="muted col-p3">{o.responsavel ?? TRACO}</td>
-                  <td className={cn('col-p2 whitespace-nowrap', o.ativador ? 'font-medium' : 'subtle')}>{o.ativador ?? TRACO}</td>
+                  <td className={cn('col-p2 whitespace-nowrap', o.ativador ? 'font-medium' : 'subtle')}>{o.ativador ?? 'sem atendente'}</td>
                   <td className={cn('num col-p2', !o.ultimo_contato && 'subtle')} title={o.contatos ? `${fmtNum(o.contatos)} ${o.contatos === 1 ? 'contato registrado' : 'contatos registrados'}` : undefined}>{dataCurta(o.ultimo_contato)}</td>
                 </tr>
               )

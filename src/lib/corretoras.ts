@@ -69,7 +69,6 @@ export function termosDaCorretora(corretora: Corretora): { assessor: string } {
 export const PAGINAS_CORRETORA: { id: string; label: string; hint: string }[] = [
   { id: 'painel',     label: 'Painel',     hint: 'Indicadores do mês, base por status e alertas' },
   { id: 'clientes',   label: 'Clientes',   hint: 'Cadastro mestre: contas, status, tarifa, giro e situação' },
-  { id: 'oportunidades', label: 'Oportunidades', hint: 'Base parada: quem reativar, quem ativar e contas em abertura' },
   { id: 'lotes',      label: 'Diário',     hint: 'Giro por dia, média móvel e tendência' },
   { id: 'assessores', label: 'Responsáveis', hint: 'Como está cada pessoa do time no mês e os maiores clientes de cada uma' },
   { id: 'receita',    label: 'Receita',    hint: 'Receita por cliente e situação (ativo, inativo, nunca girou)' },

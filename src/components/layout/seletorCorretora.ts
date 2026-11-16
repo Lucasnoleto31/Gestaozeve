@@ -41,5 +41,18 @@ export function seletorCorretora(pathname: string, busca: string, padrao: Corret
       },
     }
   }
+  // Aba Distribuir da Fila (o que era a tela Oportunidades de cada corretora): o seletor é a corretora da
+  // aba. Marca a do endereço e troca sem sair da tela, mantendo o grupo. Não tem "Todas": a lista é de uma só.
+  if (pathname === '/fila') {
+    const params = new URLSearchParams(busca)
+    if (params.get('aba') === 'distribuir') {
+      const pedida = (params.get('corretora') ?? '').toUpperCase()
+      const marcada = isCorretora(pedida) ? pedida : padrao
+      return {
+        filtro: false, marcada, atual: marcada,
+        href: c => { const p = new URLSearchParams(params); p.set('corretora', c ?? marcada); return `/fila?${p.toString()}` },
+      }
+    }
+  }
   return { filtro: false, marcada: padrao, atual: padrao, href: c => `/${CORRETORA_SLUG[c ?? padrao]}/painel` }
 }

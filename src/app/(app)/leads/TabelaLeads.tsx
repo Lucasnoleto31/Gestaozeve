@@ -223,7 +223,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
       )}
 
       <Panel title={`${fmtNum(filtrados.length)} de ${fmtNum(leads.length)} leads`}
-        subtitle={<span className="inline-flex items-center gap-1.5">Clique na linha para editar tudo e ver o histórico de contatos.<Dica texto="Ícones da linha: o telefone registra um contato hoje (Novo vira Em contato); o troféu marca Ganho e abre o cadastro do cliente (é o único jeito de marcar Ganho); o X marca Perdido." /></span>}>
+        subtitle={<span className="inline-flex items-center gap-1.5">Clique na linha para editar tudo e ver o histórico de contatos.<Dica texto="Ícones da linha: o telefone registra um contato hoje (Novo vira Em contato); o troféu abre a ficha de ganho, que cadastra o cliente e fecha o lead como Ganho; o X marca Perdido." /></span>}>
         {/* as etapas como abas: em aberto primeiro (são as que pedem contato); é o mesmo filtro ?status= do endereço */}
         <div className="mb-3 flex gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label="Etapa do lead">
           {abas.map(a => {
@@ -363,7 +363,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
         )}
         {editando && <LeadForm key={editando.id} lead={editando} aberto onClose={() => setEditando(null)} responsaveis={responsaveis} status={status} admin={admin} usuario={usuario} opcoesOrigem={opcoesOrigem}
           onGanhar={() => { const l = editando; setEditando(null); setGanhando(l) }} />}
-        {ganhando && <GanhoWizard key={ganhando.id} lead={ganhando} aberto onClose={() => setGanhando(null)} corretoras={corretoras} responsaveis={responsaveisClientes} assessores={assessores} hoje={hoje} />}
+        {ganhando && <GanhoWizard key={ganhando.id} lead={ganhando} aberto onClose={() => setGanhando(null)} corretoras={corretoras} responsaveis={responsaveisClientes} assessores={assessores} hoje={hoje} opcoesOrigem={opcoesOrigem} />}
         <Modal open={!!perdendo} onClose={() => setPerdendo(null)} title="Marcar como perdido" subtitle={perdendo?.nome}
           footer={<><Button variant="secondary" onClick={() => setPerdendo(null)}>Cancelar</Button><Button variant="danger" onClick={perder} loading={fechando}>Marcar perdido</Button></>}>
           {erroPerda && <Alert tone="danger" className="mb-3">{erroPerda}</Alert>}

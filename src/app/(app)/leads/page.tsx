@@ -48,7 +48,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <PageHeader
         eyebrow="Leads · todas as corretoras"
         title="Leads"
-        description={restrito ? undefined : <>Ganhos por dia, perdas e de onde vêm os leads estão no <Link href="/funil" className="link">Funil</Link>.</>}
+        description={restrito ? undefined : <>Ganhos por dia, perdas e de onde vêm os leads estão no <Link href="/funil" className="link">Funil</Link>; o mês dia a dia, no <Link href="/funil?aba=calendario" className="link">Calendário</Link>.</>}
         actions={<AcoesLeads responsaveis={nomesLeads} status={status} admin={profile.role === 'admin'} opcoesOrigem={opcoesOrigem} />}
       />
       <PageBody>

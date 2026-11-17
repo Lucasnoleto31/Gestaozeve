@@ -8,6 +8,8 @@ import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { MesPicker, SegParam } from '@/components/gestao/Filtros'
 import { Abas } from '@/components/gestao/Abas'
 import { AbaMes } from './AbaMes'
+import { AbaCalendario } from './AbaCalendario'
+import { pregoesParado } from '@/lib/gestao/calendario'
 import { AbaEquipe } from './AbaEquipe'
 import { AbaOrigens } from './AbaOrigens'
 import { AbaHistorico } from './AbaHistorico'
@@ -15,14 +17,16 @@ import type { PeriodoFunil } from './comum'
 
 const ABAS = [
   { valor: 'mes', label: 'Mês' },
+  { valor: 'calendario', label: 'Calendário' },
   { valor: 'equipe', label: 'Equipe' },
   { valor: 'origens', label: 'Origens' },
   { valor: 'historico', label: 'Histórico' },
 ]
 
-// O Funil em quatro abas, uma pergunta por aba: Mês (o que fechou e onde estão os leads do mês),
-// Equipe (quem fez o quê), Origens (de onde vêm e quanto rendem) e Histórico (12 meses). Cada aba
-// carrega só as consultas dela. Vocabulário do escritório: tombou = abriu a conta; ativado = 1ª operação.
+// O Funil em cinco abas, uma pergunta por aba: Mês (o que fechou e onde estão os leads do mês),
+// Calendário (o mês dia a dia: ganhos, perdidos e clientes que pararam de girar), Equipe (quem fez o quê),
+// Origens (de onde vêm e quanto rendem) e Histórico (12 meses). Cada aba carrega só as consultas dela.
+// Vocabulário do escritório: tombou = abriu a conta; ativado = 1ª operação.
 export default async function FunilPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const profile = await getProfile()
   if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor')) redirect('/dashboard')
@@ -37,6 +41,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const meses = janelaMeses(mesRef, 12)
   const descricao: Record<string, string> = {
     mes: `O que fechou em ${mesLongo(mesRef)} e onde estão hoje os leads que entraram nele.`,
+    calendario: `${mesLongo(mesRef)} dia a dia: leads ganhos, leads perdidos e clientes que pararam de girar.`,
     equipe: 'Quem fez o quê: leads por responsável, contatos com leads e clientes e a campanha de ativação.',
     origens: 'De onde vêm os leads e quanto cada origem rendeu em contas abertas, operações e receita.',
     historico: `Os 12 meses de ${mesCurto(meses[0])} a ${mesCurto(mesRef)}: resultado de cada mês e o destino dos leads de cada mês de entrada.`,
@@ -53,6 +58,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
       </PageHeader>
       <PageBody>
         {aba === 'mes' && <AbaMes mesRef={mesRef} corretoras={corretorasDoPerfil(profile)} />}
+        {aba === 'calendario' && <AbaCalendario mesRef={mesRef} corretoras={corretorasDoPerfil(profile)} minimo={pregoesParado(q('parado'))} />}
         {aba === 'equipe' && <AbaEquipe mesRef={mesRef} periodo={periodo} />}
         {aba === 'origens' && <AbaOrigens mesRef={mesRef} periodo={periodo} />}
         {aba === 'historico' && <AbaHistorico mesRef={mesRef} />}

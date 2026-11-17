@@ -24,7 +24,8 @@ const ABAS = [
 ]
 
 // O Funil em cinco abas, uma pergunta por aba: Mês (o que fechou e onde estão os leads do mês),
-// Calendário (o mês dia a dia: ganhos, perdidos e clientes que pararam de girar), Equipe (quem fez o quê),
+// Calendário (o mês dia a dia: ganhos, perdidos, clientes ativados e clientes que pararam de girar, com o
+// ranking de quem mais ganhou), Equipe (quem fez o quê),
 // Origens (de onde vêm e quanto rendem) e Histórico (12 meses). Cada aba carrega só as consultas dela.
 // Vocabulário do escritório: tombou = abriu a conta; ativado = 1ª operação.
 export default async function FunilPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -41,7 +42,7 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
   const meses = janelaMeses(mesRef, 12)
   const descricao: Record<string, string> = {
     mes: `O que fechou em ${mesLongo(mesRef)} e onde estão hoje os leads que entraram nele.`,
-    calendario: `${mesLongo(mesRef)} dia a dia: leads ganhos, leads perdidos e clientes que pararam de girar.`,
+    calendario: `${mesLongo(mesRef)} dia a dia: leads ganhos e perdidos, clientes ativados e clientes que pararam de girar.`,
     equipe: 'Quem fez o quê: leads por responsável, contatos com leads e clientes e a campanha de ativação.',
     origens: 'De onde vêm os leads e quanto cada origem rendeu em contas abertas, operações e receita.',
     historico: `Os 12 meses de ${mesCurto(meses[0])} a ${mesCurto(mesRef)}: resultado de cada mês e o destino dos leads de cada mês de entrada.`,

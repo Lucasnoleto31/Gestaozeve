@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { PhoneCall, Trash2 } from 'lucide-react'
 import { Button, IconButton } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Dica } from '@/components/ui/Dica'
 import { useToast } from '@/components/ui/Toast'
 import { TRACO, dataCurta } from '@/components/gestao/Celulas'
 import { excluirContatoLead, listarContatosLead } from '@/lib/gestao/acoes'
@@ -16,13 +17,14 @@ import { somarDias } from '@/lib/gestao/meses'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { fmtNum } from '@/lib/format'
 
-export function ContatosLead({ leadId, nome, status, aberto, onRegistrado, onExcluido }: {
+export function ContatosLead({ leadId, nome, status, aberto, onRegistrado, onExcluido, onLista }: {
   leadId: string
   nome: string
   status: string
   aberto: boolean
   onRegistrado?: (data: string, novoStatus?: string) => void   // a ficha acompanha o último contato e o status
   onExcluido?: (ultimo: string | null) => void                  // a ficha volta ao último contato que sobrou
+  onLista?: (total: number) => void                             // quantos contatos há, a cada leitura do histórico
 }) {
   const router = useRouter()
   const { avisar } = useToast()
@@ -39,15 +41,17 @@ export function ContatosLead({ leadId, nome, status, aberto, onRegistrado, onExc
     let ativo = true
     listarContatosLead(leadId).then(r => {
       if (!ativo) return
-      if (r.ok) setLista(r.dados)
+      if (r.ok) { setLista(r.dados); onLista?.(r.dados.length) }
       else { setLista([]); setErro(r.erro) }
     })
     return () => { ativo = false }
+    // onLista é só um aviso para a ficha: não refaz a leitura quando muda
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId])
   // recarrega depois de registrar ou apagar; devolve a lista nova para quem precisa dela
   const carregar = async () => {
     const r = await listarContatosLead(leadId)
-    if (r.ok) setLista(r.dados)
+    if (r.ok) { setLista(r.dados); onLista?.(r.dados.length) }
     else { setLista([]); setErro(r.erro) }
     return r.ok ? r.dados : []
   }
@@ -75,18 +79,18 @@ export function ContatosLead({ leadId, nome, status, aberto, onRegistrado, onExc
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="label">Contatos{lista ? ` · ${fmtNum(lista.length)}` : ''}</p>
-        <p className="text-micro text-fg-subtle">Cada ligação ou mensagem conta; a média de contatos até ganhar sai daqui.</p>
-      </div>
+      <p className="label mb-3 flex items-center gap-1.5">
+        Contatos{lista ? ` · ${fmtNum(lista.length)}` : ''}
+        <Dica texto="Cada ligação ou mensagem conta; a média de contatos até ganhar sai daqui." />
+      </p>
       {erro && <p className="mb-2 text-label text-loss">{erro}</p>}
       <div className="flex flex-wrap items-end gap-2">
-        <div className="w-40"><Input label="Data" type="date" value={data} max={hoje} onChange={e => setData(e.target.value)} /></div>
+        <div className="w-44"><Input label="Data" type="date" value={data} max={hoje} onChange={e => setData(e.target.value)} /></div>
         <div className="min-w-[220px] flex-1">
           <Input label="Nota" value={nota} onChange={e => setNota(e.target.value)} placeholder="Ligou, mandou WhatsApp, pediu retorno…"
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void registrar() } }} />
         </div>
-        <div className="w-40"><Input label="Próximo contato" type="date" value={proximo} min={somarDias(data || hoje, 1)} onChange={e => setProximo(e.target.value)} title="Retorno combinado: entra na Minha fila no dia" /></div>
+        <div className="w-44"><Input label="Próximo contato" type="date" value={proximo} min={somarDias(data || hoje, 1)} onChange={e => setProximo(e.target.value)} title="Retorno combinado: entra na Minha fila no dia" /></div>
         <Button variant="secondary" onClick={registrar} loading={salvando}><PhoneCall className="h-4 w-4" aria-hidden />Registrar contato</Button>
       </div>
       <ul className="mt-3 divide-y divide-line text-dense">

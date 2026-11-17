@@ -16,17 +16,18 @@ import { Panel } from '@/components/ui/Panel'
 import { Button, IconButton } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Alert } from '@/components/ui/Alert'
-import { Input } from '@/components/ui/Input'
 import { KpiCard } from '@/components/ui/Kpi'
 import { Dica } from '@/components/ui/Dica'
 import { useToast } from '@/components/ui/Toast'
 import { Resumo } from '@/components/gestao/Resumo'
+import { MotivoPerda } from '@/components/gestao/MotivoPerda'
 import { StatusLeadBadge, TRACO, dataCurta, n0 } from '@/components/gestao/Celulas'
 import { marcarLeadPerdido, registrarContatoLead } from '@/lib/gestao/acoes'
 import { COOKIE_VISAO_LEADS, VISAO_LEADS_ROTULO, VISOES_LEADS, abasDeStatus, fraseDosLeads, resumoDosLeads, ultimoContatoTexto, visaoLeads, type VisaoLeads } from '@/lib/gestao/leadsTela'
 import { variacaoMensal } from '@/lib/gestao/projecao'
 import { mesCurto, somarMeses } from '@/lib/gestao/meses'
 import type { AssessoresPorCorretora, LeadRow, StatusLead } from '@/lib/gestao/tipos'
+import type { OpcoesOrigem } from '@/lib/gestao/origens'
 import { CORRETORA_SLUG, isCorretora, type Corretora } from '@/lib/corretoras'
 import { fmtNum, labelMesCurto } from '@/lib/format'
 import { expandir, type Compacto } from '@/lib/compacto'
@@ -88,7 +89,7 @@ function CartaoFiltro({ rotulo, n, nota, ativo, alerta, onClick }: { rotulo: str
   )
 }
 
-export function TabelaLeads({ leads: compacto, responsaveis, responsaveisClientes, status, admin, filtrosSalvos, corretoras, assessores, hoje, usuario, diasAlerta, restrito = false, visaoInicial = 'atendimento' }: {
+export function TabelaLeads({ leads: compacto, responsaveis, responsaveisClientes, status, admin, filtrosSalvos, corretoras, assessores, hoje, usuario, diasAlerta, opcoesOrigem, restrito = false, visaoInicial = 'atendimento' }: {
   leads: Compacto<LeadRow>
   responsaveis: string[]           // quem trabalha leads
   responsaveisClientes: string[]   // quem cuida de clientes (ficha do lead ganho)
@@ -100,6 +101,7 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
   hoje: string
   usuario: string                  // nome de quem está logado (destaca "você" nos leads que atende)
   diasAlerta: number               // sem contato há mais que isso vira alerta (parâmetro dias_alerta_lead)
+  opcoesOrigem: OpcoesOrigem       // parceiros e origens em uso: o campo Origem / parceiro das duas fichas
   restrito?: boolean               // atendente: a lista já vem só com os leads dele
   visaoInicial?: VisaoLeads        // a visão de colunas escolhida da última vez (cookie lido pela página)
 }) {
@@ -359,12 +361,13 @@ export function TabelaLeads({ leads: compacto, responsaveis, responsaveisCliente
             <button type="button" className="link text-label" onClick={() => setLimite(n => n + 200)}>mostrar mais ({fmtNum(filtrados.length - visiveis.length)} restantes)</button>
           </div>
         )}
-        {editando && <LeadForm key={editando.id} lead={editando} aberto onClose={() => setEditando(null)} responsaveis={responsaveis} status={status} admin={admin} usuario={usuario} />}
+        {editando && <LeadForm key={editando.id} lead={editando} aberto onClose={() => setEditando(null)} responsaveis={responsaveis} status={status} admin={admin} usuario={usuario} opcoesOrigem={opcoesOrigem}
+          onGanhar={() => { const l = editando; setEditando(null); setGanhando(l) }} />}
         {ganhando && <GanhoWizard key={ganhando.id} lead={ganhando} aberto onClose={() => setGanhando(null)} corretoras={corretoras} responsaveis={responsaveisClientes} assessores={assessores} hoje={hoje} />}
         <Modal open={!!perdendo} onClose={() => setPerdendo(null)} title="Marcar como perdido" subtitle={perdendo?.nome}
           footer={<><Button variant="secondary" onClick={() => setPerdendo(null)}>Cancelar</Button><Button variant="danger" onClick={perder} loading={fechando}>Marcar perdido</Button></>}>
           {erroPerda && <Alert tone="danger" className="mb-3">{erroPerda}</Alert>}
-          <Input label="Motivo da perda" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Sem interesse, outra corretora, não respondeu…" autoFocus hint="Fecha o lead hoje. Dá para reabrir editando o status na linha." />
+          {perdendo && <MotivoPerda key={perdendo.id} valor={motivo} onChange={setMotivo} autoFocus hint="Fecha o lead hoje. Dá para reabrir editando o status na linha." />}
         </Modal>
       </Panel>
     </>

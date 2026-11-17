@@ -12,9 +12,10 @@ import { lerArquivo } from '@/lib/gestao/lerArquivo'
 import { lerLeads, type LeadImport } from '@/lib/gestao/planilhas'
 import { importarLeads } from '@/lib/gestao/acoes'
 import type { StatusLead } from '@/lib/gestao/tipos'
+import type { OpcoesOrigem } from '@/lib/gestao/origens'
 import { fmtNum } from '@/lib/format'
 
-export function AcoesLeads({ responsaveis, status, admin }: { responsaveis: string[]; status: StatusLead[]; admin: boolean }) {
+export function AcoesLeads({ responsaveis, status, admin, opcoesOrigem }: { responsaveis: string[]; status: StatusLead[]; admin: boolean; opcoesOrigem: OpcoesOrigem }) {
   const router = useRouter()
   const { avisar } = useToast()
   const [novo, setNovo] = useState(false)
@@ -51,7 +52,7 @@ export function AcoesLeads({ responsaveis, status, admin }: { responsaveis: stri
     <>
       {admin && <Button variant="secondary" onClick={() => { setImp(true); setErro(null) }}><Upload className="h-4 w-4" aria-hidden />Importar export</Button>}
       <Button onClick={() => setNovo(true)}><Plus className="h-4 w-4" aria-hidden />Novo lead</Button>
-      {novo && <LeadForm lead={null} aberto={novo} onClose={() => setNovo(false)} responsaveis={responsaveis} status={status} admin={admin} />}
+      {novo && <LeadForm lead={null} aberto={novo} onClose={() => setNovo(false)} responsaveis={responsaveis} status={status} admin={admin} opcoesOrigem={opcoesOrigem} />}
       <Modal open={imp} onClose={() => setImp(false)} title="Importar export do formulário" subtitle="Data/Hora, Nome, WhatsApp, CPF, Email, Já opera?, Corretora. Quem já existe não duplica; colunas da equipe completam o que estiver em branco."
         footer={<><Button variant="secondary" onClick={() => setImp(false)}>Fechar</Button><Button disabled={!lido} loading={ocupado} onClick={importar}>Importar {lido ? fmtNum(lido.linhas.length) : ''} leads</Button></>}>
         <div className="space-y-3">

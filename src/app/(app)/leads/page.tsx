@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { assessoresPorCorretora, leadsLista, parametroGeral, responsaveisAtivos, statusLeadLista } from '@/lib/gestao/consultas'
+import { opcoesOrigem as lerOpcoesOrigem } from '@/lib/gestao/consultasOrigens'
 import { COOKIE_VISAO_LEADS, visaoLeads } from '@/lib/gestao/leadsTela'
 import { fmtDate, hojeBrasil } from '@/lib/periodo'
 import { corretorasDoPerfil } from '@/lib/corretoras'
@@ -25,8 +26,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const profile = await getProfile()
   if (!profile || (profile.role !== 'admin' && profile.role !== 'vendedor' && profile.role !== 'atendente')) redirect('/dashboard')
   const sp = await searchParams
-  const [leads, responsaveis, status, diasAlertaTxt, assessores] = await Promise.all([
-    leadsLista(), responsaveisAtivos(), statusLeadLista(), parametroGeral('dias_alerta_lead', '7'), assessoresPorCorretora(),
+  const [leads, responsaveis, status, diasAlertaTxt, assessores, opcoesOrigem] = await Promise.all([
+    leadsLista(), responsaveisAtivos(), statusLeadLista(), parametroGeral('dias_alerta_lead', '7'), assessoresPorCorretora(), lerOpcoesOrigem(corretorasDoPerfil(profile)),
   ])
   const hoje = fmtDate(hojeBrasil())
   const diasAlerta = Math.max(1, Number(diasAlertaTxt) || 7)
@@ -48,7 +49,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         eyebrow="Leads · todas as corretoras"
         title="Leads"
         description={restrito ? undefined : <>Ganhos por dia, perdas e de onde vêm os leads estão no <Link href="/funil" className="link">Funil</Link>.</>}
-        actions={<AcoesLeads responsaveis={nomesLeads} status={status} admin={profile.role === 'admin'} />}
+        actions={<AcoesLeads responsaveis={nomesLeads} status={status} admin={profile.role === 'admin'} opcoesOrigem={opcoesOrigem} />}
       />
       <PageBody>
         <TabelaLeads
@@ -63,6 +64,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           usuario={profile.nome}
           filtrosSalvos={fi}
           diasAlerta={diasAlerta}
+          opcoesOrigem={opcoesOrigem}
           restrito={restrito}
           visaoInicial={visaoLeads(guardados.get(COOKIE_VISAO_LEADS)?.value)}
         />

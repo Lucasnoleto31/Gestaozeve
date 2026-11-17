@@ -32,7 +32,7 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
     comissaoMensal(mesRef, 12, null, corretora),
     todas ? painelResumo(corretora, mesRef) : Promise.resolve(null),   // só para o "% ativos do total levado"
   ])
-  const { cfg, atp, comRepasse, mensal, mensalPorMes, repasseDe, foraDe, bankingDe, liquidoCom, temFora, temBanking, parceirosComReceita } = eco
+  const { cfg, atp, comRepasse, mensal, mensalPorMes, repasseDe, foraDe, bankingDe, liquidoCom, temFora, temBanking, parceirosComReceita, pctGeralSempre } = eco
   const temExtras = temFora || temBanking
   const temLivros = parceirosComReceita.length > 0
 
@@ -130,7 +130,8 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
           return [
             { label: `Clientes do parceiro ${p.nome}: comissão`, valores: de(x => x.comissao), fmt: rr, total: true, so: 'todas' },
             { label: `(–) Imposto ${fmtPct(cfg.impostoPct, 1)} · ${p.nome}`, valores: de(x => x.imposto), fmt: rr, destaque: 'sub', total: true, so: 'todas' },
-            { label: `(–) Parte do parceiro ${p.nome} (${fmtPct(p.pctParceiro, 0)}), a repassar`, valores: de(x => x.parceiro), fmt: rr, destaque: 'sub', total: true, so: 'todas' },
+            // com cliente de percentual próprio na ficha (S61) o percentual do mês não é o geral: sai do rótulo
+            { label: `(–) Parte do parceiro ${p.nome}${pctGeralSempre(p.nome) ? ` (${fmtPct(p.pctParceiro, 0)})` : ''}, a repassar`, valores: de(x => x.parceiro), fmt: rr, destaque: 'sub', total: true, so: 'todas' },
             { label: `(–) Delta e terceiros (${fmtPct(100 - p.pctEscritorio, 0)} do restante) · ${p.nome}`, valores: de(x => x.terceiros), fmt: rr, destaque: 'sub', total: true, so: 'todas' },
             { label: `Comissão líquida do escritório nos clientes de ${p.nome}`, valores: de(x => x.escritorio), fmt: rr, total: true, so: 'todas' },
           ]

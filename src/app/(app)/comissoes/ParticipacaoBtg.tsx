@@ -75,7 +75,7 @@ export const btgNoPeriodo = (b: DadosDoMes, mesRef: string, desde: string | null
 const semReceita = (b: DadosDoMes, parceiro: string, mesRef: string, desde: string | null = null) =>
   desde && mesRef < desde ? `Nada em ${mesLongo(mesRef)}: a participação de ${parceiro} começa em ${mesLongo(desde)}.` : `Nada em ${mesLongo(mesRef)}: ${b.contas > 0
     ? `nenhuma das ${fmtNum(b.contas)} ${b.contas === 1 ? 'conta dele' : 'contas dele'} no BTG gerou receita no mês.`
-    : `ainda não há cliente do BTG com ${parceiro} no campo Parceiro da ficha. Para um cliente contar, escreva ${parceiro} nesse campo, na ficha dele no BTG.`}`
+    : `ainda não há cliente do BTG com ${parceiro} no campo Parceiro da ficha. Para um cliente contar, escolha ${parceiro} nesse campo, na ficha dele no BTG.`}`
 
 // ── Resumo de quem só tem a participação na comissão do BTG ───────────────────
 // desde = primeiro mês que conta ('AAAA-MM-01'), para quem também tem regra de participação na receita de

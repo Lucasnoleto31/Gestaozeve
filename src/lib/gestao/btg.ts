@@ -197,7 +197,9 @@ export type ConfigRepasse = Pick<ConfigBtg, 'faixas' | 'impostosEmbutidosPct' | 
 // Clientes de parceiros com participação (receitaParceiros: nome → receita deles no mês) formam um livro à parte,
 // como a aba própria do fechamento: a comissão deles (proporcional à receita) paga o imposto, o parceiro leva a
 // parte dele e o escritório fica com a sua parte do restante. Os diretos seguem a cadeia de sempre.
-export function calcularRepasse(receita: number, cfg: ConfigRepasse, mes?: string | null, receitaParceiros?: Record<string, number> | null): Repasse {
+// pctParceiros (nome → %): o percentual do parceiro no mês quando ele não é o geral do parâmetro, porque há
+// clientes com lista de parceiros na ficha, cada um com o seu percentual (S61; ver medirBaseBtg em participacao.ts).
+export function calcularRepasse(receita: number, cfg: ConfigRepasse, mes?: string | null, receitaParceiros?: Record<string, number> | null, pctParceiros?: Record<string, number> | null): Repasse {
   const bruta = cfg.impostosEmbutidosPct > 0 && cfg.impostosEmbutidosPct < 100 ? receita / (1 - cfg.impostosEmbutidosPct / 100) : receita
   const impostoBtg = (bruta * cfg.impostoBtgPct) / 100
   const liquida = bruta - impostoBtg
@@ -212,7 +214,7 @@ export function calcularRepasse(receita: number, cfg: ConfigRepasse, mes?: strin
     const com = (comissao * rec) / receita
     const imp = (com * cfg.impostoPct) / 100
     const liq = com - imp
-    const parte = (liq * p.pctParceiro) / 100
+    const parte = (liq * Math.min(100, Math.max(0, pctParceiros?.[p.nome] ?? p.pctParceiro))) / 100
     const escritorio = ((liq - parte) * p.pctEscritorio) / 100
     parceiros.push({ nome: p.nome, receita: rec, comissao: com, imposto: imp, liquido: liq, parceiro: parte, escritorio, terceiros: liq - parte - escritorio })
   }

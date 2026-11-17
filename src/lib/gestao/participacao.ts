@@ -24,6 +24,9 @@ export type RegraReceita = {
   pctZeragem: number      // % da zeragem
   pctIncentivo: number    // % do incentivo que a corretora paga por esses clientes
   desde: string           // primeiro mês em que vale ('AAAA-MM-01')
+  // Não vem do parâmetro: o parceiro só entra nesta corretora pela lista de parceiros da ficha de algum
+  // cliente (S61), sem código de assessor e sem percentual geral. Percentuais 0: nada sai dos códigos.
+  soFicha?: boolean
 }
 
 const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100
@@ -57,7 +60,7 @@ export function lerParceirosReceita(s: string | null | undefined): RegraReceita[
 
 // A forma gravada: por parceiro e, dentro dele, da regra mais antiga para a mais nova
 export function textoParceirosReceita(regras: RegraReceita[]): string {
-  return [...regras]
+  return regras.filter(r => !r.soFicha)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }) || a.desde.localeCompare(b.desde))
     .map(r => `${r.nome}:${r.pctCorretagem}:${r.pctZeragem}:${r.pctIncentivo}:${r.desde.slice(0, 7)}`).join(';')
 }
@@ -73,6 +76,20 @@ export function regraDoMes(regras: RegraReceita[], mes: string): RegraReceita | 
   return atual
 }
 
+// Quem está na lista de parceiros de alguma ficha (S61) entra nas regras da corretora mesmo sem regra no
+// parâmetro, ou antes de a regra dele começar: uma regra só-ficha, de percentuais 0, a partir do primeiro
+// mês da lista. Assim ele aparece em Comissões e o mês dele é calculado; dos códigos não sai nada.
+export function regrasComFichas(regras: RegraReceita[], linhas: { parceiro: string; desde: string }[]): RegraReceita[] {
+  const primeiro = new Map<string, { nome: string; desde: string }>()
+  for (const l of linhas) { const k = normTexto(l.parceiro), x = primeiro.get(k); if (!x || l.desde < x.desde) primeiro.set(k, { nome: l.parceiro, desde: l.desde }) }
+  const extras: RegraReceita[] = []
+  for (const [k, f] of primeiro) {
+    const dele = regras.filter(r => normTexto(r.nome) === k).sort((a, b) => a.desde.localeCompare(b.desde))
+    if (!dele.length || f.desde < dele[0].desde) extras.push({ nome: dele[0]?.nome ?? f.nome, pctCorretagem: 0, pctZeragem: 0, pctIncentivo: 0, desde: f.desde, soFicha: true })
+  }
+  return extras.length ? [...regras, ...extras] : regras
+}
+
 // Os nomes de quem tem regra, uma vez cada (a grafia da regra mais recente)
 export function nomesComRegra(regras: RegraReceita[]): string[] {
   const porNorm = new Map<string, RegraReceita>()
@@ -84,6 +101,11 @@ const pctTexto = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDi
 // "100 % da corretagem, 100 % da zeragem e 50 % do incentivo"
 export const textoDaRegra = (r: RegraReceita) =>
   `${pctTexto(r.pctCorretagem)} da corretagem, ${pctTexto(r.pctZeragem)} da zeragem e ${pctTexto(r.pctIncentivo)} do incentivo`
+// A regra com de quem ela é ("… dos clientes do código X"); quem só entra pela lista da ficha tem outra frase
+export const TEXTO_SO_FICHA = 'o percentual marcado na ficha de cada cliente (Parceiros do cliente), sobre a corretagem e a zeragem dele'
+export const textoDaRegraCom = (r: RegraReceita, deQuem: string) => (r.soFicha ? TEXTO_SO_FICHA : `${textoDaRegra(r)} ${deQuem}`)
+// O primeiro mês de uma regra de verdade (as do parâmetro), sem contar a que só existe pela lista das fichas
+export const inicioDasRegras = (regras: RegraReceita[]): string | null => regras.filter(r => !r.soFicha).map(r => r.desde).sort()[0] ?? null
 
 // ── Lançamentos ────────────────────────────────────────────────────────────────
 // Uma linha da tabela lotes (as colunas que a conta usa)
@@ -123,6 +145,9 @@ export type ClienteReceita = {
   incentivoCliente: number               // incentivo que a corretora paga pelo cliente no mês
   incentivo: number                      // a parte dele que vem dos códigos do parceiro (proporcional aos pontos)
   parteCorretagem: number; parteZeragem: number; parteIncentivo: number; total: number   // o que vai para o parceiro
+  // Cliente que entra pela lista de parceiros da ficha (S61): o percentual do parceiro nele, em qualquer
+  // código. Vazio = cliente dos códigos do parceiro, pela regra geral.
+  pctFicha?: number | null
 }
 export type TotaisReceita = {
   ativos: number      // clientes com lote operado
@@ -160,30 +185,56 @@ type IncentivoDoCliente = Pick<IncentivoRow, 'chave' | 'nome' | 'cliente_id' | '
 // do mês por cliente (incentivo_mes da corretora) e a regra que vale no mês. Um cliente que também operou
 // fora dos códigos do parceiro leva para a conta só a fração do incentivo que os pontos dele nos códigos
 // representam. Cada valor fecha em centavos por cliente, para a tabela somar exatamente o total.
-export function receitaDoMes(mes: string, lotes: LoteMedido[], incentivo: IncentivoDoCliente[], regra: RegraReceita): MesReceita {
-  const porChave = new Map<string, { chave: string; cliente_id: string | null; nome: string | null; lotes: number; zerados: number; corretagem: number; zeragem: number; pontos: number }>()
-  for (const l of lotes) {
-    if (l.mes !== mes) continue
-    let a = porChave.get(l.chave)
-    if (!a) { a = { chave: l.chave, cliente_id: l.cliente_id, nome: l.nome, lotes: 0, zerados: 0, corretagem: 0, zeragem: 0, pontos: 0 }; porChave.set(l.chave, a) }
-    a.lotes += l.lotes; a.zerados += l.zerados; a.corretagem += l.corretagem; a.zeragem += l.zeragem; a.pontos += l.pontos
-    a.cliente_id ??= l.cliente_id; a.nome ??= l.nome
+//
+// fichas (S61) = os clientes com lista de parceiros na ficha neste mês. Quem tem lista sai da regra geral,
+// mesmo estando num código do parceiro; e o cliente em que este parceiro está na lista entra com o
+// percentual da linha dele sobre a corretagem e a zeragem de todos os códigos nossos. O incentivo entra com
+// o mesmo percentual só quando a regra do parceiro tem incentivo.
+type Agrupado = { chave: string; cliente_id: string | null; nome: string | null; lotes: number; zerados: number; corretagem: number; zeragem: number; pontos: number }
+export type FichasDoMes = {
+  comLista: ReadonlySet<string>             // clientes com lista em vigor no mês, de qualquer parceiro
+  doParceiro: ReadonlyMap<string, number>   // clientes em que este parceiro está na lista → o percentual dele
+  lotes: LoteMedido[]                       // os lançamentos desses clientes, em qualquer código nosso
+}
+export function receitaDoMes(mes: string, lotes: LoteMedido[], incentivo: IncentivoDoCliente[], regra: RegraReceita, fichas?: FichasDoMes | null): MesReceita {
+  // soma os lançamentos do mês por grupo (null = fica fora)
+  const agrupar = (ls: LoteMedido[], grupoDe: (l: LoteMedido) => string | null): Agrupado[] => {
+    const por = new Map<string, Agrupado>()
+    for (const l of ls) {
+      if (l.mes !== mes) continue
+      const k = grupoDe(l)
+      if (k == null) continue
+      let a = por.get(k)
+      if (!a) { a = { chave: l.chave, cliente_id: l.cliente_id, nome: l.nome, lotes: 0, zerados: 0, corretagem: 0, zeragem: 0, pontos: 0 }; por.set(k, a) }
+      a.lotes += l.lotes; a.zerados += l.zerados; a.corretagem += l.corretagem; a.zeragem += l.zeragem; a.pontos += l.pontos
+      a.cliente_id ??= l.cliente_id; a.nome ??= l.nome
+    }
+    return [...por.values()]
   }
   const incPorChave = new Map(incentivo.map(i => [i.chave, i]))
-  const clientes = [...porChave.values()].map<ClienteReceita>(a => {
+  const linha = (a: Agrupado, pctCorretagem: number, pctZeragem: number, pctIncentivo: number, pctFicha: number | null): ClienteReceita => {
     const i = incPorChave.get(a.chave)
     const pontosCliente = i ? Math.max(i.pontos, a.pontos) : a.pontos
     const incentivoCliente = i?.valor_incentivo ?? 0
     const fracao = pontosCliente > 0 ? Math.min(1, a.pontos / pontosCliente) : 0
     const corretagem = round2(a.corretagem), zeragem = round2(a.zeragem), inc = round2(incentivoCliente * fracao)
-    const parteCorretagem = parteDe(corretagem, regra.pctCorretagem), parteZeragem = parteDe(zeragem, regra.pctZeragem), parteIncentivo = parteDe(inc, regra.pctIncentivo)
+    const parteCorretagem = parteDe(corretagem, pctCorretagem), parteZeragem = parteDe(zeragem, pctZeragem), parteIncentivo = parteDe(inc, pctIncentivo)
     return {
       chave: a.chave, cliente_id: a.cliente_id ?? i?.cliente_id ?? null, nome: i?.nome || a.nome || 'Não cadastrado',
       lotes: a.lotes, zerados: a.zerados, corretagem, zeragem, pontos: Math.round(a.pontos), pontosCliente: Math.round(pontosCliente),
       faixaMin: i?.faixa_min ?? 0, pontosFaltantes: i?.pontos_faltantes ?? null, incentivoCliente, incentivo: inc,
       parteCorretagem, parteZeragem, parteIncentivo, total: round2(parteCorretagem + parteZeragem + parteIncentivo),
+      ...(pctFicha != null ? { pctFicha } : {}),
     }
-  }).sort((x, y) => y.total - x.total || y.lotes - x.lotes || x.nome.localeCompare(y.nome, 'pt-BR'))
+  }
+  const temLista = (l: LoteMedido) => !!l.cliente_id && !!fichas?.comLista.has(l.cliente_id)
+  // pelos códigos do parceiro, com a regra geral (quem só entra pela lista das fichas não tem código)
+  const dosCodigos = regra.soFicha ? [] : agrupar(lotes, l => (temLista(l) ? null : l.chave))
+    .map(a => linha(a, regra.pctCorretagem, regra.pctZeragem, regra.pctIncentivo, null))
+  // pela lista da ficha, com o percentual do parceiro naquele cliente
+  const dasFichas = !fichas ? [] : agrupar(fichas.lotes, l => (l.cliente_id && fichas.doParceiro.has(l.cliente_id) ? `${l.cliente_id}|${l.chave}` : null))
+    .map(a => { const p = fichas.doParceiro.get(a.cliente_id ?? '') ?? 0; return linha(a, p, p, regra.pctIncentivo > 0 ? p : 0, p) })
+  const clientes = [...dosCodigos, ...dasFichas].sort((x, y) => y.total - x.total || y.lotes - x.lotes || x.nome.localeCompare(y.nome, 'pt-BR'))
   return { mes, regra, clientes, ...somarReceita(clientes) }
 }
 
@@ -210,8 +261,11 @@ export function resumirReceita(livros: LivroReceita[], mesRef: string): ResumoRe
 }
 
 // "100 %" quando todas as regras do mês usam o mesmo percentual naquela parte; vazio quando diferem
-export function pctComum(regras: RegraReceita[], parte: 'pctCorretagem' | 'pctZeragem' | 'pctIncentivo'): string {
-  const valores = [...new Set(regras.map(r => r[parte]))]
+// (também quando algum cliente do mês entra pela lista da ficha com outro percentual)
+export function pctComum(regras: RegraReceita[], parte: 'pctCorretagem' | 'pctZeragem' | 'pctIncentivo', linhas: Pick<ClienteReceita, 'pctFicha'>[] = []): string {
+  const daFicha = linhas.flatMap(l => (l.pctFicha != null ? [l.pctFicha] : []))
+  if (parte === 'pctIncentivo' && daFicha.length) return ''   // na ficha o incentivo depende de a regra do parceiro ter incentivo
+  const valores = [...new Set([...regras.filter(r => !r.soFicha).map(r => r[parte]), ...daFicha])]
   return valores.length === 1 ? pctTexto(valores[0]) : ''
 }
 
@@ -220,11 +274,14 @@ export type LinhaPlanilhaReceita = ClienteReceita & { corretora?: string }
 // Cabeçalho, uma linha por cliente e o total (a coluna Corretora só aparece quando informada)
 export function planilhaReceita(linhas: LinhaPlanilhaReceita[], comCorretora = false): Celula[][] {
   const cor = <T,>(v: T): T[] => (comCorretora ? [v] : [])
-  const cab: Celula[] = ['Cliente', ...cor('Corretora'), 'Lotes no mês', 'Contratos zerados', 'Corretagem (R$)', 'Zeragem (R$)', 'Pontos', 'Incentivo do cliente (R$)',
+  // a coluna do percentual só aparece quando algum cliente entra pela lista de parceiros da ficha
+  const comFicha = linhas.some(c => c.pctFicha != null)
+  const fic = <T,>(v: T): T[] => (comFicha ? [v] : [])
+  const cab: Celula[] = ['Cliente', ...cor('Corretora'), ...fic('Percentual pela ficha (%)'), 'Lotes no mês', 'Contratos zerados', 'Corretagem (R$)', 'Zeragem (R$)', 'Pontos', 'Incentivo do cliente (R$)',
     'Parceiro: corretagem (R$)', 'Parceiro: zeragem (R$)', 'Parceiro: incentivo (R$)', 'Total do parceiro (R$)']
-  const corpo = linhas.map<Celula[]>(c => [c.nome, ...cor(c.corretora ?? null), c.lotes, c.zerados, c.corretagem, c.zeragem, c.pontos, c.incentivo, c.parteCorretagem, c.parteZeragem, c.parteIncentivo, c.total])
+  const corpo = linhas.map<Celula[]>(c => [c.nome, ...cor(c.corretora ?? null), ...fic(c.pctFicha ?? null), c.lotes, c.zerados, c.corretagem, c.zeragem, c.pontos, c.incentivo, c.parteCorretagem, c.parteZeragem, c.parteIncentivo, c.total])
   const t = somarReceita(linhas)
-  const total: Celula[] = [`Total · ${linhas.length} ${linhas.length === 1 ? 'cliente' : 'clientes'}`, ...cor(null), t.lotes, t.zerados, t.corretagem, t.zeragem, null, t.incentivo, t.parteCorretagem, t.parteZeragem, t.parteIncentivo, t.total]
+  const total: Celula[] = [`Total · ${linhas.length} ${linhas.length === 1 ? 'cliente' : 'clientes'}`, ...cor(null), ...fic(null), t.lotes, t.zerados, t.corretagem, t.zeragem, null, t.incentivo, t.parteCorretagem, t.parteZeragem, t.parteIncentivo, t.total]
   return [cab, ...corpo, total]
 }
 
@@ -242,15 +299,50 @@ export type MesRepasseBtg = {
   fechado: boolean   // o mês já tem o percentual do fechamento (senão é prévia pelas faixas)
 }
 
-// receitaBtg e receitaDoParceiro: 'AAAA-MM-01' → R$. Só entram os meses em que os clientes do parceiro
-// geraram receita, a partir de `desde` quando informado. A conta é a mesma do Painel (calcularRepasse).
-export function repassePorMes(cfg: ConfigRepasse, nome: string, receitaBtg: Record<string, number>, receitaDoParceiro: Record<string, number>, desde?: string | null): MesRepasseBtg[] {
+// O que os clientes de um parceiro geraram no BTG num mês, separado por como entram na conta (S61):
+// os que não têm lista de parceiros na ficha valem o percentual geral dele (repasse_parceiros); os que têm
+// lista em que ele está valem o percentual da linha dele.
+export type BaseBtgMes = {
+  padrao: number                                               // receita dos clientes dele sem lista na ficha
+  fichas: { receita: number; pct: number; soma: number }[]    // por cliente com lista: a receita do cliente, o % dele e a soma dos % da lista
+}
+export type MedidaBtg = {
+  receita: number   // receita cheia dos clientes dele (a que a página dele mostra)
+  alocada: number   // a parte dela que entra no livro dele na cadeia do BTG
+  pct: number       // % dele sobre a comissão líquida do livro dele
+}
+// Um cliente dividido entre parceiros entra uma vez só na cadeia do BTG: a receita dele é repartida entre os
+// livros dos parceiros na proporção do percentual de cada um, e cada livro paga ao parceiro a soma dos
+// percentuais do cliente. Assim cada parceiro recebe o percentual dele sobre a comissão líquida do cliente
+// e o que sobra segue a divisão de sempre (escritório, Delta e terceiros).
+export function medirBaseBtg(b: BaseBtgMes, pctGeral: number): MedidaBtg {
+  let receita = Math.max(0, b.padrao), alocada = receita, peso = receita * pctGeral
+  for (const f of b.fichas) {
+    if (f.receita <= 0 || f.pct <= 0) continue
+    receita += f.receita
+    alocada += (f.receita * f.pct) / Math.max(f.soma, f.pct)
+    peso += f.receita * f.pct
+  }
+  return { receita, alocada, pct: alocada > 0 ? peso / alocada : pctGeral }
+}
+
+// receitaBtg: 'AAAA-MM-01' → R$. receitaDoParceiro: 'AAAA-MM-01' → a receita dos clientes dele (um número,
+// quando ninguém tem lista na ficha) ou a base separada (BaseBtgMes). Só entram os meses em que os clientes
+// do parceiro geraram receita. `desde` corta o começo dos clientes sem lista (quem também tem regra de
+// participação na receita só conta o BTG a partir dela); a linha da ficha tem o próprio começo.
+// A conta é a mesma do Painel (calcularRepasse).
+export function repassePorMes(cfg: ConfigRepasse, nome: string, receitaBtg: Record<string, number>, receitaDoParceiro: Record<string, number | BaseBtgMes>, desde?: string | null): MesRepasseBtg[] {
+  const pctGeral = cfg.parceiros?.find(p => p.nome === nome)?.pctParceiro ?? 0
   return Object.keys(receitaDoParceiro).sort().flatMap(mes => {
-    const dele = receitaDoParceiro[mes] ?? 0
-    if (dele <= 0 || (desde && mes < desde)) return []
-    const r = calcularRepasse(receitaBtg[mes] ?? 0, cfg, mes, { [nome]: dele })
+    const v = receitaDoParceiro[mes] ?? 0
+    const base: BaseBtgMes = typeof v === 'number' ? { padrao: v, fichas: [] } : v
+    const m = medirBaseBtg(desde && mes < desde ? { ...base, padrao: 0 } : base, pctGeral)
+    if (m.alocada <= 0) return []
+    const r = calcularRepasse(receitaBtg[mes] ?? 0, cfg, mes, { [nome]: m.alocada }, { [nome]: m.pct })
     const p = r.parceiros.find(x => x.nome === nome)
     if (!p) return []
-    return [{ mes, receita: round2(p.receita), comissao: round2(p.comissao), imposto: round2(p.imposto), parte: round2(p.parceiro), pct: r.pctEfetivo, fechado: cfg.pctMes?.[mes.slice(0, 7)] != null }]
+    // na página do parceiro a receita e a comissão são as dos clientes dele por inteiro
+    const cheia = m.receita / m.alocada
+    return [{ mes, receita: round2(p.receita * cheia), comissao: round2(p.comissao * cheia), imposto: round2(p.imposto * cheia), parte: round2(p.parceiro), pct: r.pctEfetivo, fechado: cfg.pctMes?.[mes.slice(0, 7)] != null }]
   })
 }

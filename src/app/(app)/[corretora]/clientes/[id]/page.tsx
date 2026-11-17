@@ -24,6 +24,8 @@ import { BuscaCliente } from '../BuscaCliente'
 import { ExcluirClienteButton } from '../ExcluirClienteButton'
 import { FichaEditavel } from './FichaEditavel'
 import { opcoesOrigem as lerOpcoesOrigem } from '@/lib/gestao/consultasOrigens'
+import { parceirosDeParticipacao, parceirosDoCliente } from '@/lib/gestao/consultasParceirosCliente'
+import { resumoDaLista } from '@/lib/gestao/parceirosCliente'
 import { Copiar } from './Copiar'
 import { AbaResumo } from './AbaResumo'
 import { AbaGiro } from './AbaGiro'
@@ -61,8 +63,10 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   if (!id) notFound()
   const { corretora, mesRef, base } = ctx
   const aba = ABAS.some(a => a.valor === ctx.q.aba) ? ctx.q.aba : 'resumo'
-  const [profile, ficha, responsaveis, assessoresTodos, contatos, opcoesOrigem, outras, contexto360, leads] = await Promise.all([
+  const [profile, ficha, responsaveis, assessoresTodos, contatos, opcoesOrigem, listaParceiros, opcoesParceiros, outras, contexto360, leads] = await Promise.all([
     getProfile(), clienteFicha(corretora, id, mesRef), responsaveisAtivos(), assessoresPorCorretora(), clienteContatos(corretora, id), lerOpcoesOrigem(),
+    // vários parceiros no mesmo cliente, cada um com o seu percentual (S61)
+    parceirosDoCliente(corretora, id), parceirosDeParticipacao(corretora),
     // o mesmo cliente nas outras corretoras entra no "Agora", que aparece em todas as abas
     clienteNasOutrasCorretoras(corretora, id),
     aba === 'resumo' ? clienteContexto(corretora, id, mesRef) : null,
@@ -96,10 +100,13 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
 
   // Quem cuida do cliente e desde quando: só o que está preenchido (responsável vazio é informação: ninguém cuida)
   const temParceiro = !!resumo?.parceiro && !/^direto$/i.test(resumo.parceiro)
+  // quem divide o que o cliente gera neste mês; com lista, o campo Parceiro fica só como origem
+  const divisao = resumoDaLista(listaParceiros.linhas, mesAtual())
   const quemCuida: { rotulo: string; valor: string; dica?: string }[] = [
     ...(resumo?.assessor_nome ? [{ rotulo: 'Assessor', valor: resumo.assessor_nome }] : []),
     { rotulo: 'Responsável', valor: resumo?.responsavel ?? 'ninguém' },
-    ...(temParceiro ? [{ rotulo: 'Parceiro', valor: resumo!.parceiro! }] : []),
+    ...(temParceiro ? [{ rotulo: divisao ? 'Origem' : 'Parceiro', valor: resumo!.parceiro! }] : []),
+    ...(divisao ? [{ rotulo: 'Parceiros', valor: divisao, dica: `Parte de cada parceiro em tudo o que o cliente gerar ${corretora === 'BTG' ? 'no' : 'na'} ${CORRETORA_LABEL[corretora]}, em qualquer código nosso` }] : []),
     ...(resumo?.ativador ? [{ rotulo: 'Campanha de ativação', valor: resumo.ativador, dica: 'Atendente da campanha de ativação; não mexe no responsável nem na comissão' }] : []),
     ...(resumo?.data_migracao ? [{ rotulo: 'Migrou em', valor: dataPt(resumo.data_migracao) }] : resumo?.data_entrada ? [{ rotulo: 'Entrou em', valor: dataPt(resumo.data_entrada) }] : []),
   ]
@@ -171,6 +178,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                   statusAutomatico={ficha.manual.status ? null : (resumo?.status ?? null)}
                   temConta={(resumo?.n_contas ?? 0) > 0}
                   opcoesOrigem={opcoesOrigem}
+                  parceiros={{ linhas: listaParceiros.linhas, opcoes: opcoesParceiros, disponivel: listaParceiros.disponivel, mesCorrente: mesAtual() }}
                   contas={contas.filter(x => (x.status as string) !== 'Não cadastrada').map(x => ({ id: x.conta_id, conta: x.conta }))}
                   abrirInicial={ctx.q.editar === '1'}
                 />
@@ -245,7 +253,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
         )}
         {aba === 'giro' && <AbaGiro ctx={ctx} ficha={ficha} giro={giro} />}
         {aba === 'contas' && <AbaContas ctx={ctx} id={id} ficha={ficha} admin={admin} />}
-        {aba === 'cadastro' && <AbaCadastro ficha={ficha} pendencias={pendencias} />}
+        {aba === 'cadastro' && <AbaCadastro ficha={ficha} pendencias={pendencias} divisao={divisao} />}
       </PageBody>
     </>
   )

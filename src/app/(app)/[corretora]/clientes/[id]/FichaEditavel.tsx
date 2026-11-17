@@ -11,6 +11,9 @@ import { Field, Input, Select } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { SelectOrigem } from '@/components/gestao/SelectOrigem'
 import { OPCOES_ORIGEM_VAZIAS, type OpcoesOrigem } from '@/lib/gestao/origens'
+import type { ParceiroDoCliente } from '@/lib/gestao/parceirosCliente'
+import { salvarParceirosCliente } from '@/lib/gestao/acoesParceirosCliente'
+import { ParceirosDoCliente, estadoDosParceiros, parceirosMudaram, parceirosParaGravar } from './ParceirosDoCliente'
 import { salvarCadastroCliente, salvarCamposCliente, salvarContasCliente, unificarClientes } from '@/lib/gestao/acoes'
 import { CORRETORA_LABEL, CORRETORA_SLUG, isCorretora, temListaPropria, termosDaCorretora, type Corretora } from '@/lib/corretoras'
 import { GRUPOS_CORRETAGEM, type ClienteCadastro, type ClienteDuplicado, type GrupoCorretagem } from '@/lib/gestao/tipos'
@@ -20,7 +23,10 @@ type Manuais = { data_entrada: string | null; parceiro: string | null; observaco
 // e o atendente da campanha de ativação (S52; fora do responsável e da comissão)
 type Manual = { status: string | null; responsavel: string | null; assessor: string | null; data_migracao: string | null; ativador: string | null }
 
-export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, contas: contasIniciais, responsaveis, atendentes, assessores, statusAutomatico, temConta, abrirInicial = false, opcoesOrigem = OPCOES_ORIGEM_VAZIAS }: {
+// A lista de parceiros do cliente (S61): o que está gravado, quem pode entrar e o mês corrente (do servidor)
+export type ParceirosDaFicha = { linhas: ParceiroDoCliente[]; opcoes: string[]; disponivel: boolean; mesCorrente: string }
+
+export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, contas: contasIniciais, responsaveis, atendentes, assessores, statusAutomatico, temConta, abrirInicial = false, opcoesOrigem = OPCOES_ORIGEM_VAZIAS, parceiros }: {
   corretora: Corretora
   clienteId: string
   admin: boolean
@@ -35,6 +41,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   temConta: boolean                 // com conta no export, o assessor vem de lá
   abrirInicial?: boolean            // abre já editando (link "editar" da lista, ?editar=1)
   opcoesOrigem?: OpcoesOrigem       // parceiros e origens em uso: o parceiro é escolhido em lista, não digitado
+  parceiros?: ParceirosDaFicha      // vários parceiros no mesmo cliente, cada um com o seu percentual
 }) {
   const router = useRouter()
   const { avisar } = useToast()
@@ -54,6 +61,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   })
   const [c, setC] = useState({ nome: cadastro.nome, documento: cadastro.documento ?? '', telefone: cadastro.telefone ?? '', email: cadastro.email ?? '' })
   const [contas, setContas] = useState<string[]>(contasIniciais.map(x => x.conta))
+  const [lista, setLista] = useState(() => estadoDosParceiros(parceiros?.linhas ?? []))
   const chaveContas = (xs: string[]) => [...new Set(xs.map(x => x.replace(/\D/g, '')).filter(Boolean))].sort().join(',')
   const opcoesResponsavel = [...new Set([...responsaveis, ...(manual.responsavel ? [manual.responsavel] : [])])]
   const opcoesAssessor = [...new Set([...assessores, ...(manual.assessor ? [manual.assessor] : [])])]
@@ -94,6 +102,10 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
     if (chaveContas(contas) !== chaveContas(contasIniciais.map(x => x.conta))) {
       const rc = await salvarContasCliente(corretora, clienteId, contas)
       if (!rc.ok) { setErro(rc.erro); setSalvando(false); return }
+    }
+    if (admin && parceiros && parceirosMudaram(parceiros.linhas, lista)) {
+      const rp = await salvarParceirosCliente(corretora, clienteId, parceirosParaGravar(lista), lista.apagar)
+      if (!rp.ok) { setErro(rp.erro); setSalvando(false); return }
     }
     if (admin) {
       const r2 = await salvarCadastroCliente(clienteId, cadastro_())
@@ -178,6 +190,10 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
             </div>
             <p className="mt-2 text-micro text-fg-subtle">Até 10 contas. Tirar uma conta desliga os lotes dela deste cliente; se o número já for de outro cliente, avisamos.</p>
           </div>
+          {parceiros && (
+            <ParceirosDoCliente corretora={corretora} existentes={parceiros.linhas} opcoes={parceiros.opcoes} disponivel={parceiros.disponivel} admin={admin}
+              mesCorrente={parceiros.mesCorrente} estado={lista} onChange={setLista} />
+          )}
           {admin && (
             <div className="border-t border-line pt-4">
               <p className="label mb-3">Cadastro básico (administrador)</p>

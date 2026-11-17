@@ -4,7 +4,8 @@ import { Panel } from '@/components/ui/Panel'
 import { TRACO, dataPt, rCurto } from '@/components/gestao/Celulas'
 import { ListaPendencias, type Ficha, type Pendencia } from './comum'
 
-export function AbaCadastro({ ficha, pendencias }: { ficha: Ficha; pendencias: Pendencia[] }) {
+// divisao = quem divide o que o cliente gera neste mês (lista de parceiros da ficha, S61); vazio = sem lista
+export function AbaCadastro({ ficha, pendencias, divisao = '' }: { ficha: Ficha; pendencias: Pendencia[]; divisao?: string }) {
   const { resumo, cadastro } = ficha
   if (!cadastro) return null
   const avisos = pendencias.filter(p => p.estado === 'warn').length
@@ -28,7 +29,8 @@ export function AbaCadastro({ ficha, pendencias }: { ficha: Ficha; pendencias: P
           <dt className="text-fg-subtle">Nascimento</dt><dd className="tabular-nums">{dataPt(cadastro.dt_nascimento)}</dd>
           <dt className="text-fg-subtle">Rendimentos</dt><dd className="tabular-nums">{cadastro.rendimentos != null ? rCurto(cadastro.rendimentos) : TRACO}</dd>
           <dt className="text-fg-subtle">Patrimônio</dt><dd className="tabular-nums">{cadastro.patrimonio != null ? rCurto(cadastro.patrimonio) : TRACO}</dd>
-          <dt className="text-fg-subtle">Parceiro</dt><dd>{resumo?.parceiro ?? 'Direto'}</dd>
+          <dt className="text-fg-subtle">{divisao ? 'Origem' : 'Parceiro'}</dt><dd>{resumo?.parceiro ?? 'Direto'}</dd>
+          {divisao && <><dt className="text-fg-subtle">Parceiros</dt><dd>{divisao}</dd></>}
           <dt className="text-fg-subtle">Grupo de corretagem</dt><dd className={resumo?.grupo_corretagem === 'Bloqueado' ? 'text-loss' : resumo?.grupo_corretagem === 'Não vinculado' ? 'text-warn' : undefined}>{resumo?.grupo_corretagem ?? 'Não informado'}</dd>
         </dl>
         {(resumo?.observacoes || resumo?.motivo_recusa) && (

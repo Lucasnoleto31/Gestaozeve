@@ -10,16 +10,19 @@ import { Modal } from '@/components/ui/Modal'
 import { Alert } from '@/components/ui/Alert'
 import { Field, Input, Select } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
+import { SelectOrigem } from '@/components/gestao/SelectOrigem'
+import { OPCOES_ORIGEM_VAZIAS, type OpcoesOrigem } from '@/lib/gestao/origens'
 import { criarCliente } from '@/lib/gestao/acoes'
 import { numeroBR } from '@/lib/gestao/planilhas'
 import { CORRETORA_LABEL, temListaPropria, type Corretora } from '@/lib/corretoras'
 
-export function NovoClienteButton({ corretora, base, responsaveis, assessores, hoje }: {
+export function NovoClienteButton({ corretora, base, responsaveis, assessores, hoje, opcoesOrigem = OPCOES_ORIGEM_VAZIAS }: {
   corretora: Corretora
   base: string
   responsaveis: string[]
   assessores: string[]
   hoje: string
+  opcoesOrigem?: OpcoesOrigem   // parceiros e origens em uso: o parceiro é escolhido em lista, não digitado
 }) {
   const router = useRouter()
   const { avisar } = useToast()
@@ -85,7 +88,7 @@ export function NovoClienteButton({ corretora, base, responsaveis, assessores, h
             <Input id="nc-migracao" label="Data de migração" type="date" value={f.data_migracao} onChange={campo('data_migracao')} hint="Só para status Migrado" />
             <Input id="nc-corretagem" label="Corretagem (R$/lote)" value={f.corretagem} onChange={campo('corretagem')} inputMode="decimal" hint={listaPropria ? 'Vira a tarifa inicial do cliente' : 'Vazio usa a tarifa do assessor'} />
             <Input id="nc-conta" label={`Conta ${CORRETORA_LABEL[corretora]}`} value={f.conta} onChange={campo('conta')} inputMode="numeric" hint="Se já souber; senão vem do export ou do relatório de lotes" />
-            <Input id="nc-parceiro" label="Parceiro" value={f.parceiro} onChange={campo('parceiro')} placeholder="Direto, Atual Capital…" />
+            <SelectOrigem label="Parceiro / origem" valor={f.parceiro} onChange={v => setF(x => ({ ...x, parceiro: v }))} opcoes={opcoesOrigem} vazio="Sem parceiro" />
             <Input id="nc-email" label="E-mail" type="email" value={f.email} onChange={campo('email')} />
             <Field label="Observações" className="sm:col-span-2">
               <textarea id="nc-obs" rows={2} value={f.observacoes} onChange={campo('observacoes')} />

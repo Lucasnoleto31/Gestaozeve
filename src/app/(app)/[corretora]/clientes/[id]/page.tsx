@@ -23,6 +23,7 @@ import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria } from '@/lib/corretor
 import { BuscaCliente } from '../BuscaCliente'
 import { ExcluirClienteButton } from '../ExcluirClienteButton'
 import { FichaEditavel } from './FichaEditavel'
+import { opcoesOrigem as lerOpcoesOrigem } from '@/lib/gestao/consultasOrigens'
 import { Copiar } from './Copiar'
 import { AbaResumo } from './AbaResumo'
 import { AbaGiro } from './AbaGiro'
@@ -60,8 +61,8 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
   if (!id) notFound()
   const { corretora, mesRef, base } = ctx
   const aba = ABAS.some(a => a.valor === ctx.q.aba) ? ctx.q.aba : 'resumo'
-  const [profile, ficha, responsaveis, assessoresTodos, contatos, outras, contexto360, leads] = await Promise.all([
-    getProfile(), clienteFicha(corretora, id, mesRef), responsaveisAtivos(), assessoresPorCorretora(), clienteContatos(corretora, id),
+  const [profile, ficha, responsaveis, assessoresTodos, contatos, opcoesOrigem, outras, contexto360, leads] = await Promise.all([
+    getProfile(), clienteFicha(corretora, id, mesRef), responsaveisAtivos(), assessoresPorCorretora(), clienteContatos(corretora, id), lerOpcoesOrigem(),
     // o mesmo cliente nas outras corretoras entra no "Agora", que aparece em todas as abas
     clienteNasOutrasCorretoras(corretora, id),
     aba === 'resumo' ? clienteContexto(corretora, id, mesRef) : null,
@@ -169,6 +170,7 @@ export default async function ConsultaClientePage({ params, searchParams }: { pa
                   assessores={assessoresTodos[corretora]}
                   statusAutomatico={ficha.manual.status ? null : (resumo?.status ?? null)}
                   temConta={(resumo?.n_contas ?? 0) > 0}
+                  opcoesOrigem={opcoesOrigem}
                   contas={contas.filter(x => (x.status as string) !== 'Não cadastrada').map(x => ({ id: x.conta_id, conta: x.conta }))}
                   abrirInicial={ctx.q.editar === '1'}
                 />

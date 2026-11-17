@@ -18,6 +18,7 @@ import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { MesPicker } from '@/components/gestao/Filtros'
 import { TabelaClientes } from './TabelaClientes'
 import { NovoClienteButton } from './NovoClienteButton'
+import { opcoesOrigem as lerOpcoesOrigem } from '@/lib/gestao/consultasOrigens'
 
 // Clientes: quem são e como cada um está. A base aparece separada em grupos (Operando, Em risco,
 // Inativos, Nunca operaram, Em abertura) que filtram a lista; quem monta os cartões e a tabela é a
@@ -32,8 +33,8 @@ export default async function ClientesPage({ params, searchParams }: { params: P
   // colunas à mostra: a visão que a pessoa escolheu da última vez
   const visao = visaoClientes(guardados.get(COOKIE_VISAO_CLIENTES)?.value)
   const listaPropria = temListaPropria(corretora)
-  const [lista, responsaveis, assessores, profile, contatos, giroFora] = await Promise.all([
-    clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(), contatosClientesResumo(corretora), giroNasOutrasCorretoras(corretora),
+  const [lista, responsaveis, assessores, profile, contatos, giroFora, opcoesOrigem] = await Promise.all([
+    clientesLista(corretora, mesRef), responsaveisAtivos(), assessoresPorCorretora(), getProfile(), contatosClientesResumo(corretora), giroNasOutrasCorretoras(corretora), lerOpcoesOrigem(),
   ])
   // contatos registrados com cada cliente (campanha de ativação, S52): quantos e o último
   const clientes = lista.map(c => { const x = contatos.get(c.cliente_id); return x ? { ...c, contatos: x.contatos, ultimo_contato: x.ultimo_contato } : c })
@@ -59,7 +60,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
         title="Clientes"
         description={`Como está cada cliente em ${mesCurto(mesRef)}. São ${fmtNum(clientes.length)} clientes em ${fmtNum(contas)} contas${recente ? `; ${recente}` : ''}.`}
         actions={<>
-          <NovoClienteButton corretora={corretora} base={base} responsaveis={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)} assessores={assessores[corretora]} hoje={hoje} />
+          <NovoClienteButton corretora={corretora} base={base} responsaveis={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)} assessores={assessores[corretora]} hoje={hoje} opcoesOrigem={opcoesOrigem} />
           <MesPicker valor={mesRef} />
         </>}
       />

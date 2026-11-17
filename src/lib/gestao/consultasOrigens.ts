@@ -1,7 +1,7 @@
 // As opções do campo Origem / parceiro (ficha do lead, ficha de ganho, ficha do cliente e cliente novo):
 // os parceiros que recebem do escritório e as origens que já estão escritas nos leads e nas fichas.
 // Só servidor. A montagem da lista fica em origens.ts.
-import type { Corretora } from '@/lib/corretoras'
+import { corretorasDoPerfil, type Corretora } from '@/lib/corretoras'
 import { equipeLeads } from './guard'
 import { configBtg } from './btg'
 import { CHAVE_PARCEIROS_RECEITA, lerParceirosReceita, nomesComRegra } from './participacao'
@@ -13,9 +13,11 @@ const PAGINA = 10000
 
 // Parceiros = comissionados (Parâmetros › Responsáveis) + quem tem participação na comissão do BTG
 // (repasse_parceiros) + quem tem participação na receita (parceiros_receita), nas corretoras que o usuário
-// vê. Uma leitura que falhe não derruba a tela: a lista só fica menor (o valor gravado continua aparecendo).
-export async function opcoesOrigem(corretoras: Corretora[]): Promise<OpcoesOrigem> {
-  const { db } = await equipeLeads()
+// vê (as do perfil, quando não vêm informadas). Uma leitura que falhe não derruba a tela: a lista só fica
+// menor (o valor gravado continua aparecendo).
+export async function opcoesOrigem(corretorasPedidas?: Corretora[]): Promise<OpcoesOrigem> {
+  const { db, profile } = await equipeLeads()
+  const corretoras = corretorasPedidas ?? corretorasDoPerfil(profile)
   const [resp, params, leads, fichas] = await Promise.all([
     db.from('responsaveis').select('nome').eq('comissionado', true).eq('ativo', true),
     corretoras.length

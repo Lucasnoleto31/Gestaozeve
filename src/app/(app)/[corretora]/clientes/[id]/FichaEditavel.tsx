@@ -9,6 +9,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Alert } from '@/components/ui/Alert'
 import { Field, Input, Select } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
+import { SelectOrigem } from '@/components/gestao/SelectOrigem'
+import { OPCOES_ORIGEM_VAZIAS, type OpcoesOrigem } from '@/lib/gestao/origens'
 import { salvarCadastroCliente, salvarCamposCliente, salvarContasCliente, unificarClientes } from '@/lib/gestao/acoes'
 import { CORRETORA_LABEL, CORRETORA_SLUG, isCorretora, temListaPropria, termosDaCorretora, type Corretora } from '@/lib/corretoras'
 import { GRUPOS_CORRETAGEM, type ClienteCadastro, type ClienteDuplicado, type GrupoCorretagem } from '@/lib/gestao/tipos'
@@ -18,7 +20,7 @@ type Manuais = { data_entrada: string | null; parceiro: string | null; observaco
 // e o atendente da campanha de ativação (S52; fora do responsável e da comissão)
 type Manual = { status: string | null; responsavel: string | null; assessor: string | null; data_migracao: string | null; ativador: string | null }
 
-export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, contas: contasIniciais, responsaveis, atendentes, assessores, statusAutomatico, temConta, abrirInicial = false }: {
+export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, manual, contas: contasIniciais, responsaveis, atendentes, assessores, statusAutomatico, temConta, abrirInicial = false, opcoesOrigem = OPCOES_ORIGEM_VAZIAS }: {
   corretora: Corretora
   clienteId: string
   admin: boolean
@@ -32,6 +34,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
   statusAutomatico: string | null   // status que vale quando não há manual (pela conta da corretora)
   temConta: boolean                 // com conta no export, o assessor vem de lá
   abrirInicial?: boolean            // abre já editando (link "editar" da lista, ?editar=1)
+  opcoesOrigem?: OpcoesOrigem       // parceiros e origens em uso: o parceiro é escolhido em lista, não digitado
 }) {
   const router = useRouter()
   const { avisar } = useToast()
@@ -145,7 +148,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
             </Select>
             <Input label="Data de migração" type="date" value={m.data_migracao} onChange={e => setM({ ...m, data_migracao: e.target.value })} hint="Só conta com status Migrado" />
             <Input label="Data de entrada" type="date" value={m.data_entrada} onChange={e => setM({ ...m, data_entrada: e.target.value })} hint="Quando o cliente foi levado para a corretora" />
-            <Input label="Parceiro" value={m.parceiro} onChange={e => setM({ ...m, parceiro: e.target.value })} placeholder="Direto, Aikon…" />
+            <SelectOrigem label="Parceiro / origem" valor={m.parceiro} onChange={v => setM(x => ({ ...x, parceiro: v }))} opcoes={opcoesOrigem} vazio="Sem parceiro" />
             <Select label="Grupo de corretagem" value={m.grupo_corretagem} onChange={e => setM({ ...m, grupo_corretagem: e.target.value })}
               hint={m.grupo_corretagem === 'Bloqueado' ? 'O banco travou a alteração do grupo por um período: pedir o desbloqueio para colocar no grupo certo' : `O cliente está no grupo de corretagem certo na ${CORRETORA_LABEL[corretora]}?`}>
               <option value="">Não informado</option>

@@ -24,7 +24,8 @@ import { fonteKpi, hrefComissoes, pagamentosDoFiltro, round2, type FiltroAba } f
 const pct = (v: number) => fmtPct(v, Number.isInteger(v) ? 0 : 1).replace('%', ' %')
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 const textoDaRegraBtg = (b: DadosDoMes, parceiro: string) =>
-  `A comissão que o BTG paga sobre os clientes dele (corretagem e zeragem) paga o imposto de ${pct(b.impostoPct)} e ${parceiro} leva ${pct(b.regra.pctParceiro)} do que sobra.`
+  `A comissão que o BTG paga sobre os clientes dele (corretagem e zeragem) paga o imposto de ${pct(b.impostoPct)} e ${parceiro} leva ${pct(b.regra.pctParceiro)} do que sobra${b.comFicha ? '; no cliente marcado "pela ficha", leva o percentual dele na lista de parceiros da ficha' : ''}.`
+const pctFicha = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} %`
 
 // Os clientes do parceiro no BTG que geraram receita no mês e quanto cada um rende a ele
 function TabelaDoMes({ b, impressao }: { b: DadosDoMes; impressao?: boolean }) {
@@ -34,7 +35,10 @@ function TabelaDoMes({ b, impressao }: { b: DadosDoMes; impressao?: boolean }) {
       <tbody>
         {b.clientes.map(c => (
           <tr key={c.cliente_id}>
-            <td className="max-w-[260px] truncate font-medium">{impressao ? c.nome : <Link href={`/btg/clientes/${c.cliente_id}`} className="link">{c.nome}</Link>}</td>
+            <td className="max-w-[260px] truncate font-medium">
+              {impressao ? c.nome : <Link href={`/btg/clientes/${c.cliente_id}`} className="link">{c.nome}</Link>}
+              {c.pctFicha != null && <span className="block text-micro font-normal text-fg-subtle" title="Está na lista de parceiros da ficha deste cliente e leva este percentual da comissão dele, depois do imposto">pela ficha · {pctFicha(c.pctFicha)}</span>}
+            </td>
             <td className={cn('num', !c.lotes && 'subtle')}>{n0(c.lotes)}</td>
             <td className={cn('num', !impressao && 'col-p2')}>{r0(c.receita)}</td>
             <td className="num font-semibold">{r0(c.parte)}</td>
@@ -68,10 +72,6 @@ function ForaDaConta({ b, mesRef }: { b: DadosDoMes; mesRef: string }) {
   )
 }
 
-// Mês anterior ao início da participação do parceiro (quem também tem regra em parceiros_receita): nada é devido
-export const btgNoPeriodo = (b: DadosDoMes, mesRef: string, desde: string | null): DadosDoMes =>
-  desde && mesRef < desde ? { ...b, receita: 0, comissao: 0, imposto: 0, parte: 0, clientes: [], foraDaConta: [] } : b
-
 const semReceita = (b: DadosDoMes, parceiro: string, mesRef: string, desde: string | null = null) =>
   desde && mesRef < desde ? `Nada em ${mesLongo(mesRef)}: a participação de ${parceiro} começa em ${mesLongo(desde)}.` : `Nada em ${mesLongo(mesRef)}: ${b.contas > 0
     ? `nenhuma das ${fmtNum(b.contas)} ${b.contas === 1 ? 'conta dele' : 'contas dele'} no BTG gerou receita no mês.`
@@ -81,9 +81,8 @@ const semReceita = (b: DadosDoMes, parceiro: string, mesRef: string, desde: stri
 // desde = primeiro mês que conta ('AAAA-MM-01'), para quem também tem regra de participação na receita de
 // outra corretora e está vendo só o BTG; sem ele, vale todo o histórico (Atual Capital).
 export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null }: FiltroAba & { desde?: string | null }) {
-  const [doMes, livro, pagamentos, ultima] = await Promise.all([participacaoBtg(parceiro, mesRef), repasseBtgMensal(parceiro, desde), comissaoPagamentos(parceiro), ultimaData('BTG')])
-  if (!doMes || !livro) return null
-  const b = btgNoPeriodo(doMes, mesRef, desde)
+  const [b, livro, pagamentos, ultima] = await Promise.all([participacaoBtg(parceiro, mesRef, desde), repasseBtgMensal(parceiro, desde), comissaoPagamentos(parceiro), ultimaData('BTG')])
+  if (!b || !livro) return null
   const visiveis = pagamentosDoFiltro(pagamentos, corretora)
   const gerado = round2(livro.meses.reduce((s, m) => s + m.parte, 0))
   const pago = visiveis.reduce((s, p) => s + p.valor, 0)
@@ -104,9 +103,9 @@ export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null 
   const pagoNaJanela = janela.reduce((s, m) => s + (pagoPorMes.get(m) ?? 0), 0)
 
   const matriz: Celula[][] = [
-    ['Cliente', 'Lotes no mês', 'Receita (R$)', 'A receber (R$)'],
-    ...b.clientes.map<Celula[]>(c => [c.nome, c.lotes, round2(c.receita), c.parte]),
-    [`Total · ${b.clientes.length} ${b.clientes.length === 1 ? 'cliente' : 'clientes'}`, b.clientes.reduce((s, c) => s + c.lotes, 0), round2(b.receita), round2(b.parte)],
+    ['Cliente', ...(b.comFicha ? ['Percentual pela ficha (%)'] : []), 'Lotes no mês', 'Receita (R$)', 'A receber (R$)'],
+    ...b.clientes.map<Celula[]>(c => [c.nome, ...(b.comFicha ? [c.pctFicha] : []), c.lotes, round2(c.receita), c.parte]),
+    [`Total · ${b.clientes.length} ${b.clientes.length === 1 ? 'cliente' : 'clientes'}`, ...(b.comFicha ? [null] : []), b.clientes.reduce((s, c) => s + c.lotes, 0), round2(b.receita), round2(b.parte)],
   ]
   const hrefImpressao = `/extrato?${new URLSearchParams({ parceiro, mes: mesRef.slice(0, 7), corretora: 'BTG' }).toString()}`
 
@@ -180,7 +179,7 @@ export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null 
       <Panel title="Como é calculado">
         <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
           <li>{textoDaRegraBtg(b, parceiro)} O escritório fica com {pct(b.regra.pctEscritorio)} do restante.</li>
-          <li>Clientes dele no BTG são os que têm {parceiro} no campo Parceiro da ficha.</li>
+          <li>Clientes dele no BTG são os que têm {parceiro} no campo Parceiro da ficha. O cliente com lista de parceiros na ficha (Editar › Parceiros do cliente) segue só a lista: cada parceiro dela leva o percentual dele da comissão do cliente, depois do imposto.</li>
           <li>No mês já fechado vale o percentual de comissão do fechamento do BTG; antes disso o valor é uma prévia pelas faixas de comissão.</li>
           <li>Os percentuais ficam em Parâmetros › BTG › Repasse. Pagamentos são lançados na aba Pagamentos e regras.</li>
         </ul>
@@ -193,18 +192,17 @@ export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null 
 // para imprimir de qualquer parceiro do repasse. `dados` = o mês já lido por quem chama (evita ler de novo);
 // `desde` = primeiro mês que conta, como em AbaRepasseBtg.
 export async function ParticipacaoBtg({ parceiro, mesRef, impressao, desde = null, dados }: { parceiro: string; mesRef: string; impressao?: boolean; desde?: string | null; dados?: DadosDoMes | null }) {
-  const doMes = dados === undefined ? await participacaoBtg(parceiro, mesRef) : dados
-  if (!doMes) return null
-  const b = btgNoPeriodo(doMes, mesRef, desde)
+  const b = dados === undefined ? await participacaoBtg(parceiro, mesRef, desde) : dados
+  if (!b) return null
   // no papel o bloco só aparece quando há valor
   if (impressao && b.receita <= 0) return null
   const mes = mesCurto(mesRef)
   return (
-    <Panel title="BTG · participação na comissão" subtitle={`${textoDaRegraBtg(b, parceiro)} Clientes dele no BTG são os que têm ${parceiro} no campo Parceiro da ficha.`}>
+    <Panel title="BTG · participação na comissão" subtitle={`${textoDaRegraBtg(b, parceiro)} Clientes dele no BTG são os que têm ${parceiro} no campo Parceiro da ficha ou na lista de parceiros dela.`}>
       {b.receita > 0 ? (
         <>
           <KpiRow cols={3}>
-            <KpiCard label={`Parte de ${parceiro} em ${mes}`} value={fmtBRL2(b.parte)} valueClassName={fonteKpi(fmtBRL2(b.parte))} sub={`${pct(b.regra.pctParceiro)} de ${fmtBRL2(b.comissao - b.imposto)}`} />
+            <KpiCard label={`Parte de ${parceiro} em ${mes}`} value={fmtBRL2(b.parte)} valueClassName={fonteKpi(fmtBRL2(b.parte))} sub={b.comFicha ? `sobre ${fmtBRL2(b.comissao - b.imposto)} de comissão líquida, pelo percentual de cada cliente` : `${pct(b.regra.pctParceiro)} de ${fmtBRL2(b.comissao - b.imposto)}`} />
             <KpiCard label="Receita dos clientes dele" value={fmtBRL2(b.receita)} valueClassName={fonteKpi(fmtBRL2(b.receita))} sub={`${fmtNum(b.clientes.length)} ${b.clientes.length === 1 ? 'cliente girou' : 'clientes giraram'} · corretagem e zeragem`} />
             <KpiCard label="Comissão do BTG sobre eles" value={fmtBRL2(b.comissao)} valueClassName={fonteKpi(fmtBRL2(b.comissao))} sub={`${pct(Math.round(b.pctComissao * 10) / 10)} da receita líquida · imposto ${fmtBRL2(b.imposto)}`} />
           </KpiRow>

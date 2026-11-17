@@ -7,7 +7,7 @@
 import Link from 'next/link'
 import { comissaoItens, comissaoMensal, comissaoPagamentos } from '@/lib/gestao/consultas'
 import { participacaoReceita, regrasDoParceiroPorCorretora, repasseBtgDeTodos, type RegrasCorretora } from '@/lib/gestao/consultasParticipacao'
-import { nomesComRegra, resumirReceita } from '@/lib/gestao/participacao'
+import { inicioDasRegras, nomesComRegra, resumirReceita } from '@/lib/gestao/participacao'
 import { resumirComissao } from '@/lib/gestao/comissao'
 import { mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
@@ -65,7 +65,7 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
   parceiros: ParceiroComissao[]; corretora: Corretora | null; mesRef: string; verBtg: boolean; regras?: RegrasCorretora[]; regrasTodas?: RegrasCorretora[]
 }) {
   const comissionados = parceiros.filter(p => p.comissionado)
-  const inicioDaReceita = (nome: string) => regrasDoParceiroPorCorretora(regrasTodas, nome).flatMap(r => r.regras.map(x => x.desde)).sort()[0] ?? null
+  const inicioDaReceita = (nome: string) => inicioDasRegras(regrasDoParceiroPorCorretora(regrasTodas, nome).flatMap(r => r.regras))
   const [porConta, btg, receitas] = await Promise.all([
     Promise.all(comissionados.map(async p => {
       const [itens, pagamentos, mensal] = await Promise.all([comissaoItens(p.nome, corretora), comissaoPagamentos(p.nome), comissaoMensal(mesRef, 1, p.nome, corretora)])

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { comissaoPagamentos } from '@/lib/gestao/consultas'
 import { participacaoReceita, repasseBtgMensal, type RegrasCorretora } from '@/lib/gestao/consultasParticipacao'
-import { pctComum, planilhaReceita, resumirReceita, textoDaRegra, TOTAIS_VAZIOS } from '@/lib/gestao/participacao'
+import { inicioDasRegras, pctComum, planilhaReceita, resumirReceita, textoDaRegraCom, TOTAIS_VAZIOS } from '@/lib/gestao/participacao'
 import { nomeArquivoExtrato, rotuloCorretora } from '@/lib/gestao/extrato'
 import { mesAtual, mesCurto, mesLongo, parseMes, somarMeses } from '@/lib/gestao/meses'
 import { CORRETORA_LABEL, CORRETORA_SLUG } from '@/lib/corretoras'
@@ -34,9 +34,11 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
   const pago = visiveis.reduce((s, p) => s + p.valor, 0)
   const variasCorretoras = livros.length > 1
   const mes = mesCurto(mesRef)
-  const inicio = livros.map(l => l.regras[0]?.desde).filter(Boolean).sort()[0] ?? mesRef
-  // a parte dele na comissão do BTG, mês a mês, desde o início da regra
-  const repasse = btg ? await repasseBtgMensal(parceiro, inicio) : null
+  // a parte dele na comissão do BTG, mês a mês: os clientes sem lista na ficha contam a partir do início da
+  // regra geral dele (a do parâmetro); o cliente com lista de parceiros conta desde o começo da linha dele
+  const repasse = btg ? await repasseBtgMensal(parceiro, inicioDasRegras(livros.flatMap(l => l.regras))) : null
+  // o mês a mês começa na primeira regra (a geral ou a da lista das fichas) ou no primeiro mês com valor no BTG
+  const inicio = [...livros.map(l => l.regras[0]?.desde), repasse?.meses[0]?.mes].filter((m): m is string => !!m).sort()[0] ?? mesRef
   const btgPorMes = new Map((repasse?.meses ?? []).map(m => [m.mes, m.parte]))
   const btgMes = btgPorMes.get(mesRef) ?? 0
   const geradoBtg = round2((repasse?.meses ?? []).reduce((s, m) => s + m.parte, 0))
@@ -47,11 +49,14 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
   // mês corrente: os lotes vão até o último dia importado
   const corrente = mesRef === mesAtual()
   const ultima = livros.map(l => l.ultimaData).filter((d): d is string => !!d && d.startsWith(mesRef.slice(0, 7))).sort().at(-1) ?? null
-  const semCodigo = livros.filter(l => l.assessores.length === 0)
+  // regra geral sem código de assessor ligado (quem só entra pela lista das fichas não precisa de código)
+  const semCodigo = livros.filter(l => l.assessores.length === 0 && l.regras.some(r => !r.soFicha))
+  const naFicha = livros.reduce((s, l) => s + l.clientesFicha, 0)
+  const temFicha = naFicha > 0 || res.linhas.some(c => c.pctFicha != null) || livros.some(l => l.regras.some(r => r.soFicha))
   const clientesNosCodigos = livros.reduce((s, l) => s + l.clientes, 0)
   const codigos = livros.flatMap(l => l.assessores)
   const de = (parte: 'pctCorretagem' | 'pctZeragem' | 'pctIncentivo', bruto: number) => {
-    const p = pctComum(res.regras, parte)
+    const p = pctComum(res.regras, parte, res.linhas)
     return `${p ? `${p} de ` : 'sobre '}${fmtBRL2(bruto)}`
   }
 
@@ -92,7 +97,8 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
         <KpiCard label="Saldo a pagar" value={fmtBRL2(saldo)} valueClassName={fonteKpi(fmtBRL2(saldo))} tone={saldo < 0 ? 'warn' : 'neutral'}
           sub={saldo < 0 ? 'pago acima do gerado até hoje' : `gerado ${fmtBRL2(gerado)} menos pago ${fmtBRL2(pago)}`} />
         <KpiCard label={`Giraram em ${mes}`} value={fmtNum(t.ativos)}
-          sub={codigos.length ? `de ${fmtNum(clientesNosCodigos)} ${clientesNosCodigos === 1 ? 'cliente' : 'clientes'} com conta no código ${codigos.join(', ')}` : 'nenhum código ligado'} />
+          sub={[codigos.length ? `de ${fmtNum(clientesNosCodigos)} ${clientesNosCodigos === 1 ? 'cliente' : 'clientes'} com conta no código ${codigos.join(', ')}` : null,
+            naFicha ? `${fmtNum(naFicha)} ${naFicha === 1 ? 'cliente' : 'clientes'} pela lista da ficha` : null].filter(Boolean).join(' · ') || 'nenhum código ligado'} />
       </KpiRow>
 
       <Panel title={`De onde vem o valor de ${mesLongo(mesRef)}`}
@@ -105,6 +111,9 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
         </div>
         {res.linhas.some(c => c.incentivoCliente > 0 && c.incentivo < c.incentivoCliente) && (
           <p className="mt-2 text-label text-fg-subtle">* Cliente que também operou fora do código do parceiro: entra a fração do incentivo que corresponde aos pontos feitos no código.</p>
+        )}
+        {res.linhas.some(c => c.pctFicha != null) && (
+          <p className="mt-2 text-label text-fg-subtle">Cliente marcado “pela ficha”: {parceiro} está na lista de parceiros da ficha dele e leva esse percentual do que o cliente gerou no mês, em qualquer código nosso.</p>
         )}
       </Panel>
 
@@ -165,12 +174,13 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
         <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
           {livros.flatMap(l => l.regras.map(r => (
             <li key={`${l.corretora}:${r.desde}`}>
-              <span className="text-fg">{CORRETORA_LABEL[l.corretora]}, desde {mesLongo(r.desde)}</span>: {textoDaRegra(r)} dos clientes {l.assessores.length ? `do código ${l.assessores.join(', ')}` : 'dos códigos ligados a ele'}.
+              <span className="text-fg">{CORRETORA_LABEL[l.corretora]}, desde {mesLongo(r.desde)}</span>: {textoDaRegraCom(r, `dos clientes ${l.assessores.length ? `do código ${l.assessores.join(', ')}` : 'dos códigos ligados a ele'}`)}.
             </li>
           )))}
+          {temFicha && <li>Cliente com lista de parceiros na ficha: {parceiro} leva o percentual dele na lista, sobre a corretagem e a zeragem do cliente em qualquer código nosso (e sobre o incentivo, quando a regra dele tem incentivo). Esse cliente deixa de contar pelo código do assessor.</li>}
           <li>Entra o que foi operado enquanto a conta estava no código do parceiro. Corretagem = lotes × tarifa; zeragem = contratos zerados × o valor da zeragem.</li>
           <li>Incentivo = o que a corretora paga pelo cliente no mês, pela faixa de pontos. Enquanto o mês não fecha, o valor é parcial.</li>
-          <li>Os percentuais ficam em Parâmetros (Parceiros com participação na receita) e o código do parceiro, em Parâmetros › Assessores. Pagamentos são lançados na aba Pagamentos e regras.</li>
+          <li>Os percentuais ficam em Parâmetros (Parceiros com participação na receita) e o código do parceiro, em Parâmetros › Assessores. A lista de parceiros de um cliente fica na ficha dele (Editar › Parceiros do cliente). Pagamentos são lançados na aba Pagamentos e regras.</li>
         </ul>
       </Panel>
     </>

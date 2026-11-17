@@ -41,8 +41,12 @@ export function TabelaReceitaParceiro({ linhas, totais, parceiro, comCorretora, 
           // cliente que também operou fora dos códigos do parceiro: só parte do incentivo entra
           const parcial = c.incentivoCliente > 0 && c.incentivo < c.incentivoCliente
           return (
-            <tr key={`${c.corretora}:${c.chave}`}>
-              <td className="max-w-[260px] truncate font-medium">{!impressao && slug && c.cliente_id ? <Link href={`/${slug}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link> : c.nome}</td>
+            <tr key={`${c.corretora}:${c.chave}:${c.pctFicha ?? ''}`}>
+              <td className="max-w-[260px] truncate font-medium">
+                {!impressao && slug && c.cliente_id ? <Link href={`/${slug}/clientes/${c.cliente_id}`} className="link">{c.nome}</Link> : c.nome}
+                {/* entra pela lista de parceiros da ficha (S61), com o percentual do parceiro naquele cliente */}
+                {c.pctFicha != null && <span className="block text-micro font-normal text-fg-subtle" title={`${parceiro} está na lista de parceiros da ficha deste cliente e leva este percentual do que ele gerar, em qualquer código nosso`}>pela ficha · {c.pctFicha.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} %</span>}
+              </td>
               {comCorretora && <td className={cn('muted', pc)}>{rotuloCorretora(c.corretora)}</td>}
               <td className={cn('num', !c.lotes && 'subtle')}>{n0(c.lotes)}</td>
               {detalhe && <td className={cn('num col-p3', !c.zerados && 'subtle')}>{n0(c.zerados)}</td>}

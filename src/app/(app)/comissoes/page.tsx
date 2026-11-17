@@ -7,7 +7,7 @@ import { getProfile } from '@/lib/auth/getProfile'
 import { parceirosLista } from '@/lib/gestao/consultas'
 import { regrasDoParceiroPorCorretora, regrasReceita, repasseBtg } from '@/lib/gestao/consultasParticipacao'
 import type { ParceiroRepasse } from '@/lib/gestao/btg'
-import { nomesComRegra, textoDaRegra } from '@/lib/gestao/participacao'
+import { TEXTO_SO_FICHA, inicioDasRegras, nomesComRegra, textoDaRegra } from '@/lib/gestao/participacao'
 import { parceirosDeComissao } from '@/lib/gestao/comissao'
 import { normTexto } from '@/lib/texto'
 import { mesAtual, mesLongo, parseMes } from '@/lib/gestao/meses'
@@ -108,10 +108,14 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   const aba = abas.some(a => a.valor === pedida) ? pedida : padrao
   const filtro = { parceiro, corretora, mesRef }
   const naCorretora = (c: string) => `na ${isCorretora(c) ? CORRETORA_LABEL[c] : c}`
-  const descricaoReceita = receitaTodas.map(r => `${textoDaRegra(r.regras[r.regras.length - 1])} dos clientes dele ${naCorretora(r.corretora)}`).join('; ')
+  const descricaoReceita = receitaTodas.map(r => {
+    const ultima = r.regras[r.regras.length - 1]
+    // quem só entra pela lista de parceiros das fichas não tem percentual geral nem código
+    return ultima.soFicha ? `${TEXTO_SO_FICHA}, ${naCorretora(r.corretora)}` : `${textoDaRegra(ultima)} dos clientes dele ${naCorretora(r.corretora)}`
+  }).join('; ')
   const descricaoBtg = regraBtg ? `${regraBtg.pctParceiro.toLocaleString('pt-BR')} % da comissão que o BTG paga sobre os clientes dele, depois do imposto` : ''
-  // quem também tem regra de participação na receita só conta o BTG a partir do início dela
-  const inicioReceita = receitaTodas.flatMap(r => r.regras.map(x => x.desde)).sort()[0] ?? null
+  // quem também tem regra de participação na receita (a do parâmetro) só conta o BTG a partir do início dela
+  const inicioReceita = inicioDasRegras(receitaTodas.flatMap(r => r.regras))
   const blocoBtg = mostraBtg ? <ParticipacaoBtg parceiro={parceiro} mesRef={mesRef} desde={inicioReceita} /> : null
 
   return (

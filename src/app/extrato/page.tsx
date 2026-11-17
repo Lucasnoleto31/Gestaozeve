@@ -8,7 +8,7 @@ import { redirect } from 'next/navigation'
 import { getProfile } from '@/lib/auth/getProfile'
 import { comissaoCarteiraMes, parceirosLista } from '@/lib/gestao/consultas'
 import { participacaoBtg, participacaoReceita, regrasDoParceiroPorCorretora, regrasReceita } from '@/lib/gestao/consultasParticipacao'
-import { pctComum, resumirReceita, textoDaRegra } from '@/lib/gestao/participacao'
+import { inicioDasRegras, pctComum, resumirReceita, textoDaRegraCom } from '@/lib/gestao/participacao'
 import { normTexto } from '@/lib/texto'
 import { mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { CORRETORA_LABEL, corretorasDoPerfil, isCorretora } from '@/lib/corretoras'
@@ -20,7 +20,7 @@ import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { rCurto } from '@/components/gestao/Celulas'
 import { TabelaExtrato } from '@/components/gestao/TabelaExtrato'
 import { TabelaReceitaParceiro } from '@/components/gestao/TabelaReceitaParceiro'
-import { ParticipacaoBtg, btgNoPeriodo } from '@/app/(app)/comissoes/ParticipacaoBtg'
+import { ParticipacaoBtg } from '@/app/(app)/comissoes/ParticipacaoBtg'
 import { BotaoImprimir } from './BotaoImprimir'
 
 export default async function ExtratoPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -44,13 +44,13 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
   // receita) ganha o bloco do BTG: só no extrato com receita, só quando há valor no mês e, para quem tem
   // regra de participação na receita, só do início dela em diante
   const verBtg = comReceita && minhas.includes('BTG') && (!corretora || corretora === 'BTG')
-  const inicioDele = regrasDele.flatMap(r => r.regras.map(x => x.desde)).sort()[0] ?? null
+  const inicioDele = inicioDasRegras(regrasDele.flatMap(r => r.regras))
   const [linhas, livros, doBtg] = await Promise.all([
     comissaoCarteiraMes(parceiro, corretora, mesRef),
     Promise.all(regras.map(r => participacaoReceita(r.corretora, r.regras, parceiro))),
-    verBtg ? participacaoBtg(parceiro, mesRef) : Promise.resolve(null),
+    verBtg ? participacaoBtg(parceiro, mesRef, inicioDele) : Promise.resolve(null),
   ])
-  const comBtg = !!doBtg && btgNoPeriodo(doBtg, mesRef, inicioDele).receita > 0
+  const comBtg = !!doBtg && doBtg.receita > 0
   const t = totaisExtrato(linhas)
   const emitido = hojeBrasil().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   // o bloco só aparece do mês em que a regra começa em diante
@@ -59,7 +59,7 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
   const ultima = livros.map(l => l.ultimaData).filter((d): d is string => !!d && d.startsWith(mesRef.slice(0, 7))).sort().at(-1) ?? null
   const parcial = mesRef === mesAtual()
   const de = (parte: 'pctCorretagem' | 'pctZeragem' | 'pctIncentivo', bruto: number) => {
-    const p = part ? pctComum(part.regras, parte) : ''
+    const p = part ? pctComum(part.regras, parte, part.linhas) : ''
     return `${p ? `${p} de ` : 'sobre '}${fmtBRL2(bruto)}`
   }
 
@@ -81,7 +81,7 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
           <section className="mt-6">
             <h2 className="text-section font-semibold">Participação na receita</h2>
             <p className="mt-0.5 text-dense text-fg-muted">
-              {livros.map(l => `${textoDaRegra(l.regras[l.regras.length - 1])} dos clientes ${l.assessores.length ? `do código ${l.assessores.join(', ')}` : 'dele'} na ${CORRETORA_LABEL[l.corretora]}`).join('; ')}.
+              {livros.map(l => `${textoDaRegraCom(l.regras[l.regras.length - 1], `dos clientes ${l.assessores.length ? `do código ${l.assessores.join(', ')}` : 'dele'}`)} na ${CORRETORA_LABEL[l.corretora]}`).join('; ')}.
               {parcial ? ` Mês em andamento: ${ultima ? `lotes até ${ultima.slice(8, 10)}/${ultima.slice(5, 7)}` : 'sem lotes ainda'}; o incentivo pode subir até o fechamento.` : ''}
             </p>
             <KpiRow cols={4} className="my-4">
@@ -111,7 +111,7 @@ export default async function ExtratoPage({ searchParams }: { searchParams: Prom
         <p className="mt-6 text-label text-fg-subtle">
           Contas atribuídas ao parceiro: lead ganho, parceiro informado na ficha, assessor ligado ao parceiro ou responsável interno.
           Lotes = contratos operados no mês, pelo relatório da corretora.{comReceita ? ' Receita bruta = corretagem, zeragem e operações avulsas, antes de repasse e impostos.' : ''}
-          {part ? ' Participação na receita: entra o que foi operado enquanto a conta estava no código do parceiro; corretagem = lotes × tarifa, zeragem = contratos zerados × o valor da zeragem e incentivo = o que a corretora paga pelo cliente no mês, pela faixa de pontos.' : ''}
+          {part ? ' Participação na receita: entra o que foi operado enquanto a conta estava no código do parceiro (ou, no cliente marcado "pela ficha", tudo o que ele operou, com o percentual do parceiro naquele cliente); corretagem = lotes × tarifa, zeragem = contratos zerados × o valor da zeragem e incentivo = o que a corretora paga pelo cliente no mês, pela faixa de pontos.' : ''}
         </p>
       </div>
     </div>

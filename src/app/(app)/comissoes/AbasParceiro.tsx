@@ -4,10 +4,14 @@ import Link from 'next/link'
 import { comissaoCarteiraMes, comissaoContasMes, comissaoItens, comissaoMensal, comissaoPagamentos, comissaoRegras } from '@/lib/gestao/consultas'
 import type { RegrasCorretora } from '@/lib/gestao/consultasParticipacao'
 import type { ParceiroRepasse } from '@/lib/gestao/btg'
-import { textoDaRegra } from '@/lib/gestao/participacao'
+import { textoDaRegraCom } from '@/lib/gestao/participacao'
+import { listaDaCorretora } from '@/lib/gestao/consultasParceirosCliente'
+import { emVigor } from '@/lib/gestao/parceirosCliente'
+import { getProfile } from '@/lib/auth/getProfile'
+import { normTexto } from '@/lib/texto'
 import { linhasPlanilha, nomeArquivoExtrato, totaisExtrato } from '@/lib/gestao/extrato'
-import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
-import { CORRETORA_LABEL, CORRETORA_SLUG, isCorretora } from '@/lib/corretoras'
+import { janelaMeses, mesAtual, mesCurto, mesLongo } from '@/lib/gestao/meses'
+import { CORRETORA_LABEL, CORRETORA_SLUG, corretorasDoPerfil, isCorretora, type Corretora } from '@/lib/corretoras'
 import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
@@ -21,6 +25,23 @@ import { ExtratoAcoes } from './ExtratoAcoes'
 import { PagamentosComissao } from './PagamentosComissao'
 import { RegrasComissao } from './RegrasComissao'
 import { SITUACAO, TIPO, corretoraNome, hrefComissoes, linhasPorMes, origemTexto, round2, somaLinhas, type FiltroAba } from './comum'
+
+// A carteira e o extrato vêm dos critérios de sempre (lead, campo Parceiro da ficha, código do assessor…).
+// O cliente em que o parceiro está só na lista de parceiros da ficha (S61), com percentual próprio, pode não
+// estar neles: a nota diz quantos são e onde aparecem, para as abas não parecerem incompletas.
+async function NotaDaLista({ parceiro, corretora }: { parceiro: string; corretora: Corretora | null }) {
+  const profile = await getProfile()
+  const minhas = profile ? corretorasDoPerfil(profile) : []
+  const listas = await Promise.all(minhas.filter(c => !corretora || c === corretora).map(c => listaDaCorretora(c)))
+  const mes = mesAtual()
+  const n = new Set(listas.flat().filter(l => normTexto(l.parceiro) === normTexto(parceiro) && emVigor(l, mes)).map(l => `${l.corretora}:${l.cliente_id}`)).size
+  if (!n) return null
+  return (
+    <p className="mt-3 text-label text-fg-subtle">
+      {parceiro} também está na lista de parceiros da ficha de {fmtNum(n)} {n === 1 ? 'cliente' : 'clientes'}, com percentual próprio. O valor de cada um aparece no Resumo, mesmo quando o cliente não está nesta carteira.
+    </p>
+  )
+}
 
 // ── Extrato ──────────────────────────────────────────────────────────────────
 export async function AbaExtrato({ parceiro, corretora, mesRef }: FiltroAba) {
@@ -51,6 +72,7 @@ export async function AbaExtrato({ parceiro, corretora, mesRef }: FiltroAba) {
         <div className="tbl-wrap max-h-[75vh]">
           <TabelaExtrato linhas={carteiraMes} comReceita vazio={`Nenhuma conta na carteira de ${parceiro}${filtroCorretora}.`} />
         </div>
+        <NotaDaLista parceiro={parceiro} corretora={corretora} />
       </Panel>
     </>
   )
@@ -76,11 +98,12 @@ export async function AbaPagamentos({ parceiro, admin, comissionado = true, rece
         <Panel title="Regra de participação" subtitle={`O que ${parceiro} recebe sobre o que os clientes dele geram. O valor de cada mês e o saldo estão na aba Resumo.`}>
           <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
             {receita.flatMap(r => r.regras.map(x => (
-              <li key={`${r.corretora}:${x.desde}`}><span className="text-fg">{CORRETORA_LABEL[r.corretora]}, desde {mesLongo(x.desde)}</span>: {textoDaRegra(x)} dos clientes dos códigos de assessor ligados a ele.</li>
+              <li key={`${r.corretora}:${x.desde}`}><span className="text-fg">{CORRETORA_LABEL[r.corretora]}, desde {mesLongo(x.desde)}</span>: {textoDaRegraCom(x, 'dos clientes dos códigos de assessor ligados a ele')}.</li>
             )))}
             {btg && (
               <li><span className="text-fg">BTG</span>: {btg.pctParceiro.toLocaleString('pt-BR')} % da comissão que o BTG paga sobre os clientes dele (corretagem e zeragem), depois do imposto; clientes dele são os que têm {parceiro} no campo Parceiro da ficha.</li>
             )}
+            <li>Cliente com lista de parceiros na ficha (Editar › Parceiros do cliente): vale o percentual de {parceiro} na lista, em qualquer código nosso, no lugar da regra geral.</li>
             <li>Onde mudar: {receita.length > 0 ? 'os percentuais ficam nos Parâmetros da corretora (Parceiros com participação na receita) e o código do parceiro, em Parâmetros › Assessores, coluna Parceiro' : ''}{receita.length > 0 && btg ? '; ' : ''}{btg ? 'a divisão do BTG fica em Parâmetros › BTG › Repasse' : ''}.</li>
           </ul>
         </Panel>
@@ -154,6 +177,7 @@ export async function AbaCarteira({ parceiro, corretora }: FiltroAba) {
           )}
         </table>
       </div>
+      <NotaDaLista parceiro={parceiro} corretora={corretora} />
     </Panel>
   )
 }

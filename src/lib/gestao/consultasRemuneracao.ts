@@ -189,8 +189,8 @@ export type Remuneracao = {
 
 // Tudo o que a conta precisa, de mesIni até o mês corrente. `comParceirosGenial` = descontar a parte de parceiro
 // com participação na Genial (precisa do acesso da equipe).
-async function carregar(db: Admin, comParceirosGenial: boolean): Promise<Remuneracao> {
-  const config = await lerConfig(db)
+async function carregar(db: Admin, comParceirosGenial: boolean, configLida?: ConfigRemuneracao): Promise<Remuneracao> {
+  const config = configLida ?? await lerConfig(db)
   const mesFim = mesAtual()
   const entradas = config.pessoas.map(p => p.nivelDesde).sort()
   const mesIni = entradas.length ? somarMeses(entradas[0], -3) : mesFim
@@ -259,10 +259,13 @@ export const pessoaNoModelo = (r: Remuneracao, nome: string): PessoaModelo | nul
 export type MeusPontos = { pessoa: PessoaModelo; conta: ContaMes; tabela: TabelaNiveis; regua: Regua; instalado: boolean }
 export async function meusPontos(): Promise<MeusPontos | null> {
   const { db, profile } = await equipeLeads()
-  const nome = await responsavelDoUsuario(db, profile.nome ?? '')
-  const r = await carregar(db, profile.role !== 'atendente')
+  const [nome, config] = await Promise.all([responsavelDoUsuario(db, profile.nome ?? ''), lerConfig(db)])
+  // quem não está no modelo não paga a leitura da conta inteira (eventos, giro, incentivo e cadeia do BTG)
+  const dele = config.pessoas.find(p => normTexto(p.nome) === normTexto(nome))
+  if (!dele || mesAtual() < dele.nivelDesde) return null
+  const r = await carregar(db, profile.role !== 'atendente', config)
   const pessoa = pessoaNoModelo(r, nome)
-  if (!pessoa || r.mesFim < pessoa.nivelDesde) return null
+  if (!pessoa) return null
   const [conta] = contasDe(r, pessoa.nome, [r.mesFim])
   return { pessoa, conta, tabela: vigente(r.config.tabelas, r.mesFim) ?? NIVEIS_PADRAO, regua: vigente(r.config.reguas, r.mesFim) ?? REGUA_PADRAO, instalado: r.config.instalado }
 }

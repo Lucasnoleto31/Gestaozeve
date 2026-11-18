@@ -1,8 +1,10 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { ArrowRight } from 'lucide-react'
+import { MeusPontos } from '@/components/gestao/MeusPontos'
 import { getProfile } from '@/lib/auth/getProfile'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Panel } from '@/components/ui/Panel'
@@ -129,6 +131,9 @@ export default async function DashboardPage() {
           {apoio && <p className="mt-1.5 text-dense text-fg-muted">{semQuebra(apoio)}</p>}
           {lancadoAte && <p className="mt-1 text-label text-fg-subtle">Lotes lançados: {lancadoAte}.</p>}
         </div>
+
+        {/* remuneração por níveis: os pontos de quem está logado, se estiver no modelo */}
+        <Suspense fallback={null}><MeusPontos comLink /></Suspense>
 
         <KpiRow cols={6}>
           <KpiCard destaque label="Receita do giro no mês" value={rCurto(t.receita)}

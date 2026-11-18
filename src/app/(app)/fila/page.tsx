@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { getProfile } from '@/lib/auth/getProfile'
@@ -9,6 +10,7 @@ import { GRUPOS_DISTRIBUIR, type TipoOportunidade } from '@/lib/gestao/oportunid
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Alert } from '@/components/ui/Alert'
 import { Abas } from '@/components/gestao/Abas'
+import { MeusPontos } from '@/components/gestao/MeusPontos'
 import { MinhaFila } from './MinhaFila'
 import { Distribuir } from './Distribuir'
 
@@ -55,6 +57,8 @@ export default async function FilaPage({ searchParams }: { searchParams: Promise
             Rode a S59 no Supabase para combinar retornos; até lá a fila mostra só leads sem contato, leads parados, clientes em risco e campanha.
           </Alert>
         )}
+        {/* remuneração por níveis: só aparece para quem está no modelo, sem segurar a fila */}
+        <Suspense fallback={null}><MeusPontos comLink={profile.role !== 'atendente'} /></Suspense>
         <MinhaFila {...dados} />
       </PageBody>
     </>

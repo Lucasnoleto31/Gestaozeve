@@ -7,6 +7,8 @@
 import Link from 'next/link'
 import { comissaoItens, comissaoMensal, comissaoPagamentos } from '@/lib/gestao/consultas'
 import { participacaoReceita, regrasDoParceiroPorCorretora, repasseBtgDeTodos, type RegrasCorretora } from '@/lib/gestao/consultasParticipacao'
+import { contasDe, geradoAteHoje, pessoaNoModelo, remuneracaoDaEquipe } from '@/lib/gestao/consultasRemuneracao'
+import { valorNaCorretora } from '@/lib/gestao/remuneracao'
 import { inicioDasRegras, nomesComRegra, resumirReceita } from '@/lib/gestao/participacao'
 import { resumirComissao } from '@/lib/gestao/comissao'
 import { mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
@@ -17,8 +19,18 @@ import { fmtNum } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
+import { Dica } from '@/components/ui/Dica'
 import { LinhaVazia, TRACO, n0, r0, rCurto } from '@/components/gestao/Celulas'
 import { hrefComissoes, pagamentosDoFiltro, round2 } from './comum'
+import { DICA_NIVEL, DICA_PONTOS, pts } from '@/lib/gestao/remuneracaoTexto'
+
+// Uma linha de comissionado: pela regra por conta ou, para quem está na remuneração por níveis (S62), pela conta
+// do nível. `nivel` só vem para quem está no modelo; null no mês antes da entrada.
+type LinhaComissionado = {
+  nome: string; modelo: boolean; nivel: number | null; pontos: number
+  abertasMes: number; ativacoesMes: number; reativadasMes: number; comissaoMes: number
+  geradoTotal: number; pago: number; saldo: number; pagoMes: number
+}
 
 // Parceiro com participação na comissão do BTG: a parte dele no mês e a posição até hoje
 type Btg = { nome: string; receita: number; comissao: number; mes: number; previa: boolean; gerado: number; pago: number; pagoMes: number; saldo: number }
@@ -66,12 +78,32 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
 }) {
   const comissionados = parceiros.filter(p => p.comissionado)
   const inicioDaReceita = (nome: string) => inicioDasRegras(regrasDoParceiroPorCorretora(regrasTodas, nome).flatMap(r => r.regras))
+  const rem = comissionados.length ? await remuneracaoDaEquipe() : null
+  const doFiltro = (c: string) => !corretora || c === corretora
   const [porConta, btg, receitas] = await Promise.all([
-    Promise.all(comissionados.map(async p => {
+    Promise.all(comissionados.map(async (p): Promise<LinhaComissionado> => {
+      const pessoa = rem ? pessoaNoModelo(rem, p.nome) : null
+      if (rem && pessoa) {
+        // remuneração por níveis: a conta do nível no mês (antes da entrada, a comissão por conta) e o gerado até hoje
+        const [conta] = contasDe(rem, pessoa.nome, [mesRef])
+        const visiveis = pagamentosDoFiltro(await comissaoPagamentos(p.nome), corretora)
+        const ev = conta.eventos.filter(e => doFiltro(e.corretora))
+        const geradoTotal = geradoAteHoje(rem, pessoa.nome, corretora)
+        const pago = round2(visiveis.reduce((s, x) => s + x.valor, 0))
+        return {
+          nome: p.nome, modelo: true, nivel: conta.noModelo ? conta.nivel?.nivel ?? null : null, pontos: conta.pontos.total,
+          abertasMes: ev.filter(e => e.tipo === 'abertura').length, ativacoesMes: ev.filter(e => e.tipo === 'ativacao').length, reativadasMes: ev.filter(e => e.tipo === 'reativacao').length,
+          comissaoMes: valorNaCorretora(conta, corretora), geradoTotal, pago, saldo: round2(geradoTotal - pago),
+          pagoMes: visiveis.filter(x => parseMes(x.mes_ref) === mesRef).reduce((s, x) => s + x.valor, 0),
+        }
+      }
       const [itens, pagamentos, mensal] = await Promise.all([comissaoItens(p.nome, corretora), comissaoPagamentos(p.nome), comissaoMensal(mesRef, 1, p.nome, corretora)])
       const visiveis = pagamentosDoFiltro(pagamentos, corretora)
       const r = resumirComissao(itens, mensal, visiveis, mesRef, () => 0)
-      return { nome: p.nome, ...r, pagoMes: visiveis.filter(x => parseMes(x.mes_ref) === mesRef).reduce((s, x) => s + x.valor, 0) }
+      return {
+        nome: p.nome, modelo: false, nivel: null, pontos: 0, abertasMes: r.abertasMes, ativacoesMes: r.ativacoesMes, reativadasMes: r.reativadasMes,
+        comissaoMes: r.comissaoMes, geradoTotal: r.geradoTotal, pago: r.pago, saldo: r.saldo, pagoMes: visiveis.filter(x => parseMes(x.mes_ref) === mesRef).reduce((s, x) => s + x.valor, 0),
+      }
     })),
     verBtg && (!corretora || corretora === 'BTG') ? participacoesBtg(corretora, mesRef, inicioDaReceita) : Promise.resolve([] as Btg[]),
     participacoesReceita(regras, corretora, mesRef),
@@ -96,7 +128,7 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
   // as linhas que carregam o pago e o saldo de cada parceiro, uma por parceiro
   const contas = [...linhas, ...linhasReceita.filter(r => !r.junto), ...linhasBtg.filter(b => !b.junto)]
   const soma = (f: (l: (typeof linhas)[number]) => number) => linhas.reduce((s, l) => s + f(l), 0)
-  const comissaoMes = soma(l => l.comissaoMes), saldo = soma(l => l.saldo)
+  const comissaoMes = soma(l => l.comissaoMes)
   const receitaMes = round2(receitas.reduce((s, r) => s + r.mes, 0) + btg.reduce((s, b) => s + b.mes, 0))
   const pagoMes = contas.reduce((s, c) => s + c.pagoMes, 0)
   // quem tem a receber não é compensado por quem recebeu a mais: são pessoas diferentes
@@ -109,18 +141,70 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
   const reais = (v: number) => (v ? rCurto(v) : 'R$ 0')
   const mes = mesCurto(mesRef)
   const abrir = (nome: string, aba?: string) => hrefComissoes({ parceiro: nome, corretora, mes: mesRef, aba })
+  const equipe = linhas.filter(l => l.modelo), porContaSo = linhas.filter(l => !l.modelo)
+  const somaDe = (ls: LinhaComissionado[], f: (l: LinhaComissionado) => number) => ls.reduce((s, l) => s + f(l), 0)
+  const equipeMes = round2(somaDe(equipe, l => l.comissaoMes)), porContaMes = round2(somaDe(porContaSo, l => l.comissaoMes))
+  const partesGerado = [equipe.length ? `${reais(equipeMes)} da equipe` : '', porContaSo.length ? `${reais(porContaMes)} de comissão por conta` : '', temParticipacao ? `${reais(receitaMes)} de participação na receita` : ''].filter(Boolean)
 
   return (
     <>
       <KpiRow cols={4}>
-        {temParticipacao
-          ? <KpiCard destaque label={`Gerado em ${mes}`} value={reais(comissaoMes + receitaMes)} sub={`${reais(comissaoMes)} de comissão por conta · ${reais(receitaMes)} de participação na receita`} />
+        {temParticipacao || equipe.length
+          ? <KpiCard destaque label={`Gerado em ${mes}`} value={reais(comissaoMes + receitaMes)} sub={partesGerado.join(' · ')} />
           : <KpiCard destaque label={`Comissão de ${mes}`} value={rCurto(comissaoMes)} sub={`${fmtNum(comissionados.length)} ${comissionados.length === 1 ? 'comissionado' : 'comissionados'} · abertura, ativação e reativação`} />}
         <KpiCard label="A pagar" value={reais(aPagar)} sub={adiantado ? `gerado menos pago · ${rCurto(adiantado)} já pagos a mais a outro parceiro` : 'tudo o que foi gerado menos o que já foi pago'} />
         <KpiCard label={`Pago referente a ${mes}`} value={reais(pagoMes)} sub="pagamentos lançados com este mês de referência" />
         <KpiCard label={`Eventos de ${mes}`} value={fmtNum(eventos)} sub={`${plural(soma(l => l.abertasMes), 'aberta', 'abertas')} · ${plural(soma(l => l.ativacoesMes), 'ativada', 'ativadas')} · ${plural(soma(l => l.reativadasMes), 'reativada', 'reativadas')}`} />
       </KpiRow>
 
+      {equipe.length > 0 && (
+        <Panel title="Equipe · remuneração por níveis"
+          subtitle={`O que cada um gerou em ${mesLongo(mesRef)}: o fixo do nível, cada conta pelo valor do nível e o bônus da base ativa. Gerado, pago e saldo são até hoje. Clique no nome para ver a conta do mês, o extrato e as regras.`}>
+          <div className="tbl-wrap">
+            <table className="tbl tbl-dense">
+              <thead>
+                <tr>
+                  <th scope="col">Pessoa</th>
+                  <th scope="col" className="col-p2"><span className="inline-flex items-center gap-1">Nível<Dica texto={DICA_NIVEL} /></span></th>
+                  <th scope="col" className="num col-p2"><span className="inline-flex items-center justify-end gap-1">Pontos de {mes}<Dica texto={DICA_PONTOS} /></span></th>
+                  <th scope="col" className="num">Total de {mes}</th><th scope="col" className="num col-p3">Gerado até hoje</th><th scope="col" className="num col-p3">Pago até hoje</th><th scope="col" className="num">Saldo a pagar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {equipe.map(l => (
+                  <tr key={l.nome}>
+                    <td className="font-medium">
+                      <Link href={abrir(l.nome)} className="link">{l.nome}</Link>
+                      <span className="block text-label font-normal text-fg-subtle md:hidden">{l.nivel != null ? `Nível ${l.nivel}` : 'por conta'}</span>
+                    </td>
+                    <td className={cn('col-p2', l.nivel == null && 'muted')}>{l.nivel != null ? `Nível ${l.nivel}` : 'comissão por conta'}</td>
+                    <td className={cn('num col-p2', !l.pontos && 'subtle')}>{l.pontos ? pts(l.pontos) : TRACO}</td>
+                    <td className={cn('num font-semibold', !l.comissaoMes && 'subtle')}>{r0(l.comissaoMes)}</td>
+                    <td className="num col-p3">{r0(l.geradoTotal)}</td>
+                    <td className="num col-p3">{r0(l.pago)}</td>
+                    <td className={cn('num font-semibold', l.saldo < 0 ? 'text-warn' : !l.saldo && 'subtle')}>{r0(l.saldo)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {equipe.length > 1 && (
+                <tfoot>
+                  <tr className="total">
+                    <td>Total</td>
+                    <td className="col-p2" />
+                    <td className="num col-p2">{pts(somaDe(equipe, l => l.pontos))}</td>
+                    <td className="num">{r0(equipeMes)}</td>
+                    <td className="num col-p3">{r0(somaDe(equipe, l => l.geradoTotal))}</td>
+                    <td className="num col-p3">{r0(somaDe(equipe, l => l.pago))}</td>
+                    <td className="num">{r0(somaDe(equipe, l => l.saldo))}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </Panel>
+      )}
+
+      {(porContaSo.length > 0 || equipe.length === 0) && (
       <Panel title="Comissionados" subtitle={`O que cada um gerou em ${mesLongo(mesRef)} e a posição até hoje. Clique no nome para ver as contas, o extrato, os pagamentos e as regras.`}>
         <div className="tbl-wrap">
           <table className="tbl tbl-dense">
@@ -131,8 +215,8 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
               </tr>
             </thead>
             <tbody>
-              {linhas.length === 0 && <LinhaVazia colunas={8}>Ninguém marcado como comissionado. Marque em Parâmetros › Responsáveis (coluna Comissão).</LinhaVazia>}
-              {linhas.map(l => (
+              {porContaSo.length === 0 && <LinhaVazia colunas={8}>Ninguém marcado como comissionado. Marque em Parâmetros › Responsáveis (coluna Comissão).</LinhaVazia>}
+              {porContaSo.map(l => (
                 <tr key={l.nome}>
                   <td className="font-medium"><Link href={abrir(l.nome)} className="link">{l.nome}</Link></td>
                   <td className={cn('num col-p2', !l.abertasMes && 'subtle')}>{n0(l.abertasMes)}</td>
@@ -145,23 +229,24 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
                 </tr>
               ))}
             </tbody>
-            {linhas.length > 1 && (
+            {porContaSo.length > 1 && (
               <tfoot>
                 <tr className="total">
                   <td>Total</td>
-                  <td className="num col-p2">{n0(soma(l => l.abertasMes))}</td>
-                  <td className="num col-p2">{n0(soma(l => l.ativacoesMes))}</td>
-                  <td className="num col-p2">{n0(soma(l => l.reativadasMes))}</td>
-                  <td className="num">{r0(comissaoMes)}</td>
-                  <td className="num col-p3">{r0(soma(l => l.geradoTotal))}</td>
-                  <td className="num col-p3">{r0(soma(l => l.pago))}</td>
-                  <td className="num">{r0(saldo)}</td>
+                  <td className="num col-p2">{n0(somaDe(porContaSo, l => l.abertasMes))}</td>
+                  <td className="num col-p2">{n0(somaDe(porContaSo, l => l.ativacoesMes))}</td>
+                  <td className="num col-p2">{n0(somaDe(porContaSo, l => l.reativadasMes))}</td>
+                  <td className="num">{r0(porContaMes)}</td>
+                  <td className="num col-p3">{r0(somaDe(porContaSo, l => l.geradoTotal))}</td>
+                  <td className="num col-p3">{r0(somaDe(porContaSo, l => l.pago))}</td>
+                  <td className="num">{r0(somaDe(porContaSo, l => l.saldo))}</td>
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
       </Panel>
+      )}
 
       {receitas.length > 0 && (
         <Panel title="Participação na receita · corretagem, zeragem e incentivo" subtitle={`Parceiros que recebem uma parte do que os clientes deles geram. A parte de cada um em ${mesLongo(mesRef)} e a posição até hoje. Clique no nome para ver cliente a cliente.`}>

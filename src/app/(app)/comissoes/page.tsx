@@ -9,7 +9,8 @@ import { regrasDoParceiroPorCorretora, regrasReceita, repasseBtg } from '@/lib/g
 import type { ParceiroRepasse } from '@/lib/gestao/btg'
 import { TEXTO_SO_FICHA, inicioDasRegras, nomesComRegra, textoDaRegra } from '@/lib/gestao/participacao'
 import { parceirosDeComissao } from '@/lib/gestao/comissao'
-import { normTexto } from '@/lib/texto'
+import { equipe, responsavelDoUsuario } from '@/lib/gestao/guard'
+import { mesmaPessoa, normTexto } from '@/lib/texto'
 import { mesAtual, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { CORRETORAS, CORRETORA_LABEL, corretorasDoPerfil, isCorretora } from '@/lib/corretoras'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
@@ -48,7 +49,11 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   const minhas = corretorasDoPerfil(profile)
   const verBtg = minhas.includes('BTG')
   const [todos, noBtg, regrasTodas] = await Promise.all([parceirosLista(), verBtg ? repasseBtg() : Promise.resolve<ParceiroRepasse[]>([]), regrasReceita(minhas)])
+  // O valor de cada pessoa da equipe (os comissionados) só para o admin e para a própria pessoa (Lucas, 18/11/2026,
+  // na remuneração por níveis); os parceiros com participação na receita seguem visíveis para a equipe
+  const eu = admin ? null : await responsavelDoUsuario((await equipe()).db, profile.nome ?? '')
   const parceiros = parceirosDeComissao(todos, [...noBtg.map(r => r.nome), ...nomesComRegra(regrasTodas.flatMap(r => r.regras))])
+    .filter(p => admin || !p.comissionado || mesmaPessoa(p.nome, eu))
   const pedido = normTexto(q('parceiro'))
   const parceiroSel = pedido ? parceiros.find(p => normTexto(p.nome) === pedido) ?? null : null
   const corretoraParam = q('corretora')

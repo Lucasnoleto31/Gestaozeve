@@ -9,9 +9,10 @@ import { regrasDoParceiroPorCorretora, regrasReceita, repasseBtg } from '@/lib/g
 import type { ParceiroRepasse } from '@/lib/gestao/btg'
 import { TEXTO_SO_FICHA, inicioDasRegras, nomesComRegra, textoDaRegra } from '@/lib/gestao/participacao'
 import { parceirosDeComissao } from '@/lib/gestao/comissao'
+import { pessoaNoModelo, remuneracaoDaEquipe } from '@/lib/gestao/consultasRemuneracao'
 import { equipe, responsavelDoUsuario } from '@/lib/gestao/guard'
 import { mesmaPessoa, normTexto } from '@/lib/texto'
-import { mesAtual, mesLongo, parseMes } from '@/lib/gestao/meses'
+import { mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { CORRETORAS, CORRETORA_LABEL, corretorasDoPerfil, isCorretora } from '@/lib/corretoras'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Alert } from '@/components/ui/Alert'
@@ -22,6 +23,7 @@ import { AbaResumo } from './AbaResumo'
 import { AbaReceita } from './AbaReceita'
 import { AbaRepasseBtg, ParticipacaoBtg } from './ParticipacaoBtg'
 import { AbaCarteira, AbaExtrato, AbaPagamentos, AbaRetorno } from './AbasParceiro'
+import { AbaExtratoNivel, AbaPagamentosNivel, AbaResumoNivel } from './Equipe'
 import { hrefComissoes } from './comum'
 
 const ABAS = [
@@ -31,6 +33,8 @@ const ABAS = [
   { valor: 'carteira', label: 'Carteira' },
   { valor: 'retorno', label: 'Retorno' },
 ]
+// Quem está na remuneração por níveis: o Retorno compara receita com comissão por conta, que não existe mais
+const ABAS_NIVEL = ABAS.filter(a => a.valor !== 'retorno')
 
 // Comissão de parceiros em dois níveis: a visão geral (quanto cada comissionado gerou no mês, o que foi
 // pago e o saldo) e, ao escolher um parceiro, as abas dele — Resumo, Extrato, Pagamentos e regras,
@@ -106,8 +110,12 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   const regraBtg = noBtg.find(r => normTexto(r.nome) === normTexto(parceiro)) ?? null
   const mostraBtg = !!regraBtg && (!corretora || corretora === 'BTG')
   const participa = temReceita || !!regraBtg
+  // remuneração por níveis (S62): a partir do mês de entrada, Resumo, Extrato e regras do nível
+  const rem = parceiroSel.comissionado ? await remuneracaoDaEquipe() : null
+  const pessoaModelo = rem ? pessoaNoModelo(rem, parceiro) : null
+  const noModelo = !!pessoaModelo && mesRef >= pessoaModelo.nivelDesde
   // o Retorno (receita das contas menos a comissão por conta) não serve para quem recebe sobre a própria receita
-  const abas = participa && !parceiroSel.comissionado ? ABAS.filter(a => a.valor !== 'retorno') : ABAS
+  const abas = noModelo ? ABAS_NIVEL : participa && !parceiroSel.comissionado ? ABAS.filter(a => a.valor !== 'retorno') : ABAS
   const padrao = 'resumo'
   const pedida = q('aba')
   const aba = abas.some(a => a.valor === pedida) ? pedida : padrao
@@ -126,7 +134,11 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   return (
     <>
       <PageHeader eyebrow="Comissões" title={parceiro} actions={filtros}
-        description={temReceita
+        description={pessoaModelo
+          ? noModelo
+            ? `Remuneração por níveis desde ${mesCurto(pessoaModelo.nivelDesde)}: fixo do nível, cada conta pelo valor do nível e bônus da base ativa${corretora ? `, na ${CORRETORA_LABEL[corretora]}` : ''}, em ${mesLongo(mesRef)}.`
+            : `Comissão por abertura, ativação e reativação de conta em ${mesLongo(mesRef)}. A partir de ${mesCurto(pessoaModelo.nivelDesde)}, remuneração por níveis.`
+          : temReceita
           ? `Participação na receita: ${descricaoReceita}${regraBtg ? `; no BTG, ${descricaoBtg}` : ''}.${parceiroSel.comissionado ? ' Também recebe comissão por conta aberta e ativada.' : ''}`
           : regraBtg
             ? `Participação na comissão do BTG: ${descricaoBtg}.${parceiroSel.comissionado ? ' Também recebe comissão por conta aberta e ativada.' : ''}`
@@ -159,9 +171,12 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
             A participação dele vale {[...receitaTodas.map(r => naCorretora(r.corretora)), ...(regraBtg ? ['no BTG'] : [])].join(' e ')}. <Link href={hrefComissoes({ parceiro, mes: mesRef })} className="link">Ver sem o filtro de corretora</Link>. A carteira e o extrato dele aqui ficam nas outras abas.
           </Alert>
         )}
-        {aba === 'resumo' && parceiroSel.comissionado && <AbaResumo {...filtro} comissionado participacao={parceiroSel.participacao} admin={admin} />}
-        {aba === 'extrato' && <AbaExtrato {...filtro} />}
-        {aba === 'pagamentos' && <AbaPagamentos parceiro={parceiro} admin={admin} comissionado={parceiroSel.comissionado} receita={receitaTodas} btg={regraBtg} />}
+        {aba === 'resumo' && parceiroSel.comissionado && !noModelo && <AbaResumo {...filtro} comissionado participacao={parceiroSel.participacao} admin={admin} />}
+        {aba === 'resumo' && noModelo && <AbaResumoNivel {...filtro} />}
+        {aba === 'extrato' && (noModelo ? <AbaExtratoNivel {...filtro} /> : <AbaExtrato {...filtro} />)}
+        {aba === 'pagamentos' && (pessoaModelo
+          ? <AbaPagamentosNivel parceiro={parceiro} admin={admin} />
+          : <AbaPagamentos parceiro={parceiro} admin={admin} comissionado={parceiroSel.comissionado} receita={receitaTodas} btg={regraBtg} />)}
         {aba === 'carteira' && <AbaCarteira {...filtro} />}
         {aba === 'retorno' && <AbaRetorno {...filtro} />}
       </PageBody>

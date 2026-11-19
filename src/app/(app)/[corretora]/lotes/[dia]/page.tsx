@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
 import { contexto } from '@/lib/gestao/pagina'
 import { equipe } from '@/lib/gestao/guard'
 import { operacoesDoDia } from '@/lib/gestao/consultas'
@@ -33,7 +34,12 @@ export default async function OperacoesDoDiaPage({ params }: { params: ParamsDia
     <>
       <PageHeader
         eyebrow={ctx.eyebrow}
-        title={`Operações de ${dataPt(dia)}`}
+        // celular: a seta de voltar fica ao lado do título (a descrição, com o link "Voltar ao giro diário",
+        // some ali; o dia da semana vai para a frase que abre a tela e a instrução, para o "i" da lista)
+        title={<>
+          <Link href={`${ctx.base}/lotes`} aria-label="Voltar ao giro diário" className="-ml-3 inline-flex h-11 w-11 items-center justify-center align-middle text-fg md:hidden"><ArrowLeft className="h-5 w-5" aria-hidden /></Link>
+          Operações de {dataPt(dia)}
+        </>}
         tituloNoCelular
         description={
           <>

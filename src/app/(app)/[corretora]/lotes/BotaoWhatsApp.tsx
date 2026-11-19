@@ -12,7 +12,8 @@ import { resumoGiroDoDia } from '@/lib/gestao/acoesGiro'
 import { dataPt } from '@/components/gestao/Celulas'
 import type { Corretora } from '@/lib/corretoras'
 
-export function BotaoWhatsApp({ corretora, dia }: { corretora: Corretora; dia: string }) {
+// className: no celular o botão do cabeçalho some e a aba Agora mostra o dela, logo abaixo da frase
+export function BotaoWhatsApp({ corretora, dia, className }: { corretora: Corretora; dia: string; className?: string }) {
   const [aberto, setAberto] = useState(false)
   const [carregando, setCarregando] = useState(false)
   const [texto, setTexto] = useState<string | null>(null)
@@ -30,7 +31,7 @@ export function BotaoWhatsApp({ corretora, dia }: { corretora: Corretora; dia: s
 
   return (
     <>
-      <Button variant="secondary" size="sm" onClick={abrir} loading={carregando} title={`Resumo de ${dataPt(dia)} para o WhatsApp`}>
+      <Button variant="secondary" size="sm" className={className} onClick={abrir} loading={carregando} title={`Resumo de ${dataPt(dia)} para o WhatsApp`}>
         <MessageCircle className="h-4 w-4" aria-hidden />WhatsApp
       </Button>
       <Modal open={aberto} onClose={() => setAberto(false)} title={`Giro de ${dataPt(dia)}`} subtitle="O último dia lançado, no formato da mensagem do grupo." size="md">

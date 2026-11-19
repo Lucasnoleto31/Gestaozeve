@@ -2,17 +2,31 @@
 // giro, receita, comissão, parceiros e leads). Por padrão aparece o essencial de cada bloco; "todas as
 // linhas" abre a conta completa do fechamento (bruta, impostos, clientes diretos, cada parceiro, fora do
 // giro e Banking passo a passo), que antes ficava tudo junto numa tabela de mais de 40 linhas.
+// No celular (DESIGN.md §8) a aba abre pela frase com os três meses mais novos; a tabela vem antes do
+// gráfico, mostra primeiro os meses mais novos e leva o Total para uma lista recolhida.
+import { Fragment } from 'react'
 import Link from 'next/link'
 import type { Contexto } from '@/lib/gestao/pagina'
 import { comissaoMensal, funilMensal, painelResumo } from '@/lib/gestao/consultas'
-import { janelaMeses, mesCurto, mesLongo } from '@/lib/gestao/meses'
+import { janelaMeses, mesAtual as mesDeHoje, mesCurto, mesLongo } from '@/lib/gestao/meses'
 import type { FunilMensalRow, PainelMensalRow } from '@/lib/gestao/tipos'
 import { fmtPct } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Panel } from '@/components/ui/Panel'
+import { Recolhido } from '@/components/ui/Recolhido'
 import { TRACO, n0, n2, p1, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
+import { Resumo } from '@/components/gestao/Resumo'
 import { economiaDoPainel } from '@/lib/gestao/economiaPainel'
+import { fraseDosMeses } from './frases'
+
+// A coluna do nome da linha no celular: mais estreita (sobra lugar para dois meses) e com o nome inteiro,
+// quebrando em linhas. O "!" é preciso porque a regra da base para a primeira coluna (46vw, sem quebra,
+// reticências) fica fora de camada e vence os utilitários.
+const COL_NOME = 'max-md:min-w-[9.5rem] max-md:max-w-[9.5rem]! max-md:whitespace-normal!'
+// Cada mês com metade do que sobra da tela (largura menos as margens e a coluna do nome): cabem dois meses
+// inteiros, sem um terceiro cortado ao meio (número cortado parece outro número)
+const COL_MES = 'max-md:min-w-[calc((100vw-11.5rem)/2)]'
 
 type Linha = {
   label: string
@@ -41,8 +55,6 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
   const comDado = (m: string) => { const x = mensalPorMes.get(m); return !!x && (x.lotes > 0 || x.receita > 0 || x.clientes_ativos > 0 || x.migrados_acumulados > 0 || x.novas_migracoes > 0 || x.entradas > 0) }
   const primeiro = janela.findIndex(comDado)
   const meses = primeiro < 0 ? janela.slice(-1) : janela.slice(primeiro)
-  // No celular só os 3 últimos meses ficam visíveis (os outros em telas ≥ 768 px)
-  const colMes = (i: number) => (i < meses.length - 3 ? 'col-p2' : '')
 
   const funilPorMes = new Map(funil.map(f => [f.mes_ref, f]))
   // Comissão de parceiros (abertura e ativação de conta) nesta corretora, somando os parceiros
@@ -171,10 +183,38 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
   })
   const hrefLinhas = `${base}/painel?${ctx.mesEscolhido ? `mes=${mesRef.slice(0, 7)}&` : ''}aba=meses${todas ? '' : '&linhas=todas'}`
   const periodo = meses.length > 1 ? `${mesCurto(meses[0])} a ${mesCurto(mesRef)}` : mesCurto(mesRef)
+  const somaDe = (l: Linha) => (l.total ? l.valores.reduce<number>((s, v) => s + (v ?? 0), 0) : null)
 
-  return (
+  // A frase do celular: os três meses mais novos na linha de total da tabela (receita total; no BTG, a
+  // comissão líquida do escritório), com os mesmos valores dela. A aba não carrega o último dia lançado:
+  // "em andamento" é o mês do calendário.
+  const linhaTotal = [blocoReceita, blocoComissao].flatMap(b => b?.linhas ?? []).find(l => l.destaque === 'total')
+  const frase = linhaTotal
+    ? fraseDosMeses(linhaTotal.label.toLowerCase(), meses.map((m, i) => ({ mes: m, valor: linhaTotal.valores[i] })).reverse().slice(0, 3), mesRef === mesDeHoje())
+    : null
+  // A explicação da comissão: rodapé no computador, recolhida no celular (o mesmo texto nos dois)
+  const notaComissao = comRepasse && (
     <>
-      <Panel title="Lotes, receita e clientes ativos" subtitle={`${periodo} · receita = corretagem + zeragem${atp ? '' : ' + incentivo'}`}>
+      A comissão segue o fechamento mensal do {ctx.label} (Parâmetros): no mês já fechado vale o percentual que o {ctx.label} pagou; nos outros, as faixas.
+      {todas && ` A receita bruta do ${ctx.label} é maior que a receita do giro porque o preço cobrado do cliente embute ${fmtPct(cfg.impostosEmbutidosPct, 2)} de impostos e a tarifa cadastrada (R$/lote) é o valor sem eles.`}
+      {todas && temLivros && ' Os clientes de parceiros com participação na comissão seguem a divisão combinada com cada parceiro: imposto, parte do parceiro e o que fica para o escritório.'}
+      {temExtras && ' O fora do giro e o Banking vêm das planilhas do mês (Importar), já com a parte do escritório e o imposto de lá.'}
+      {' '}A conta de um mês só, explicada, está na aba Resumo ({mesLongo(mesRef)}).
+    </>
+  )
+
+  // Uma coluna só, com a ordem trocada no celular: a frase e a tabela vêm antes do gráfico (a tabela tem
+  // de começar na primeira tela). O espaço entre os blocos é o mesmo que a página dava.
+  return (
+    <div className="flex flex-col gap-6 md:gap-8">
+      {frase && <div className="md:hidden"><Resumo frase={frase} /></div>}
+
+      <Panel className="max-md:order-last" title="Lotes, receita e clientes ativos"
+        subtitle={<>
+          <span className="max-md:hidden">{`${periodo} · receita = corretagem + zeragem${atp ? '' : ' + incentivo'}`}</span>
+          {/* no celular os dois eixos não dizem o que medem: uma linha curta diz */}
+          <span className="md:hidden">Barras: lotes. Linha: receita em R$.</span>
+        </>}>
         <GraficoSeries
           dados={grafico}
           series={[
@@ -189,33 +229,39 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
       </Panel>
 
       <Panel title={todas ? 'Mês a mês · todas as linhas' : 'Mês a mês'}
-        subtitle={`${periodo}; o último mês pode estar parcial. ${todas ? 'A conta completa do fechamento, passo a passo.' : 'O essencial de cada bloco.'}`}
-        action={<Link href={hrefLinhas} scroll={false} className="link text-label">{todas ? 'mostrar só o essencial' : `ver todas as linhas (${totalLinhas})`}</Link>}>
-        {/* com poucos meses a tabela não se estica pela tela toda: os números ficam perto dos rótulos */}
-        <div className="tbl-wrap" style={meses.length <= 6 ? { maxWidth: 520 + (meses.length + 1) * 130 } : undefined}>
-          <table className="tbl tbl-dense">
+        subtitle={<>
+          <span className="max-md:hidden">{`${periodo}; o último mês pode estar parcial. ${todas ? 'A conta completa do fechamento, passo a passo.' : 'O essencial de cada bloco.'}`}</span>
+          <span className="md:hidden">{meses.length > 2 ? 'Arraste para ver os meses anteriores.' : periodo}</span>
+        </>}
+        action={<Link href={hrefLinhas} scroll={false} className="link text-label max-md:-my-3 max-md:inline-block max-md:py-3">{todas ? 'mostrar só o essencial' : `ver todas as linhas (${totalLinhas})`}</Link>}>
+        {/* com poucos meses a tabela não se estica pela tela toda: os números ficam perto dos rótulos.
+            No celular a matriz continua tabela (DESIGN.md §8.6), com todos os meses: a moldura nasce rolada
+            para os mais novos (direção invertida só na moldura; a tabela continua da esquerda para a direita),
+            o nome da linha quebra em vez de cortar e o Total vai para a lista recolhida logo abaixo. */}
+        <div className="tbl-wrap max-md:[direction:rtl]" style={meses.length <= 6 ? { maxWidth: 520 + (meses.length + 1) * 130 } : undefined}>
+          <table className="tbl tbl-dense max-md:[direction:ltr]">
             <thead>
               <tr>
-                <th className="sticky-col min-w-[200px]">Indicador</th>
-                {meses.map((m, i) => <th key={m} className={cn('num', colMes(i), m === mesRef && 'text-fg')}>{mesCurto(m)}</th>)}
-                {meses.length > 1 && <th className="num">Total</th>}
+                <th className={cn('sticky-col min-w-[200px]', COL_NOME)}>Indicador</th>
+                {meses.map(m => <th key={m} className={cn('num', COL_MES, m === mesRef && 'text-fg')}>{mesCurto(m)}</th>)}
+                {meses.length > 1 && <th className="num max-md:hidden">Total</th>}
               </tr>
             </thead>
             {blocos.map(b => (
               <tbody key={b.titulo}>
                 <tr>
-                  <td className="sticky-col border-b-0 pb-1 pt-5"><span className="label whitespace-nowrap">{b.titulo}</span></td>
+                  <td className={cn('sticky-col border-b-0 pb-1 pt-5', COL_NOME)}><span className="label whitespace-nowrap max-md:whitespace-normal">{b.titulo}</span></td>
                   <td colSpan={meses.length + (meses.length > 1 ? 1 : 0)} className="border-b-0 pb-1 pt-5" />
                 </tr>
                 {b.linhas.map(l => {
-                  const soma = l.total ? l.valores.reduce<number>((s, v) => s + (v ?? 0), 0) : null
+                  const soma = somaDe(l)
                   return (
                     <tr key={l.label} className={l.destaque === 'total' ? 'total' : ''}>
-                      <td className={cn('sticky-col', l.destaque === 'sub' && 'pl-6 text-fg-muted', l.destaque === 'bold' && 'font-semibold')}>{l.label}</td>
+                      <td className={cn('sticky-col', COL_NOME, l.destaque === 'sub' && 'pl-6 text-fg-muted max-md:pl-4', l.destaque === 'bold' && 'font-semibold')}>{l.label}</td>
                       {l.valores.map((v, i) => (
-                        <td key={i} className={cn('num', colMes(i), (v == null || v === 0) && 'subtle', l.destaque === 'bold' && 'font-semibold')}>{l.fmt(v)}</td>
+                        <td key={i} className={cn('num', (v == null || v === 0) && 'subtle', l.destaque === 'bold' && 'font-semibold')}>{l.fmt(v)}</td>
                       ))}
-                      {meses.length > 1 && <td className="num font-semibold">{soma == null ? '' : l.fmt(soma)}</td>}
+                      {meses.length > 1 && <td className="num font-semibold max-md:hidden">{soma == null ? '' : l.fmt(soma)}</td>}
                     </tr>
                   )
                 })}
@@ -223,16 +269,39 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
             ))}
           </table>
         </div>
-        {comRepasse && (
-          <p className="mt-3 max-w-4xl text-micro text-fg-subtle">
-            A comissão segue o fechamento mensal do {ctx.label} (Parâmetros): no mês já fechado vale o percentual que o {ctx.label} pagou; nos outros, as faixas.
-            {todas && ` A receita bruta do ${ctx.label} é maior que a receita do giro porque o preço cobrado do cliente embute ${fmtPct(cfg.impostosEmbutidosPct, 2)} de impostos e a tarifa cadastrada (R$/lote) é o valor sem eles.`}
-            {todas && temLivros && ' Os clientes de parceiros com participação na comissão seguem a divisão combinada com cada parceiro: imposto, parte do parceiro e o que fica para o escritório.'}
-            {temExtras && ' O fora do giro e o Banking vêm das planilhas do mês (Importar), já com a parte do escritório e o imposto de lá.'}
-            {' '}A conta de um mês só, explicada, está na aba Resumo ({mesLongo(mesRef)}).
-          </p>
+        {/* a coluna Total do computador: no celular, uma lista de nome e soma, só com as linhas que se somam */}
+        {meses.length > 1 && (
+          <Recolhido tamanho="linha" titulo={`Total de ${periodo}`} className="mt-2 md:hidden">
+            <table className="tbl w-full">
+              <tbody>
+                {blocos.map(b => {
+                  const somaveis = b.linhas.filter(l => l.total)
+                  if (!somaveis.length) return null
+                  return (
+                    <Fragment key={b.titulo}>
+                      <tr><td colSpan={2} className="border-b-0 pb-1 pt-4"><span className="label">{b.titulo}</span></td></tr>
+                      {somaveis.map(l => (
+                        <tr key={l.label} className={l.destaque === 'total' ? 'total' : ''}>
+                          <td className={cn(l.destaque === 'sub' && 'pl-6 text-fg-muted', l.destaque === 'bold' && 'font-semibold')}>{l.label}</td>
+                          <td className={cn('num align-top', l.destaque === 'sub' && 'text-fg-muted', l.destaque === 'bold' && 'font-semibold')}>{l.fmt(somaDe(l))}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </Recolhido>
+        )}
+        {notaComissao && (
+          <>
+            <p className="mt-3 max-w-4xl text-micro text-fg-subtle max-md:hidden">{notaComissao}</p>
+            <Recolhido tamanho="linha" titulo="Como a comissão é calculada" className="md:hidden">
+              <p className="text-label text-fg-muted">{notaComissao}</p>
+            </Recolhido>
+          </>
         )}
       </Panel>
-    </>
+    </div>
   )
 }

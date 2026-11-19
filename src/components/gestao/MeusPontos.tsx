@@ -21,7 +21,8 @@ export async function MeusPontos({ comLink = false }: { comLink?: boolean }) {
     <section aria-label="Meus pontos" className="max-w-5xl rounded-lg border border-line bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-label font-medium text-fg-muted">Meus pontos · Nível {d.conta.nivel?.nivel}</h2>
-        {comLink && <Link href={`/comissoes?parceiro=${encodeURIComponent(d.pessoa.nome)}`} className="link text-label">Ver a conta do mês</Link>}
+        {/* celular: área de toque de 44 px; a margem negativa devolve a altura e o cabeçalho não cresce */}
+        {comLink && <Link href={`/comissoes?parceiro=${encodeURIComponent(d.pessoa.nome)}`} className="link text-label max-md:-my-3 max-md:inline-flex max-md:min-h-11 max-md:items-center">Ver a conta do mês</Link>}
       </div>
       <p className="mt-1.5 text-balance text-dense text-fg">{semQuebra(texto.frase)}</p>
       <p className="mt-1 text-label text-fg-muted">{semQuebra(texto.apoio)}</p>

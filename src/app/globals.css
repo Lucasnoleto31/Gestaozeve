@@ -829,7 +829,13 @@ html {
     padding: 14px 16px;
   }
 
+  /* os dois cartões da frente dividem as mesmas três linhas (nome, número, apoio): quando o nome de um
+     quebra em duas linhas e o do outro não, os dois números continuam na mesma altura */
   .kpi-row:not(.kpi-etiquetas) > .kpi:nth-child(-n + 2) {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 3;
+    align-content: start;
     margin-bottom: 6px;
   }
 

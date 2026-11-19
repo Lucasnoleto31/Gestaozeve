@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import { clientesLista, giroDiario, painelMensal, ultimaData } from '@/lib/gestao/consultas'
@@ -22,6 +23,7 @@ import { Resumo } from '@/components/gestao/Resumo'
 import { BarraCelula, LinhaVazia, TRACO, dataCurta, n0, n2, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { TabelaReceita } from './TabelaReceita'
+import { fatiaDoTotal, fraseDosMaiores, notaDoGrafico } from './celular'
 import { compactar } from '@/lib/compacto'
 import { CAMPOS_RECEITA_LINHA } from '@/lib/gestao/tipos'
 
@@ -31,6 +33,20 @@ import { CAMPOS_RECEITA_LINHA } from '@/lib/gestao/tipos'
 // O que saiu da visão principal no redesenho de 16/11/2026 continua aqui: os números mês a mês em "ver
 // os números" e o valor do cliente, as safras e a receita por estado em "Análises". Só o ranking de
 // lotes saiu de vez, porque repetia a tabela. As contas são as mesmas de antes.
+// No celular (18/11/2026, DESIGN.md §8) a ordem é a mesma e as tabelas de pessoas viram lista: o nome, uma
+// linha de apoio com o que no computador são colunas e um número à direita com o nome dele embaixo. O
+// bloco dos 10 maiores não aparece (são as primeiras linhas da lista por cliente) e a tabela mês a mês
+// continua tabela, com todas as colunas, rolando de lado dentro da moldura.
+
+// Celular: lugar do número à direita nas listas ("R$ 63.119" e, nas de 12 meses, "R$ 1.804.393")
+const LISTA: CSSProperties = { '--lista-direita': '7rem' } as CSSProperties
+const LISTA_LARGA: CSSProperties = { '--lista-direita': '8.5rem' } as CSSProperties
+// Celular: o que no computador é o cabeçalho da coluna vai escrito depois do número, na linha de apoio
+// (data-sufixo da base). Os espaços não quebram, para a linha partir antes do número e não no meio de
+// "em 12 meses".
+const NBSP = String.fromCharCode(160)
+const nb = (texto: string) => texto.replace(/ /g, NBSP)
+
 export default async function ReceitaPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
   const { corretora, mesRef, base } = ctx
@@ -87,6 +103,11 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
   const ltvSafra = valorPorSafra(migrados, 6)
   const porEstado = somarPorMomento(clientes)
   const n1 = (v: number) => v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+  // Celular: a nota embaixo do gráfico e o nome da coluna "Clientes com receita" escrito depois do número
+  const nota = notaDoGrafico({ incentivo: temIncentivo, parcial: proj.parcial, mesRef, ultimaData: proj.ultimaData })
+  // Celular, tabela mês a mês: recuo da primeira coluna depois do Total (o "!" vence o px-1 da tabela)
+  const aposTotal = 'max-md:pl-14!'
+  const comReceitaTxt = (n: number) => (n === 1 ? 'cliente com receita' : 'clientes com receita')
 
   return (
     <>
@@ -112,7 +133,8 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
             dica="Clientes com alguma receita no mês, comparados com todos os que já migraram." />
         </KpiRow>
 
-        <Panel title="Receita por mês" subtitle={serie.length ? `${rCurto(receitaDosMeses)} de ${mesCurto(serie[0].mes)} a ${mesCurto(mesRef)}, com ${fmtNum(totMensal.lotes)} lotes${temIncentivo ? `, mais ${rCurto(totMensal.inc)} de incentivo` : ''}.` : undefined}>
+        {/* celular: os três totais do subtítulo ficam na linha Total de "ver os números mês a mês" */}
+        <Panel title="Receita por mês" subtitle={serie.length ? <span className="max-md:hidden">{`${rCurto(receitaDosMeses)} de ${mesCurto(serie[0].mes)} a ${mesCurto(mesRef)}, com ${fmtNum(totMensal.lotes)} lotes${temIncentivo ? `, mais ${rCurto(totMensal.inc)} de incentivo` : ''}.`}</span> : undefined}>
           {serie.length === 0 ? <p className="py-10 text-center text-dense text-fg-subtle">Sem receita lançada na janela.</p> : (
             <>
               <GraficoSeries
@@ -125,20 +147,25 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
                 ]}
                 colorido formato="brl" altura={260}
               />
+              {nota && <p className="mt-2 text-label text-fg-muted md:hidden">{nota}</p>}
               <Recolhido tamanho="linha" titulo="ver os números mês a mês">
                 <div className="tbl-wrap">
-                  <table className="tbl tbl-dense max-md:[&_td]:px-1.5 max-md:[&_th]:px-1.5">
-                    <thead><tr><th>Mês</th><th className="num col-p2">Lotes</th><th className="num">Corretagem</th><th className="num">Zeragem</th>{temFixa && <th className="num col-p2">Fixa</th>}<th className="num">Total</th>{temIncentivo && <th className="num col-p2">Incentivo</th>}</tr></thead>
+                  <table className="tbl tbl-dense max-md:[&_td]:px-1 max-md:[&_th]:px-1">
+                    {/* celular: nenhuma coluna some; a receita fixa e o incentivo ficam no lugar e os lotes vão para o fim, para o
+                        Total não sair da primeira vista. A primeira coluna depois do Total leva um recuo que a empurra
+                        inteira para fora da moldura: a primeira vista termina no Total e o resto só aparece inteiro
+                        quando a pessoa arrasta (sem o recuo ficavam pedaços de algarismo na borda). */}
+                    <thead><tr><th>Mês</th><th className="num col-p2">Lotes</th><th className="num">Corretagem</th><th className="num">Zeragem</th>{temFixa && <th className="num">Fixa</th>}<th className="num">Total</th>{temIncentivo && <th className={cn('num', aposTotal)}>Incentivo</th>}<th className={cn('num md:hidden', !temIncentivo && aposTotal)}>Lotes</th></tr></thead>
                     <tbody>
                       {serie.map(({ mes, x }) => (
                         <tr key={mes} className={cn(mes === mesRef && 'font-semibold')}>
                           <td>{mesCurto(mes)}</td><td className="num col-p2">{n0(x?.lotes)}</td><td className="num">{rCurto(x?.receita_corretagem)}</td><td className="num">{rCurto(x?.receita_zeragem)}</td>
-                          {temFixa && <td className="num col-p2">{rCurto(x?.receita_acoes)}</td>}<td className="num">{rCurto(x?.receita)}</td>{temIncentivo && <td className="num col-p2">{rCurto(x?.incentivo)}</td>}
+                          {temFixa && <td className="num">{rCurto(x?.receita_acoes)}</td>}<td className="num">{rCurto(x?.receita)}</td>{temIncentivo && <td className={cn('num', aposTotal)}>{rCurto(x?.incentivo)}</td>}<td className={cn('num md:hidden', !temIncentivo && aposTotal)}>{n0(x?.lotes)}</td>
                         </tr>
                       ))}
                       <tr className="total">
                         <td>Total</td><td className="num col-p2">{n0(totMensal.lotes)}</td><td className="num">{rCurto(totMensal.rc)}</td><td className="num">{rCurto(totMensal.rz)}</td>
-                        {temFixa && <td className="num col-p2">{rCurto(totMensal.ra)}</td>}<td className="num">{rCurto(receitaDosMeses)}</td>{temIncentivo && <td className="num col-p2">{rCurto(totMensal.inc)}</td>}
+                        {temFixa && <td className="num">{rCurto(totMensal.ra)}</td>}<td className="num">{rCurto(receitaDosMeses)}</td>{temIncentivo && <td className={cn('num', aposTotal)}>{rCurto(totMensal.inc)}</td>}<td className={cn('num md:hidden', !temIncentivo && aposTotal)}>{n0(totMensal.lotes)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -155,7 +182,8 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
         </Panel>
 
         <div className="grid gap-8 xl:grid-cols-2">
-          <Panel title="De onde vem: os 10 maiores clientes" subtitle={top.itens.length ? `Juntos, ${fmtPct(top.pctJuntos, 0)} da receita de ${mesCurto(mesRef)}.` : undefined}>
+          {/* celular: os mesmos 10, na mesma ordem e com a mesma fatia, abrem a lista "Receita por cliente" */}
+          <Panel className="max-md:hidden" title="De onde vem: os 10 maiores clientes" subtitle={top.itens.length ? `Juntos, ${fmtPct(top.pctJuntos, 0)} da receita de ${mesCurto(mesRef)}.` : undefined}>
             <div className="tbl-wrap">
               <table className="tbl tbl-dense">
                 <thead><tr><th>Cliente</th><th className="num"><span className="md:hidden">Receita</span><span className="hidden md:inline">Receita no mês</span></th><th className="num"><span className="md:hidden">%</span><span className="hidden md:inline">% do total</span></th></tr></thead>
@@ -174,27 +202,31 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
             </div>
           </Panel>
 
-          <Panel title="De onde vem: por responsável" subtitle="Quem cuida dos clientes que geraram a receita do mês.">
+          <Panel title="De onde vem: por responsável" subtitle={<span className="max-md:hidden">Quem cuida dos clientes que geraram a receita do mês.</span>}>
             <div className="tbl-wrap">
-              <table className="tbl tbl-dense">
+              {/* celular: lista. A fatia vai embaixo do valor; quantos clientes e os 12 meses, na linha de apoio */}
+              <table className="tbl tbl-dense tbl-lista" style={LISTA}>
                 <thead><tr><th>Responsável</th><th className="num col-p2">Clientes com receita</th><th className="num"><span className="md:hidden">Receita</span><span className="hidden md:inline">Receita no mês</span></th><th className="num"><span className="md:hidden">%</span><span className="hidden md:inline">% do total</span></th><th className="num col-p2">Receita 12 meses</th></tr></thead>
                 <tbody>
                   {resp.length === 0 && !temAbertura && <LinhaVazia colunas={5}>Sem receita na janela.</LinhaVazia>}
                   {resp.map(g => (
                     <tr key={g.grupo}>
-                      <td className="font-medium">{g.grupo}</td><td className="num col-p2">{n0(g.comReceita)}</td>
-                      <td className="num">{rCurto(g.receitaMes)}</td><td className="num">{receitaMes ? fmtPct((g.receitaMes / receitaMes) * 100) : TRACO}</td><td className="num col-p2">{rCurto(g.receita12m)}</td>
+                      <td className="cel-titulo font-medium">{g.grupo}</td><td className={cn('num col-p2 cel-sub', !g.comReceita && 'vazio')} data-sufixo={nb(comReceitaTxt(g.comReceita))}>{n0(g.comReceita)}</td>
+                      <td className="num cel-valor" data-rotulo={fatiaDoTotal(g.receitaMes, receitaMes)}>{rCurto(g.receitaMes)}</td><td className="num">{receitaMes ? fmtPct((g.receitaMes / receitaMes) * 100) : TRACO}</td>
+                      <td className={cn('num col-p2 cel-sub', !g.receita12m && 'vazio')} data-sufixo={nb('em 12 meses')}>{rCurto(g.receita12m)}</td>
                     </tr>
                   ))}
                   {temAbertura && (
                     <tr>
-                      <td className="muted">Contas em abertura</td><td className="num col-p2">{n0(abertura.comReceita)}</td>
-                      <td className="num">{rCurto(abertura.receitaMes)}</td><td className="num">{receitaMes ? fmtPct((abertura.receitaMes / receitaMes) * 100) : TRACO}</td><td className="num col-p2">{rCurto(abertura.receita12m)}</td>
+                      <td className="muted cel-titulo">Contas em abertura</td><td className={cn('num col-p2 cel-sub', !abertura.comReceita && 'vazio')} data-sufixo={nb(comReceitaTxt(abertura.comReceita))}>{n0(abertura.comReceita)}</td>
+                      <td className="num cel-valor" data-rotulo={fatiaDoTotal(abertura.receitaMes, receitaMes)}>{rCurto(abertura.receitaMes)}</td><td className="num">{receitaMes ? fmtPct((abertura.receitaMes / receitaMes) * 100) : TRACO}</td>
+                      <td className={cn('num col-p2 cel-sub', !abertura.receita12m && 'vazio')} data-sufixo={nb('em 12 meses')}>{rCurto(abertura.receita12m)}</td>
                     </tr>
                   )}
                   {(resp.length > 0 || temAbertura) && (
                     <tr className="total">
-                      <td>Total</td><td className="num col-p2">{n0(comReceita.length)}</td><td className="num">{rCurto(receitaMes)}</td><td className="num">{receitaMes ? '100,0%' : TRACO}</td><td className="num col-p2">{rCurto(receita12)}</td>
+                      <td className="cel-titulo">Total</td><td className={cn('num col-p2 cel-sub', !comReceita.length && 'vazio')} data-sufixo={nb(comReceitaTxt(comReceita.length))}>{n0(comReceita.length)}</td>
+                      <td className="num cel-valor">{rCurto(receitaMes)}</td><td className="num">{receitaMes ? '100,0%' : TRACO}</td><td className={cn('num col-p2 cel-sub', !receita12 && 'vazio')} data-sufixo={nb('em 12 meses')}>{rCurto(receita12)}</td>
                     </tr>
                   )}
                 </tbody>
@@ -203,7 +235,7 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
           </Panel>
         </div>
 
-        <TabelaReceita clientes={compactar(clientes, CAMPOS_RECEITA_LINHA)} base={base} />
+        <TabelaReceita clientes={compactar(clientes, CAMPOS_RECEITA_LINHA)} base={base} totalMes={top.total} resumoCelular={fraseDosMaiores(top.itens.length, top.pctJuntos, mesRef)} />
 
         <Recolhido titulo="Análises" resumo="valor do cliente, safras de migração e receita por estado">
           <div className="grid gap-8 xl:grid-cols-2">
@@ -232,13 +264,17 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
                 </div>
               </dl>
               <div className="tbl-wrap mt-4">
-                <table className="tbl tbl-dense">
+                {/* celular: "R$ 2.924,30 por mês com operação" vai sempre numa linha própria, embaixo de migrados e
+                    operaram (no fim da fila ele partia em lugares diferentes de uma pessoa para outra). O número
+                    da direita (hoje até R$ 1.659,74) cabe em 7rem, e a largura menor deixa essa linha caber inteira. */}
+                <table className="tbl tbl-dense tbl-lista" style={LISTA}>
                   <thead><tr><th>Responsável</th><th className="num">Migrados</th><th className="num col-p2">Operaram</th><th className="num">Por migração</th><th className="num col-p2">Por mês com operação</th></tr></thead>
                   <tbody>
                     {ltvResp.map(g => (
                       <tr key={g.grupo}>
-                        <td className="font-medium">{g.grupo}</td><td className="num">{n0(g.migrados)}</td><td className="num col-p2">{n0(g.comGiro)}</td>
-                        <td className="num">{r0(g.ltvPorMigracao)}</td><td className="num col-p2">{r0(g.receitaPorMesAtivo)}</td>
+                        <td className="cel-titulo font-medium">{g.grupo}</td><td className={cn('num cel-sub', !g.migrados && 'vazio')} data-sufixo={nb(g.migrados === 1 ? 'migrado' : 'migrados')}>{n0(g.migrados)}</td>
+                        <td className={cn('num col-p2 cel-sub', !g.comGiro && 'vazio')} data-sufixo={nb(g.comGiro === 1 ? 'operou' : 'operaram')}>{n0(g.comGiro)}</td>
+                        <td className="num cel-valor" data-rotulo="por migração">{r0(g.ltvPorMigracao)}</td><td className={cn('num col-p2 cel-sub max-md:block! max-md:before:content-none!', !g.receitaPorMesAtivo && 'vazio')} data-sufixo="por mês com operação">{r0(g.receitaPorMesAtivo)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -250,13 +286,14 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
               {ltvSafra.length > 0 && (
                 <Panel title={<span className="inline-flex items-center gap-1.5">Safras de migração<Dica texto="Quem migrou em cada mês e quanto já rendeu desde então. Safra recente ainda está rendendo: compare só safras com a mesma idade." /></span>}>
                   <div className="tbl-wrap">
-                    <table className="tbl tbl-dense">
+                    <table className="tbl tbl-dense tbl-lista" style={LISTA_LARGA}>
                       <thead><tr><th>Migrou em</th><th className="num">Migrados</th><th className="num col-p2">Operaram</th><th className="num col-p2">Receita</th><th className="num">Por migração</th></tr></thead>
                       <tbody>
                         {ltvSafra.map(s => (
                           <tr key={s.safra}>
-                            <td className="font-medium">{mesCurto(s.safra)}</td><td className="num">{n0(s.migrados)}</td><td className="num col-p2">{n0(s.comGiro)}</td>
-                            <td className="num col-p2">{rCurto(s.receitaTotal)}</td><td className="num">{r0(s.ltvPorMigracao)}</td>
+                            <td className="cel-titulo font-medium">{mesCurto(s.safra)}</td><td className={cn('num cel-sub', !s.migrados && 'vazio')} data-sufixo={nb(s.migrados === 1 ? 'migrado' : 'migrados')}>{n0(s.migrados)}</td>
+                            <td className={cn('num col-p2 cel-sub', !s.comGiro && 'vazio')} data-sufixo={nb(s.comGiro === 1 ? 'operou' : 'operaram')}>{n0(s.comGiro)}</td>
+                            <td className={cn('num col-p2 cel-sub', !s.receitaTotal && 'vazio')} data-sufixo={nb('de receita')}>{rCurto(s.receitaTotal)}</td><td className="num cel-valor" data-rotulo="por migração">{r0(s.ltvPorMigracao)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -265,16 +302,21 @@ export default async function ReceitaPage({ params, searchParams }: { params: Pa
                 </Panel>
               )}
 
-              <Panel title="Por estado do cliente" subtitle="Os grupos da tela Clientes; um clique abre a lista.">
+              <Panel title="Por estado do cliente" subtitle={<>Os grupos da tela Clientes<span className="max-md:hidden">; um clique abre a lista</span>.</>}>
                 <div className="tbl-wrap">
-                  <table className="tbl tbl-dense">
+                  {/* celular: a linha leva à lista de Clientes; o que o grupo quer dizer (no computador, a dica do link) vai embaixo do nome */}
+                  <table className="tbl tbl-dense tbl-lista lista-abre" style={LISTA_LARGA}>
                     <thead><tr><th>Grupo</th><th className="num">Clientes</th><th className="num col-p2">Lotes 12 meses</th><th className="num">Receita 12 meses</th></tr></thead>
                     <tbody>
                       {porEstado.length === 0 && <LinhaVazia colunas={4} />}
                       {porEstado.map(l => (
                         <tr key={l.momento}>
-                          <td className="whitespace-nowrap"><Link href={`${base}/clientes?momento=${l.momento}`} className="link font-medium" title={MOMENTO_RESUMO[l.momento]}>{MOMENTO_GRUPO[l.momento]}</Link></td>
-                          <td className="num">{n0(l.clientes)}</td><td className="num col-p2">{n0(l.lotes12m)}</td><td className="num">{rCurto(l.receita12m)}</td>
+                          <td className="cel-titulo whitespace-nowrap">
+                            <Link href={`${base}/clientes?momento=${l.momento}`} className="link font-medium" title={MOMENTO_RESUMO[l.momento]}>{MOMENTO_GRUPO[l.momento]}</Link>
+                            <span className="block text-label font-normal text-fg-muted md:hidden">{MOMENTO_RESUMO[l.momento]}</span>
+                          </td>
+                          <td className="num cel-sub" data-sufixo={nb(l.clientes === 1 ? 'cliente' : 'clientes')}>{n0(l.clientes)}</td><td className={cn('num col-p2 cel-sub', !l.lotes12m && 'vazio')} data-sufixo={nb('lotes em 12 meses')}>{n0(l.lotes12m)}</td>
+                          <td className="num cel-valor" data-rotulo={l.receita12m ? 'em 12 meses' : undefined}>{rCurto(l.receita12m)}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -2,6 +2,8 @@
 // Lucas: "parece que está um tabelão e eu não consigo entender nada". Aqui ficam a frase do topo e as
 // contas do bloco "De onde vem" (funções puras, testes em receitaTela.test.ts). Os números são os de
 // antes: só mudou a apresentação.
+// Os textos que só o celular mostra (a fatia embaixo do número, a nota do gráfico) ficam ao lado da tela, em
+// app/(app)/[corretora]/receita/celular.ts: entram na lista que roda no navegador, e este arquivo puxa a projeção.
 import { MESES_LONGOS } from '@/lib/format'
 import { arredondado, variacaoPct } from './inicio'
 import type { ProjecaoMes } from './projecao'

@@ -14,6 +14,7 @@ import { lerFaixasComissao } from '@/lib/gestao/comissao'
 import { CORRETORAS, CORRETORA_LABEL, isCorretora } from '@/lib/corretoras'
 import { fmtBRL2 } from '@/lib/format'
 import type { ComissaoRegra } from '@/lib/gestao/tipos'
+import { listaDireita } from './comum'
 
 // "0:20;5:25" → "R$ 20,00 (a partir de 0) · R$ 25,00 (a partir de 5)"
 function descreve(metas: string): string {
@@ -50,7 +51,8 @@ export function RegrasComissao({ parceiro, regras, admin }: { parceiro: string; 
   }
 
   return (
-    <Panel variant="card" title="Regras" subtitle="Valor por conta em faixas pela quantidade do mês: mínimo:R$ separado por ponto e vírgula. A faixa alcançada vale para todas as contas do mês."
+    // No celular o subtítulo fica sem a instrução de formato (os campos do formulário já dizem "mínimo no mês:R$")
+    <Panel variant="card" title="Regras" subtitle={<>Valor por conta em faixas pela quantidade do mês<span className="max-md:hidden">: mínimo:R$ separado por ponto e vírgula</span>. A faixa alcançada vale para todas as contas do mês.</>}
       action={admin && !novo ? <Button variant="secondary" size="sm" onClick={() => setNovo(true)}><Plus className="h-4 w-4" aria-hidden />Regra</Button> : undefined}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       {novo && (
@@ -69,20 +71,22 @@ export function RegrasComissao({ parceiro, regras, admin }: { parceiro: string; 
           </div>
         </div>
       )}
+      {/* No celular cada regra é uma linha (tbl-lista): a corretora em cima e tudo o mais por extenso na linha de
+          apoio, inclusive o prazo e a reativação, que a tabela estreita escondia; a lixeira à direita */}
       <div className="tbl-wrap">
-      <table className="tbl tbl-dense w-full">
+      <table className="tbl tbl-dense tbl-lista w-full" style={listaDireita('3.25rem')}>
         <thead><tr><th>Corretora</th><th>Vigência</th><th className="num col-p3">Prazo</th><th className="num col-p3">Reativação</th><th>Abertura</th><th>Ativação</th>{admin && <th><span className="sr-only">Ações</span></th>}</tr></thead>
         <tbody>
           {ordenadas.length === 0 && <tr><td colSpan={admin ? 7 : 6} className="py-4 text-center text-label text-fg-subtle">Nenhuma regra: nada é pago até cadastrar.</td></tr>}
           {ordenadas.map(r => (
             <tr key={r.id}>
-              <td className="font-medium">{isCorretora(r.corretora) ? CORRETORA_LABEL[r.corretora] : r.corretora}</td>
-              <td className="num">{dataPt(r.vigencia)}</td>
-              <td className="num col-p3">{r.prazo_ativacao_dias} d</td>
-              <td className="num col-p3">{r.reativacao_meses} m</td>
-              <td className="whitespace-normal">{descreve(r.metas_abertura)}</td>
-              <td className="whitespace-normal">{descreve(r.metas_ativacao)}</td>
-              {admin && <td className="text-right"><IconButton tone="danger" aria-label="Excluir regra" onClick={() => excluir(r)}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>}
+              <td className="cel-titulo font-medium">{isCorretora(r.corretora) ? CORRETORA_LABEL[r.corretora] : r.corretora}</td>
+              <td className="num cel-sub" data-rotulo="desde">{dataPt(r.vigencia)}</td>
+              <td className="num col-p3 cel-sub" data-rotulo={'ativação\u00a0em\u00a0até'}>{r.prazo_ativacao_dias} <span className="max-md:hidden">d</span><span className="md:hidden">dias</span></td>
+              <td className="num col-p3 cel-sub" data-rotulo={'reativação\u00a0depois\u00a0de'}>{r.reativacao_meses} <span className="max-md:hidden">m</span><span className="md:hidden">{r.reativacao_meses === 1 ? 'mês parado' : 'meses parado'}</span></td>
+              <td className="cel-sub whitespace-normal" data-rotulo="abertura">{descreve(r.metas_abertura)}</td>
+              <td className="cel-sub whitespace-normal" data-rotulo="ativação">{descreve(r.metas_ativacao)}</td>
+              {admin && <td className="cel-acoes text-right"><IconButton tone="danger" aria-label="Excluir regra" onClick={() => excluir(r)}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>}
             </tr>
           ))}
         </tbody>

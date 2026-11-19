@@ -1,4 +1,5 @@
 // O que as abas da tela Comissões compartilham: rótulos, a linha mensal e o endereço com os filtros.
+import type { CSSProperties } from 'react'
 import type { BadgeVariant } from '@/components/ui/Badge'
 import type { ComissaoContaMes, ComissaoItem, ComissaoMensalRow, ComissaoPagamento } from '@/lib/gestao/tipos'
 import { CORRETORA_LABEL, isCorretora, type Corretora } from '@/lib/corretoras'
@@ -16,8 +17,24 @@ export const TIPO: Record<ComissaoContaMes['tipo'], { label: string; variant: Ba
 export const corretoraNome = (c: string) => (isCorretora(c) ? CORRETORA_LABEL[c] : c)
 export const round2 = (v: number) => Math.round(v * 100) / 100
 // Fonte de um valor em reais com centavos dentro da faixa de KPIs, para o número nunca cortar: em tela com
-// menos de 375 px a fonte acompanha a largura, e valor de cinco ou mais dígitos desce um degrau em qualquer tela
-export const fonteKpi = (valor: string) => `max-[374px]:text-[5.2vw]! ${valor.length > 12 ? 'text-[1.05rem]!' : valor.length > 11 ? 'text-[1.2rem]!' : ''}`.trim()
+// menos de 375 px a fonte acompanha a largura, e valor de cinco ou mais dígitos desce um degrau em qualquer tela.
+// No celular o número do cartão subiu para 26 px (DESIGN.md §8.4) e "R$ 1.234,56" deixou de caber em meio
+// cartão: desce um degrau só ali. `linha` = cartão que no celular vira linha (do terceiro em diante): lá o
+// número tem a largura toda e fica no tamanho das outras linhas; os degraus valem só no computador.
+export const fonteKpi = (valor: string, linha = false) => (linha
+  ? (valor.length > 12 ? 'md:text-[1.05rem]!' : valor.length > 11 ? 'md:text-[1.2rem]!' : '')
+  : `max-[374px]:text-[5.2vw]! ${valor.length > 12 ? 'text-[1.05rem]!' : valor.length > 11 ? 'text-[1.2rem]!' : valor.length > 10 ? 'max-md:text-[1.35rem]!' : ''}`.trim())
+
+// Lista longa no celular: as primeiras linhas e o resto atrás de "mostrar mais" (MostrarMais.tsx). A classe é
+// a mesma ALEM_NO_CELULAR / alemDe(10) da base (components/ui/MostrarMais), copiada aqui porque as abas são
+// componentes de servidor: o que um módulo 'use client' exporta chega ao servidor como referência, não como
+// texto, e a lista viria inteira. Só age abaixo de 768 px e dentro de um MostrarMais ainda fechado.
+export const LIMITE_CELULAR = 10
+export const alemDoLimite = (i: number) => (i >= LIMITE_CELULAR ? 'max-md:group-data-[tudo=false]/mais:hidden!' : undefined)
+
+// Largura reservada para o número à direita na lista do celular (tbl-lista): o padrão da base (6rem) corta
+// valores como "R$ 12.345,67"
+export const listaDireita = (largura: string) => ({ '--lista-direita': largura }) as CSSProperties
 const ddmmaa =(iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`
 
 export function origemTexto(origem: ComissaoItem['origem'], dataLead: string | null, assessor: string | null): string {

@@ -17,9 +17,13 @@ import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { Alert } from '@/components/ui/Alert'
+import { Dica } from '@/components/ui/Dica'
+import { Resumo } from '@/components/gestao/Resumo'
 import { n0, r0 } from '@/components/gestao/Celulas'
 import { ExtratoAcoes } from './ExtratoAcoes'
-import { fonteKpi, hrefComissoes, pagamentosDoFiltro, round2, type FiltroAba } from './comum'
+import { alemDoLimite, fonteKpi, hrefComissoes, listaDireita, pagamentosDoFiltro, round2, type FiltroAba } from './comum'
+import { MostrarMais } from './MostrarMais'
+import { RecolheNoCelular } from '@/components/ui/RecolheNoCelular'
 
 const pct = (v: number) => fmtPct(v, Number.isInteger(v) ? 0 : 1).replace('%', ' %')
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
@@ -27,30 +31,36 @@ const textoDaRegraBtg = (b: DadosDoMes, parceiro: string) =>
   `A comissão que o BTG paga sobre os clientes dele (corretagem e zeragem) paga o imposto de ${pct(b.impostoPct)} e ${parceiro} leva ${pct(b.regra.pctParceiro)} do que sobra${b.comFicha ? '; no cliente marcado "pela ficha", leva o percentual dele na lista de parceiros da ficha' : ''}.`
 const pctFicha = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} %`
 
-// Os clientes do parceiro no BTG que geraram receita no mês e quanto cada um rende a ele
+// Os clientes do parceiro no BTG que geraram receita no mês e quanto cada um rende a ele.
+// Na tela, no celular, a tabela vira lista (DESIGN.md §8.6): o cliente em cima; os lotes e a receita dele na
+// linha de apoio; a parte do parceiro à direita. As linhas além da décima ficam atrás de "mostrar mais"
+// (dentro de um MostrarMais). No papel (`impressao`) nada disso entra.
 function TabelaDoMes({ b, impressao }: { b: DadosDoMes; impressao?: boolean }) {
+  const papel = (classe: string, tem: unknown = true) => (!impressao && tem ? classe : '')
+  const lotes = (n: number) => (impressao ? null : <span className="md:hidden"> {n === 1 ? 'lote' : 'lotes'}</span>)
+  const totalLotes = b.clientes.reduce((s, c) => s + c.lotes, 0)
   return (
-    <table className="tbl tbl-dense">
+    <table className={cn('tbl tbl-dense', !impressao && 'tbl-lista lista-abre')} style={impressao ? undefined : listaDireita('7rem')}>
       <thead><tr><th>Cliente</th><th className="num">Lotes</th><th className={cn('num', !impressao && 'col-p2')}>Receita</th><th className="num">A receber</th></tr></thead>
       <tbody>
-        {b.clientes.map(c => (
-          <tr key={c.cliente_id}>
-            <td className="max-w-[260px] truncate font-medium">
+        {b.clientes.map((c, i) => (
+          <tr key={c.cliente_id} className={impressao ? undefined : alemDoLimite(i)}>
+            <td className={cn('max-w-[260px] truncate font-medium', papel('cel-titulo'))}>
               {impressao ? c.nome : <Link href={`/btg/clientes/${c.cliente_id}`} className="link">{c.nome}</Link>}
               {c.pctFicha != null && <span className="block text-micro font-normal text-fg-subtle" title="Está na lista de parceiros da ficha deste cliente e leva este percentual da comissão dele, depois do imposto">pela ficha · {pctFicha(c.pctFicha)}</span>}
             </td>
-            <td className={cn('num', !c.lotes && 'subtle')}>{n0(c.lotes)}</td>
-            <td className={cn('num', !impressao && 'col-p2')}>{r0(c.receita)}</td>
-            <td className="num font-semibold">{r0(c.parte)}</td>
+            <td className={cn('num', !c.lotes && 'subtle', papel('cel-sub', c.lotes))}>{n0(c.lotes)}{lotes(c.lotes)}</td>
+            <td className={cn('num', !impressao && 'col-p2 cel-sub')} data-rotulo={impressao ? undefined : 'receita'}>{r0(c.receita)}</td>
+            <td className={cn('num font-semibold', papel('cel-valor'))}>{r0(c.parte)}</td>
           </tr>
         ))}
       </tbody>
       <tfoot>
         <tr className="total">
-          <td>{fmtNum(b.clientes.length)} {b.clientes.length === 1 ? 'cliente' : 'clientes'}</td>
-          <td className="num">{n0(b.clientes.reduce((s, c) => s + c.lotes, 0))}</td>
-          <td className={cn('num', !impressao && 'col-p2')}>{r0(b.receita)}</td>
-          <td className="num">{r0(b.parte)}</td>
+          <td className={papel('cel-titulo')}>{fmtNum(b.clientes.length)} {b.clientes.length === 1 ? 'cliente' : 'clientes'}</td>
+          <td className={cn('num', papel('cel-sub', totalLotes))}>{n0(totalLotes)}{lotes(totalLotes)}</td>
+          <td className={cn('num', !impressao && 'col-p2 cel-sub')} data-rotulo={impressao ? undefined : 'receita'}>{r0(b.receita)}</td>
+          <td className={cn('num', papel('cel-valor'))}>{r0(b.parte)}</td>
         </tr>
       </tfoot>
     </table>
@@ -111,28 +121,40 @@ export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null 
 
   return (
     <>
+      {/* Celular (DESIGN.md §8): a página do parceiro abre pelo número dele, em uma frase: quanto tem a receber no
+          mês e o saldo a pagar. São os mesmos valores dos cartões "A receber" e "Saldo a pagar". */}
+      <div className="md:hidden">
+        <Resumo frase={`${parceiro} tem ${fmtBRL2(b.parte)} a receber de ${mes}${b.receita > 0 ? ` (${situacao})` : ', sem receita dos clientes dele no mês'}. ${
+          saldo > 0 ? `O saldo a pagar até hoje é de ${fmtBRL2(saldo)}.` : saldo < 0 ? `Já foram pagos ${fmtBRL2(-saldo)} acima do gerado até hoje.` : 'Tudo o que foi gerado até hoje já foi pago.'}`} />
+      </div>
+
+      {/* No celular os dois primeiros ficam como cartão e os outros viram linha: o saldo a pagar sobe para o lado do
+          valor a receber; a ordem do computador volta por classe */}
       <KpiRow cols={4}>
         <KpiCard destaque label={`A receber de ${mes}`} value={fmtBRL2(b.parte)} valueClassName={fonteKpi(fmtBRL2(b.parte))} sub={b.receita > 0 ? situacao : 'sem receita dos clientes dele no mês'} />
-        <KpiCard label="Receita dos clientes dele" value={fmtBRL2(b.receita)} valueClassName={fonteKpi(fmtBRL2(b.receita))}
-          sub={`${fmtNum(b.clientes.length)} de ${fmtNum(b.contas)} ${b.contas === 1 ? 'conta girou' : 'contas giraram'} · corretagem e zeragem`} />
-        <KpiCard label="Comissão do BTG sobre eles" value={fmtBRL2(b.comissao)} valueClassName={fonteKpi(fmtBRL2(b.comissao))}
-          sub={b.receita > 0 ? `${pct(Math.round(b.pctComissao * 10) / 10)} da receita líquida · imposto ${fmtBRL2(b.imposto)}` : undefined} />
-        <KpiCard label="Saldo a pagar" value={fmtBRL2(saldo)} valueClassName={fonteKpi(fmtBRL2(saldo))} tone={saldo < 0 ? 'warn' : 'neutral'}
+        <KpiCard className="md:order-3" label="Saldo a pagar" value={fmtBRL2(saldo)} valueClassName={fonteKpi(fmtBRL2(saldo))} tone={saldo < 0 ? 'warn' : 'neutral'}
           sub={saldo < 0 ? 'pago acima do gerado até hoje' : `gerado ${fmtBRL2(gerado)} menos pago ${fmtBRL2(pago)}`} />
+        <KpiCard className="md:order-1" label="Receita dos clientes dele" value={fmtBRL2(b.receita)} valueClassName={fonteKpi(fmtBRL2(b.receita), true)}
+          sub={`${fmtNum(b.clientes.length)} de ${fmtNum(b.contas)} ${b.contas === 1 ? 'conta girou' : 'contas giraram'} · corretagem e zeragem`} />
+        <KpiCard className="md:order-2" label="Comissão do BTG sobre eles" value={fmtBRL2(b.comissao)} valueClassName={fonteKpi(fmtBRL2(b.comissao), true)}
+          sub={b.receita > 0 ? `${pct(Math.round(b.pctComissao * 10) / 10)} da receita líquida · imposto ${fmtBRL2(b.imposto)}` : undefined} />
       </KpiRow>
 
       <Panel title={`De onde vem o valor de ${mesLongo(mesRef)}`}
-        subtitle={`${textoDaRegraBtg(b, parceiro)} Abaixo, os clientes dele que geraram receita no mês e quanto cada um rende a ele.`}
+        subtitle={<><span className="max-md:hidden">{textoDaRegraBtg(b, parceiro)} Abaixo, os</span><span className="md:hidden">Os</span> clientes dele que geraram receita no mês e quanto cada um rende a ele.</>}
         action={<ExtratoAcoes matriz={matriz} nomeArquivo={nomeArquivoExtrato(parceiro, mesRef, 'BTG').replace(/^extrato-/, 'participacao-')} aba="Participação" hrefImpressao={hrefImpressao} />}>
         {b.receita > 0
-          ? <div className="tbl-wrap max-h-[70vh]"><TabelaDoMes b={b} /></div>
+          ? <MostrarMais total={b.clientes.length}><div className="tbl-wrap max-h-[70vh]"><TabelaDoMes b={b} /></div></MostrarMais>
           : <p className="max-w-3xl text-dense text-fg-muted">{semReceita(b, parceiro, mesRef, desde)}</p>}
       </Panel>
       <ForaDaConta b={b} mesRef={mesRef} />
 
-      <Panel title="Mês a mês" subtitle="A parte dele em cada mês e o que já foi pago. Clique no mês para ver os clientes dele.">
+      {/* No celular cada mês é uma linha que abre o mês (tbl-lista): o valor a receber à direita; o que foi pago e
+          o que falta na linha de apoio. A receita dos clientes e a comissão do BTG de cada mês estão no mês aberto
+          (as duas linhas sob os cartões). O destaque do mês aberto fica só no computador. */}
+      <Panel title="Mês a mês" subtitle={<>A parte dele em cada mês e o que já foi pago.<span className="max-md:hidden"> Clique no mês para ver os clientes dele.</span></>}>
         <div className="tbl-wrap">
-          <table className="tbl tbl-dense">
+          <table className="tbl tbl-dense tbl-lista lista-abre" style={listaDireita('7rem')}>
             <thead>
               <tr>
                 <th>Mês</th><th className="num col-p2">Receita dos clientes</th><th className="num col-p2">Comissão do BTG</th>
@@ -146,16 +168,20 @@ export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null 
                 const pg = pagoPorMes.get(m) ?? 0
                 const falta = round2(parte - pg)
                 return (
-                  <tr key={m} className={cn(m === mesRef && 'bg-accent-soft')}>
-                    <td className="font-medium">
+                  <tr key={m} className={cn(m === mesRef && 'md:bg-accent-soft')}>
+                    <td className="cel-titulo font-medium">
                       <Link href={hrefComissoes({ parceiro, corretora, mes: m })} className="link">{mesLongo(m)}</Link>
-                      {x && !x.fechado && <span className="ml-1.5 font-normal text-fg-subtle max-sm:ml-0 max-sm:block" title="Mês ainda sem o percentual do fechamento: o valor é uma prévia pelas faixas de comissão">prévia</span>}
+                      {x && !x.fechado && <span className="ml-1.5 font-normal text-fg-subtle max-md:hidden" title="Mês ainda sem o percentual do fechamento: o valor é uma prévia pelas faixas de comissão">prévia</span>}
                     </td>
+                    {/* no celular a palavra "prévia" vai para a linha de apoio (a explicação está em "Como é calculado") */}
+                    {x && !x.fechado && <td className="cel-sub md:hidden">prévia</td>}
                     <td className={cn('num col-p2', !x?.receita && 'subtle')}>{r0(x?.receita)}</td>
                     <td className={cn('num col-p2', !x?.comissao && 'subtle')}>{r0(x?.comissao)}</td>
-                    <td className={cn('num font-medium', !parte && 'subtle')}>{r0(parte)}</td>
-                    <td className={cn('num', !pg && 'subtle')}>{r0(pg)}</td>
-                    <td className={cn('num font-medium', falta < 0 ? 'text-warn' : !falta && 'subtle')} title={falta < 0 ? 'pago acima do valor do mês' : undefined}>{r0(falta)}</td>
+                    <td className={cn('num cel-valor font-medium', !parte && 'subtle')}><span className={cn(!parte && 'max-md:text-fg-subtle')}>{r0(parte)}</span></td>
+                    <td className={cn('num cel-sub', !pg && 'subtle vazio')} data-rotulo="pago">{r0(pg)}</td>
+                    <td className={cn('num cel-sub font-medium max-md:font-normal', falta < 0 ? 'text-warn' : !falta && 'subtle vazio')} data-rotulo={falta < 0 ? 'pago\u00a0a\u00a0mais' : 'falta\u00a0pagar'} title={falta < 0 ? 'pago acima do valor do mês' : undefined}>
+                      <span className={cn(falta < 0 && 'max-md:hidden')}>{r0(falta)}</span>{falta < 0 && <span className="text-warn md:hidden">{r0(-falta)}</span>}
+                    </td>
                   </tr>
                 )
               })}
@@ -163,12 +189,12 @@ export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null 
             {janela.length > 1 && (
               <tfoot>
                 <tr className="total">
-                  <td>Desde {mesCurto(inicio)}</td>
-                  <td className="num col-p2">{r0(round2(livro.meses.reduce((s, m) => s + m.receita, 0)))}</td>
-                  <td className="num col-p2">{r0(round2(livro.meses.reduce((s, m) => s + m.comissao, 0)))}</td>
-                  <td className="num">{r0(gerado)}</td>
-                  <td className="num">{r0(pagoNaJanela)}</td>
-                  <td className={cn('num', gerado - pagoNaJanela < 0 && 'text-warn')}>{r0(round2(gerado - pagoNaJanela))}</td>
+                  <td className="cel-titulo">Desde {mesCurto(inicio)}</td>
+                  <td className="num col-p2 cel-sub" data-rotulo={'receita\u00a0dos\u00a0clientes'}>{r0(round2(livro.meses.reduce((s, m) => s + m.receita, 0)))}</td>
+                  <td className="num col-p2 cel-sub" data-rotulo={'comissão\u00a0do\u00a0BTG'}>{r0(round2(livro.meses.reduce((s, m) => s + m.comissao, 0)))}</td>
+                  <td className="num cel-valor">{r0(gerado)}</td>
+                  <td className={cn('num cel-sub', !pagoNaJanela && 'vazio')} data-rotulo="pago">{r0(pagoNaJanela)}</td>
+                  <td className={cn('num cel-sub', gerado - pagoNaJanela < 0 && 'text-warn', !round2(gerado - pagoNaJanela) && 'vazio')} data-rotulo={'falta\u00a0pagar'}>{r0(round2(gerado - pagoNaJanela))}</td>
                 </tr>
               </tfoot>
             )}
@@ -176,7 +202,8 @@ export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null 
         </div>
       </Panel>
 
-      <Panel title="Como é calculado">
+      <RecolheNoCelular titulo="Como é calculado">
+      <Panel title={<span className="max-md:hidden">Como é calculado</span>}>
         <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
           <li>{textoDaRegraBtg(b, parceiro)} O escritório fica com {pct(b.regra.pctEscritorio)} do restante.</li>
           <li>Clientes dele no BTG são os que têm {parceiro} no campo Parceiro da ficha. O cliente com lista de parceiros na ficha (Editar › Parceiros do cliente) segue só a lista: cada parceiro dela leva o percentual dele da comissão do cliente, depois do imposto.</li>
@@ -184,6 +211,7 @@ export async function AbaRepasseBtg({ parceiro, corretora, mesRef, desde = null 
           <li>Os percentuais ficam em Parâmetros › BTG › Repasse. Pagamentos são lançados na aba Pagamentos e regras.</li>
         </ul>
       </Panel>
+      </RecolheNoCelular>
     </>
   )
 }
@@ -197,16 +225,21 @@ export async function ParticipacaoBtg({ parceiro, mesRef, impressao, desde = nul
   // no papel o bloco só aparece quando há valor
   if (impressao && b.receita <= 0) return null
   const mes = mesCurto(mesRef)
+  const regra = `${textoDaRegraBtg(b, parceiro)} Clientes dele no BTG são os que têm ${parceiro} no campo Parceiro da ficha ou na lista de parceiros dela.`
+  const tabela = <div className="tbl-wrap mt-4"><TabelaDoMes b={b} impressao={impressao} /></div>
   return (
-    <Panel title="BTG · participação na comissão" subtitle={`${textoDaRegraBtg(b, parceiro)} Clientes dele no BTG são os que têm ${parceiro} no campo Parceiro da ficha ou na lista de parceiros dela.`}>
+    // Na tela, no celular, a regra (cinco linhas de subtítulo) fica atrás do "i" ao lado do título; no papel e no
+    // computador segue como subtítulo
+    <Panel title={impressao ? 'BTG · participação na comissão' : <>BTG · participação na comissão<Dica className="ml-1.5 md:hidden" texto={regra} /></>}
+      subtitle={impressao ? regra : <span className="max-md:hidden">{regra}</span>}>
       {b.receita > 0 ? (
         <>
           <KpiRow cols={3}>
             <KpiCard label={`Parte de ${parceiro} em ${mes}`} value={fmtBRL2(b.parte)} valueClassName={fonteKpi(fmtBRL2(b.parte))} sub={b.comFicha ? `sobre ${fmtBRL2(b.comissao - b.imposto)} de comissão líquida, pelo percentual de cada cliente` : `${pct(b.regra.pctParceiro)} de ${fmtBRL2(b.comissao - b.imposto)}`} />
             <KpiCard label="Receita dos clientes dele" value={fmtBRL2(b.receita)} valueClassName={fonteKpi(fmtBRL2(b.receita))} sub={`${fmtNum(b.clientes.length)} ${b.clientes.length === 1 ? 'cliente girou' : 'clientes giraram'} · corretagem e zeragem`} />
-            <KpiCard label="Comissão do BTG sobre eles" value={fmtBRL2(b.comissao)} valueClassName={fonteKpi(fmtBRL2(b.comissao))} sub={`${pct(Math.round(b.pctComissao * 10) / 10)} da receita líquida · imposto ${fmtBRL2(b.imposto)}`} />
+            <KpiCard label="Comissão do BTG sobre eles" value={fmtBRL2(b.comissao)} valueClassName={fonteKpi(fmtBRL2(b.comissao), !impressao)} sub={`${pct(Math.round(b.pctComissao * 10) / 10)} da receita líquida · imposto ${fmtBRL2(b.imposto)}`} />
           </KpiRow>
-          <div className="tbl-wrap mt-4"><TabelaDoMes b={b} impressao={impressao} /></div>
+          {impressao ? tabela : <MostrarMais total={b.clientes.length}>{tabela}</MostrarMais>}
         </>
       ) : (
         <p className="max-w-3xl text-dense text-fg-muted">{semReceita(b, parceiro, mesRef, desde)}</p>

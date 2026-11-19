@@ -11,7 +11,7 @@ import { contasDe, geradoAteHoje, pessoaNoModelo, remuneracaoDaEquipe } from '@/
 import { valorNaCorretora } from '@/lib/gestao/remuneracao'
 import { inicioDasRegras, nomesComRegra, resumirReceita } from '@/lib/gestao/participacao'
 import { resumirComissao } from '@/lib/gestao/comissao'
-import { mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
+import { mesAtual, mesCurto, mesLongo, parseMes } from '@/lib/gestao/meses'
 import { CORRETORA_LABEL, type Corretora } from '@/lib/corretoras'
 import type { ParceiroComissao } from '@/lib/gestao/comissao'
 import { normTexto } from '@/lib/texto'
@@ -20,9 +20,12 @@ import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { Dica } from '@/components/ui/Dica'
+import { Recolhido } from '@/components/ui/Recolhido'
+import { Resumo } from '@/components/gestao/Resumo'
 import { LinhaVazia, TRACO, n0, r0, rCurto } from '@/components/gestao/Celulas'
-import { hrefComissoes, pagamentosDoFiltro, round2 } from './comum'
-import { DICA_NIVEL, DICA_PONTOS, pts } from '@/lib/gestao/remuneracaoTexto'
+import { hrefComissoes, listaDireita, pagamentosDoFiltro, round2 } from './comum'
+import { RecolheNoCelular } from '@/components/ui/RecolheNoCelular'
+import { DICA_NIVEL, DICA_PONTOS, listaTexto, pts } from '@/lib/gestao/remuneracaoTexto'
 
 // Uma linha de comissionado: pela regra por conta ou, para quem está na remuneração por níveis (S62), pela conta
 // do nível. `nivel` só vem para quem está no modelo; null no mês antes da entrada.
@@ -146,8 +149,92 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
   const equipeMes = round2(somaDe(equipe, l => l.comissaoMes)), porContaMes = round2(somaDe(porContaSo, l => l.comissaoMes))
   const partesGerado = [equipe.length ? `${reais(equipeMes)} da equipe` : '', porContaSo.length ? `${reais(porContaMes)} de comissão por conta` : '', temParticipacao ? `${reais(receitaMes)} de participação na receita` : ''].filter(Boolean)
 
+  // O que cada bloco explica. No computador é o subtítulo da tabela (com a instrução de clicar no nome); no
+  // celular as tabelas viram uma lista só e a explicação fica em "Como ler estes números".
+  const sobreEquipe = `O que cada um gerou em ${mesLongo(mesRef)}: o fixo do nível, cada conta pelo valor do nível e o bônus da base ativa. Gerado, pago e saldo são até hoje.`
+  const sobreComissionados = `O que cada um gerou em ${mesLongo(mesRef)} e a posição até hoje.`
+  const sobreReceita = `Parceiros que recebem uma parte do que os clientes deles geram. A parte de cada um em ${mesLongo(mesRef)} e a posição até hoje.`
+  const sobreBtg = `Parceiros que levam uma parte da comissão que o BTG paga sobre os clientes deles (a aba própria do fechamento). A parte de cada um em ${mesLongo(mesRef)} e a posição até hoje, com a mesma conta do Painel do BTG.${previaBtg ? ' Antes do fechamento do mês o valor é uma prévia.' : ''}`
+
+  // ── Celular (DESIGN.md §8): a tela abre pela frase e por uma lista só, "quanto falta pagar a cada um". São as
+  // mesmas contas das tabelas, uma linha por parceiro, com o saldo da linha que carrega a conta dele. O valor
+  // do mês é sempre um número que já existe: na equipe e nos comissionados, a comissão do mês (a participação
+  // dele, se tiver, fica em palavras: somar daria um número que nenhuma tela mostra); no parceiro de receita
+  // que também tem BTG, o "A receber" da página dele (receita + BTG). Quem não tem valor no mês nem saldo vai
+  // para o fim.
+  const doMesNoBtg = (nome: string) => btgDe(nome)?.mes ?? 0
+  const previaDe = (nome: string) => !!btgDe(nome)?.previa && doMesNoBtg(nome) > 0
+  const itens = [
+    ...linhas.map(l => {
+      // os nomes dos blocos do computador, em palavras e sem valor
+      const participa = [receitaDe(l.nome) ? 'na receita' : '', btgDe(l.nome) ? 'na comissão do BTG' : ''].filter(Boolean)
+      return {
+        nome: l.nome, grupo: l.modelo ? 'equipe' : 'comissionado', tipo: !l.modelo ? 'Comissionado' : l.nivel != null ? `Equipe · Nível ${l.nivel}` : 'Equipe · comissão por conta',
+        mes: l.comissaoMes, nota: participa.length ? `também tem participação ${participa.join(' e ')}` : '', saldo: l.saldo,
+      }
+    }),
+    ...linhasReceita.filter(r => !r.junto).map(r => {
+      const doBtg = doMesNoBtg(r.nome)
+      return { nome: r.nome, grupo: 'parceiro', tipo: 'Participação na receita', mes: round2(r.mes + doBtg), nota: doBtg ? `inclui ${r0(doBtg)} do BTG${previaDe(r.nome) ? ' (prévia)' : ''}` : '', saldo: r.saldo }
+    }),
+    ...linhasBtg.filter(b => !b.junto).map(b => ({ nome: b.nome, grupo: 'parceiro', tipo: 'Participação na comissão do BTG', mes: b.mes, nota: previaDe(b.nome) ? 'prévia' : '', saldo: b.saldo })),
+  ]
+  const parado = (c: (typeof itens)[number]) => !c.mes && !c.saldo
+  const naOrdem = [...itens.filter(c => !parado(c)), ...itens.filter(parado)]
+  const comSaldo = itens.filter(c => c.saldo > 0)
+  const quantos = (grupo: string) => comSaldo.filter(c => c.grupo === grupo).length
+  const grupos = [
+    quantos('equipe') ? `${fmtNum(quantos('equipe'))} da equipe` : '',
+    quantos('comissionado') ? plural(quantos('comissionado'), 'comissionado', 'comissionados') : '',
+    quantos('parceiro') ? plural(quantos('parceiro'), 'parceiro', 'parceiros') : '',
+  ].filter(Boolean)
+  const frase = !comSaldo.length ? 'Tudo o que foi gerado até hoje já foi pago.'
+    : comSaldo.length === 1 ? `O saldo a pagar até hoje é de ${reais(aPagar)}, todo de ${comSaldo[0].nome}.`
+    : `O saldo a pagar até hoje é de ${reais(aPagar)}, dividido entre ${listaTexto(grupos)}.`
+  const apoio = `Em ${mes} foram gerados ${reais(comissaoMes + receitaMes)}${mesRef === mesAtual() ? ' até agora' : ''}.${adiantado ? ` ${rCurto(adiantado)} já pagos a mais a outro parceiro não abatem do saldo.` : ''}`
+  const totalDe = (nome: string, ls: LinhaComissionado[]) => `${nome}: ${r0(round2(somaDe(ls, l => l.comissaoMes)))} gerados em ${mes} · saldo a pagar ${r0(somaDe(ls, l => l.saldo))}`
+
   return (
-    <>
+    // no celular a ordem muda (frase, lista, números recolhidos, explicação): coluna com ordem por CSS; no
+    // computador o bloco tem o mesmo respiro de antes
+    <div className="flex flex-col gap-6 md:block md:space-y-8">
+      <div className="md:hidden"><Resumo frase={frase} apoio={apoio} /></div>
+
+      <section className="md:hidden">
+        <h2 className="mb-1 text-section font-semibold text-fg">Saldo a pagar a cada um</h2>
+        <div className="tbl-wrap">
+          <table className="tbl tbl-lista lista-abre" style={listaDireita('7rem')}>
+            <tbody>
+              {naOrdem.map(c => (
+                <tr key={c.nome}>
+                  <td className="cel-titulo"><Link href={abrir(c.nome)}>{c.nome}</Link></td>
+                  <td className="cel-sub">{c.tipo}</td>
+                  <td className="cel-sub">{c.mes ? `gerou ${r0(c.mes)} em ${mes}` : `sem valor em ${mes}`}</td>
+                  {c.nota && <td className="cel-sub">{c.nota}</td>}
+                  {c.saldo < 0 && <td className="cel-sub"><span className="text-warn">pago acima do gerado até hoje</span></td>}
+                  <td className="cel-valor"><span className={cn(c.saldo < 0 ? 'text-warn' : !c.saldo && 'text-fg-subtle')}>{r0(c.saldo)}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {/* o mesmo aviso da tabela "Comissionados" vazia do computador */}
+        {linhas.length === 0 && <p className="mt-3 text-label text-fg-muted">Ninguém marcado como comissionado. Marque em Parâmetros › Responsáveis (coluna Comissão).</p>}
+      </section>
+
+      <Recolhido titulo="Como ler estes números" className="md:hidden max-md:order-last">
+        <ul className="list-disc space-y-1.5 pl-5 text-dense text-fg-muted">
+          <li><span className="text-fg">Saldo a pagar</span>: tudo o que foi gerado até hoje menos o que já foi pago. Quem recebeu a mais não abate do saldo dos outros.</li>
+          {equipe.length > 0 && <li><span className="text-fg">Equipe · remuneração por níveis</span>: {sobreEquipe}</li>}
+          {porContaSo.length > 0 && <li><span className="text-fg">Comissionados</span>: {sobreComissionados}</li>}
+          {receitas.length > 0 && <li><span className="text-fg">Participação na receita · corretagem, zeragem e incentivo</span>: {sobreReceita}</li>}
+          {linhasBtg.length > 0 && <li><span className="text-fg">Participação na comissão do BTG</span>: {sobreBtg}</li>}
+          {itens.length < linhas.length + linhasReceita.length + linhasBtg.length && <li>Quem recebe de mais de um jeito aparece uma vez só, com o saldo de tudo somado.</li>}
+          <li>Gerado até hoje, pago até hoje, pontos e a divisão do valor do mês ficam na página de cada um.</li>
+        </ul>
+      </Recolhido>
+
+      <RecolheNoCelular titulo={`Números de ${mes}`}>
       <KpiRow cols={4}>
         {temParticipacao || equipe.length
           ? <KpiCard destaque label={`Gerado em ${mes}`} value={reais(comissaoMes + receitaMes)} sub={partesGerado.join(' · ')} />
@@ -156,10 +243,17 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
         <KpiCard label={`Pago referente a ${mes}`} value={reais(pagoMes)} sub="pagamentos lançados com este mês de referência" />
         <KpiCard label={`Eventos de ${mes}`} value={fmtNum(eventos)} sub={`${plural(soma(l => l.abertasMes), 'aberta', 'abertas')} · ${plural(soma(l => l.ativacoesMes), 'ativada', 'ativadas')} · ${plural(soma(l => l.reativadasMes), 'reativada', 'reativadas')}`} />
       </KpiRow>
+      {/* a linha de total das tabelas do computador */}
+      {(equipe.length > 1 || porContaSo.length > 1) && (
+        <p className="mt-3 text-label text-fg-muted md:hidden">
+          {[equipe.length > 1 ? totalDe('Equipe', equipe) : '', porContaSo.length > 1 ? totalDe('Comissionados', porContaSo) : ''].filter(Boolean).join('. ')}.
+        </p>
+      )}
+      </RecolheNoCelular>
 
       {equipe.length > 0 && (
-        <Panel title="Equipe · remuneração por níveis"
-          subtitle={`O que cada um gerou em ${mesLongo(mesRef)}: o fixo do nível, cada conta pelo valor do nível e o bônus da base ativa. Gerado, pago e saldo são até hoje. Clique no nome para ver a conta do mês, o extrato e as regras.`}>
+        <Panel title="Equipe · remuneração por níveis" className="max-md:hidden"
+          subtitle={`${sobreEquipe} Clique no nome para ver a conta do mês, o extrato e as regras.`}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>
@@ -175,7 +269,6 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
                   <tr key={l.nome}>
                     <td className="font-medium">
                       <Link href={abrir(l.nome)} className="link">{l.nome}</Link>
-                      <span className="block text-label font-normal text-fg-subtle md:hidden">{l.nivel != null ? `Nível ${l.nivel}` : 'por conta'}</span>
                     </td>
                     <td className={cn('col-p2', l.nivel == null && 'muted')}>{l.nivel != null ? `Nível ${l.nivel}` : 'comissão por conta'}</td>
                     <td className={cn('num col-p2', !l.pontos && 'subtle')}>{l.pontos ? pts(l.pontos) : TRACO}</td>
@@ -205,7 +298,7 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
       )}
 
       {(porContaSo.length > 0 || equipe.length === 0) && (
-      <Panel title="Comissionados" subtitle={`O que cada um gerou em ${mesLongo(mesRef)} e a posição até hoje. Clique no nome para ver as contas, o extrato, os pagamentos e as regras.`}>
+      <Panel title="Comissionados" className="max-md:hidden" subtitle={`${sobreComissionados} Clique no nome para ver as contas, o extrato, os pagamentos e as regras.`}>
         <div className="tbl-wrap">
           <table className="tbl tbl-dense">
             <thead>
@@ -249,7 +342,7 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
       )}
 
       {receitas.length > 0 && (
-        <Panel title="Participação na receita · corretagem, zeragem e incentivo" subtitle={`Parceiros que recebem uma parte do que os clientes deles geram. A parte de cada um em ${mesLongo(mesRef)} e a posição até hoje. Clique no nome para ver cliente a cliente.`}>
+        <Panel title="Participação na receita · corretagem, zeragem e incentivo" className="max-md:hidden" subtitle={`${sobreReceita} Clique no nome para ver cliente a cliente.`}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>
@@ -283,8 +376,8 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
       )}
 
       {linhasBtg.length > 0 && (
-        <Panel title="Participação na comissão do BTG"
-          subtitle={`Parceiros que levam uma parte da comissão que o BTG paga sobre os clientes deles (a aba própria do fechamento). A parte de cada um em ${mesLongo(mesRef)} e a posição até hoje, com a mesma conta do Painel do BTG.${previaBtg ? ' Antes do fechamento do mês o valor é uma prévia.' : ''} Clique no nome para ver cliente a cliente.`}>
+        <Panel title="Participação na comissão do BTG" className="max-md:hidden"
+          subtitle={`${sobreBtg} Clique no nome para ver cliente a cliente.`}>
           <div className="tbl-wrap">
             <table className="tbl tbl-dense">
               <thead>
@@ -310,6 +403,6 @@ export async function VisaoGeral({ parceiros, corretora, mesRef, verBtg, regras 
           </div>
         </Panel>
       )}
-    </>
+    </div>
   )
 }

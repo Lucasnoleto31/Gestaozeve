@@ -66,11 +66,13 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   // regras de participação em corretagem, zeragem e incentivo dentro do filtro de corretora
   const regras = corretora ? regrasTodas.filter(r => r.corretora === corretora) : regrasTodas
 
+  // No celular sobra só o mês (DESIGN.md §8): a corretora troca na barra de cima (Todas | Genial | BTG, o mesmo
+  // parâmetro) e a escolha do parceiro é a própria lista da visão geral, com "Todos os parceiros" para voltar
   const filtros = (
     <>
-      <SelectParam param="parceiro" valor={parceiroSel?.nome ?? ''} label="Parceiro" todos="Todos (visão geral)"
+      <SelectParam param="parceiro" valor={parceiroSel?.nome ?? ''} label="Parceiro" todos="Todos (visão geral)" className="max-md:hidden"
         opcoes={parceiros.map(p => ({ valor: p.nome, label: p.comissionado ? `${p.nome} · comissionado` : `${p.nome} · participação na receita` }))} />
-      <SelectParam param="corretora" valor={corretora ?? ''} opcoes={CORRETORAS.map(c => ({ valor: c, label: CORRETORA_LABEL[c] }))} label="Corretora" todos="Todas" />
+      <SelectParam param="corretora" valor={corretora ?? ''} opcoes={CORRETORAS.map(c => ({ valor: c, label: CORRETORA_LABEL[c] }))} label="Corretora" todos="Todas" className="max-md:hidden" />
       <MesPicker valor={mesRef} label="Mês" />
     </>
   )
@@ -130,6 +132,9 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
   // quem também tem regra de participação na receita (a do parâmetro) só conta o BTG a partir do início dela
   const inicioReceita = inicioDasRegras(receitaTodas.flatMap(r => r.regras))
   const blocoBtg = mostraBtg ? <ParticipacaoBtg parceiro={parceiro} mesRef={mesRef} desde={inicioReceita} /> : null
+  // no celular o Resumo abre por uma frase só: com a participação na tela (AbaReceita ou AbaRepasseBtg, que
+  // trazem a frase dela), a frase da comissão por conta ou do nível não entra
+  const fraseDaComissao = !(receita.length > 0 || mostraBtg)
 
   return (
     <>
@@ -143,7 +148,8 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
           : regraBtg
             ? `Participação na comissão do BTG: ${descricaoBtg}.${parceiroSel.comissionado ? ' Também recebe comissão por conta aberta e ativada.' : ''}`
             : `Comissão por abertura, ativação e reativação de conta${corretora ? ` na ${CORRETORA_LABEL[corretora]}` : ''}, em ${mesLongo(mesRef)}.`}>
-        <Link href={hrefComissoes({ corretora, mes: mesRef })} className="link mt-3 inline-flex items-center gap-1 text-label"><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Todos os parceiros</Link>
+        {/* no celular o voltar ganha a altura do dedo (44 px) */}
+        <Link href={hrefComissoes({ corretora, mes: mesRef })} className="link mt-3 inline-flex items-center gap-1 text-label max-md:mt-1 max-md:min-h-11"><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Todos os parceiros</Link>
         <Abas caminho="/comissoes" query={{ parceiro, corretora, mes: mesRef.slice(0, 7) }} valor={aba} opcoes={abas} padrao={padrao} rotulo={`Seções de ${parceiro}`} />
       </PageHeader>
       <PageBody>
@@ -171,8 +177,8 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
             A participação dele vale {[...receitaTodas.map(r => naCorretora(r.corretora)), ...(regraBtg ? ['no BTG'] : [])].join(' e ')}. <Link href={hrefComissoes({ parceiro, mes: mesRef })} className="link">Ver sem o filtro de corretora</Link>. A carteira e o extrato dele aqui ficam nas outras abas.
           </Alert>
         )}
-        {aba === 'resumo' && parceiroSel.comissionado && !noModelo && <AbaResumo {...filtro} comissionado participacao={parceiroSel.participacao} admin={admin} />}
-        {aba === 'resumo' && noModelo && <AbaResumoNivel {...filtro} />}
+        {aba === 'resumo' && parceiroSel.comissionado && !noModelo && <AbaResumo {...filtro} comissionado participacao={parceiroSel.participacao} admin={admin} fraseNoCelular={fraseDaComissao} />}
+        {aba === 'resumo' && noModelo && <AbaResumoNivel {...filtro} fraseNoCelular={fraseDaComissao} />}
         {aba === 'extrato' && (noModelo ? <AbaExtratoNivel {...filtro} /> : <AbaExtrato {...filtro} />)}
         {aba === 'pagamentos' && (pessoaModelo
           ? <AbaPagamentosNivel parceiro={parceiro} admin={admin} />

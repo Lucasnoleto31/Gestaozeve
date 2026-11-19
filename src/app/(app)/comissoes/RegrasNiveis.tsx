@@ -15,6 +15,7 @@ import { fmtBRL2 } from '@/lib/format'
 import { mesCurto, mesInput, parseMes, somarMeses } from '@/lib/gestao/meses'
 import { salvarPessoaNoModelo, salvarRegua, salvarTabelaNiveis, type NivelForm, type ReguaForm } from '@/lib/gestao/acoesRemuneracao'
 import { fatorGenial, vigente, type PessoaModelo, type Regua, type TabelaNiveis } from '@/lib/gestao/remuneracao'
+import { RecolheNoCelular } from '@/components/ui/RecolheNoCelular'
 
 const pct = (f: number) => `${(f * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} %`
 // R$ sem centavos quando o valor é inteiro (a tabela cabe no celular)
@@ -109,12 +110,16 @@ export function RegrasNiveis({ tabelas, reguas, pessoa, admin, instalado, mesAtu
     </div>
   )
 
+  // No celular cada bloco de regra fica recolhido atrás do título (RecolheNoCelular): a aba abre pelos pagamentos
+  // e as regras, que são texto, ficam a um toque. O erro ao salvar aparece fora dos blocos, sempre à vista; o
+  // bloco em edição já está aberto (o botão "Mudar" fica dentro dele). No computador tudo segue aberto.
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-8 max-md:gap-6">
       {erro && <Alert tone="loss">{erro}</Alert>}
       {!instalado && <Alert tone="warn" title="A tabela de níveis ainda não está no banco">Rode a S62 (supabase-s62-remuneracao-niveis.sql) no Supabase para poder mudar a tabela, a régua e as datas.</Alert>}
 
-      <Panel title="Tabela de níveis" subtitle={`A mesma para toda a equipe, na Genial e no BTG${tabela ? `, desde ${mesCurto(tabela.vigencia)}` : ''}.${anteriores.length ? ` Antes valeu a de ${anteriores.join(', ')}.` : ''}${futuras.length ? ` Já gravada para ${futuras.map(t => mesCurto(t.vigencia)).join(', ')}.` : ''}`}
+      <RecolheNoCelular titulo="Tabela de níveis" resumo="a mesma para toda a equipe">
+      <Panel title={<span className="max-md:hidden">Tabela de níveis</span>} subtitle={`A mesma para toda a equipe, na Genial e no BTG${tabela ? `, desde ${mesCurto(tabela.vigencia)}` : ''}.${anteriores.length ? ` Antes valeu a de ${anteriores.join(', ')}.` : ''}${futuras.length ? ` Já gravada para ${futuras.map(t => mesCurto(t.vigencia)).join(', ')}.` : ''}`}
         action={botaoMudar('tabela', abrirTabela)}>
         {editando === 'tabela' ? (
           <div className="grid gap-4">
@@ -135,7 +140,10 @@ export function RegrasNiveis({ tabelas, reguas, pessoa, admin, instalado, mesAtu
           </div>
         ) : (
           <div className="tbl-wrap">
-            <table className="tbl tbl-dense">
+            {/* No celular cada nível é uma linha (tbl-lista) com todos os valores escritos: o fixo à direita; pontos,
+                abertura, ativação, as duas metades da reativação e o bônus do 1º ano e de depois na linha de apoio
+                (no computador os dois últimos detalhes ficam na dica da célula) */}
+            <table className="tbl tbl-dense tbl-lista">
               <thead>
                 <tr>
                   <th scope="col">Nível</th><th scope="col" className="num"><span className="md:hidden">Pontos</span><span className="hidden md:inline">Pontos a partir de</span></th><th scope="col" className="num">Fixo</th><th scope="col" className="num col-p2">Abertura</th>
@@ -145,24 +153,31 @@ export function RegrasNiveis({ tabelas, reguas, pessoa, admin, instalado, mesAtu
               <tbody>
                 {(tabela?.niveis ?? []).map(n => (
                   <tr key={n.nivel}>
-                    <td className="font-medium">Nível {n.nivel}</td>
-                    <td className="num">{n.pontosMin.toLocaleString('pt-BR')}</td>
-                    <td className="num">{reaisNivel(n.fixo)}</td>
-                    <td className="num col-p2">{reaisNivel(n.abertura)}</td>
-                    <td className="num">{reaisNivel(n.ativacao)}</td>
-                    <td className="num col-p2" title={`${fmtBRL2(n.reativacaoVolta)} quando volta + ${fmtBRL2(n.reativacao3Meses)} se ainda gira 3 meses depois`}>{reaisNivel(n.reativacaoVolta + n.reativacao3Meses)}</td>
-                    <td className="num col-p2" title={`${pct(n.bonus1Ano)} no 1º ano depois do movimento, ${pct(n.bonusDepois)} depois`}>{pct(n.bonus1Ano)}</td>
+                    <td className="cel-titulo font-medium">Nível {n.nivel}</td>
+                    <td className="num cel-sub" data-rotulo={'a\u00a0partir\u00a0de'}>{n.pontosMin.toLocaleString('pt-BR')}<span className="md:hidden"> {n.pontosMin === 1 ? 'ponto' : 'pontos'} por mês</span></td>
+                    <td className="num cel-valor" data-rotulo="fixo">{reaisNivel(n.fixo)}</td>
+                    <td className="num col-p2 cel-sub" data-rotulo="abertura">{reaisNivel(n.abertura)}</td>
+                    <td className="num cel-sub" data-rotulo="ativação">{reaisNivel(n.ativacao)}</td>
+                    <td className="num col-p2 cel-sub" data-rotulo="reativação" title={`${fmtBRL2(n.reativacaoVolta)} quando volta + ${fmtBRL2(n.reativacao3Meses)} se ainda gira 3 meses depois`}>
+                      <span className="max-md:hidden">{reaisNivel(n.reativacaoVolta + n.reativacao3Meses)}</span>
+                      <span className="md:hidden">{fmtBRL2(n.reativacaoVolta)} quando volta + {fmtBRL2(n.reativacao3Meses)} se ainda gira 3 meses depois</span>
+                    </td>
+                    <td className="num col-p2 cel-sub" data-rotulo={'bônus\u00a0da\u00a0base'} title={`${pct(n.bonus1Ano)} no 1º ano depois do movimento, ${pct(n.bonusDepois)} depois`}>
+                      {pct(n.bonus1Ano)}<span className="md:hidden"> no 1º ano, {pct(n.bonusDepois)} depois</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="mt-3 text-label text-fg-subtle">Reativação: metade quando o cliente volta a girar e metade se ainda gira 3 meses depois. Bônus: sobre o líquido da base ativa, cheio no 1º ano depois do último movimento com o cliente e metade depois.</p>
+            <p className="mt-3 text-label text-fg-subtle max-md:text-fg-muted">Reativação: metade quando o cliente volta a girar e metade se ainda gira 3 meses depois. Bônus: sobre o líquido da base ativa, cheio no 1º ano depois do último movimento com o cliente e metade depois.</p>
           </div>
         )}
       </Panel>
+      </RecolheNoCelular>
 
       {regua && (
-        <Panel title="Régua de pontos" subtitle={`Desde ${mesCurto(regua.vigencia)}. Os pontos do mês decidem o nível; o líquido do cliente paga o bônus.`} action={botaoMudar('regua', abrirRegua)}>
+        <RecolheNoCelular titulo="Régua de pontos">
+        <Panel title={<span className="max-md:hidden">Régua de pontos</span>} subtitle={`Desde ${mesCurto(regua.vigencia)}. Os pontos do mês decidem o nível; o líquido do cliente paga o bônus.`} action={botaoMudar('regua', abrirRegua)}>
           {editando === 'regua' ? (
             <div className="grid gap-4">
               <div className="grid gap-2 rounded-lg bg-surface-2 p-3 sm:grid-cols-4">
@@ -187,10 +202,12 @@ export function RegrasNiveis({ tabelas, reguas, pessoa, admin, instalado, mesAtu
             </ul>
           )}
         </Panel>
+        </RecolheNoCelular>
       )}
 
       {pessoa && (
-        <Panel title={`${pessoa.nome} no modelo`} subtitle="O nível é revisto a cada 3 meses desde a entrada, pela média dos 3 meses anteriores; os meses antes do início do trabalho não entram na média."
+        <RecolheNoCelular titulo={`${pessoa.nome} no modelo`} resumo={`desde ${mesCurto(pessoa.nivelDesde)}`}>
+        <Panel title={<span className="max-md:hidden">{pessoa.nome} no modelo</span>} subtitle="O nível é revisto a cada 3 meses desde a entrada, pela média dos 3 meses anteriores; os meses antes do início do trabalho não entram na média."
           action={botaoMudar('pessoa', () => { setErro(null); setEditando('pessoa') })}>
           {editando === 'pessoa' ? (
             <div className="flex flex-wrap items-end gap-2">
@@ -206,6 +223,7 @@ export function RegrasNiveis({ tabelas, reguas, pessoa, admin, instalado, mesAtu
             </p>
           )}
         </Panel>
+        </RecolheNoCelular>
       )}
     </div>
   )

@@ -13,7 +13,9 @@ import { excluirPagamentoComissao, salvarPagamentoComissao } from '@/lib/gestao/
 import { numeroBR } from '@/lib/gestao/planilhas'
 import { mesCurto, mesInput, mesAtual } from '@/lib/gestao/meses'
 import { CORRETORAS, CORRETORA_LABEL, isCorretora } from '@/lib/corretoras'
+import { cn } from '@/lib/utils'
 import type { ComissaoPagamento } from '@/lib/gestao/tipos'
+import { listaDireita } from './comum'
 
 // Pagamentos feitos ao parceiro: lista e, para o admin, o lançamento (mês, corretora, valor, data, observação)
 export function PagamentosComissao({ parceiro, pagamentos, admin }: { parceiro: string; pagamentos: ComissaoPagamento[]; admin: boolean }) {
@@ -62,19 +64,22 @@ export function PagamentosComissao({ parceiro, pagamentos, admin }: { parceiro: 
           </div>
         </div>
       )}
+      {/* No celular cada pagamento é uma linha (tbl-lista): o mês em cima; a corretora, a data e a observação na
+          linha de apoio (as duas que a tabela estreita escondia); o valor à direita. Para o administrador o valor
+          recua para dar lugar à lixeira: a base põe número e botões no mesmo canto. */}
       <div className="tbl-wrap">
-      <table className="tbl tbl-dense w-full">
+      <table className="tbl tbl-dense tbl-lista w-full" style={listaDireita(admin ? '10rem' : '6.75rem')}>
         <thead><tr><th>Mês</th><th className="col-p2">Corretora</th><th className="num">Valor</th><th>Pago em</th><th className="col-p3">Observação</th>{admin && <th><span className="sr-only">Ações</span></th>}</tr></thead>
         <tbody>
           {pagamentos.length === 0 && <tr><td colSpan={admin ? 6 : 5} className="py-4 text-center text-label text-fg-subtle">Nenhum pagamento lançado.</td></tr>}
           {pagamentos.map(p => (
             <tr key={p.id}>
-              <td className="num">{mesCurto(p.mes_ref)}</td>
-              <td className="muted col-p2">{p.corretora && isCorretora(p.corretora) ? CORRETORA_LABEL[p.corretora] : 'Geral'}</td>
-              <td className="num font-medium">{r0(p.valor)}</td>
-              <td className="num">{dataPt(p.data_pagamento)}</td>
-              <td className="muted col-p3">{p.observacao ?? TRACO}</td>
-              {admin && <td className="text-right"><IconButton tone="danger" aria-label="Excluir pagamento" onClick={() => excluir(p)}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>}
+              <td className="num cel-titulo">{mesCurto(p.mes_ref)}</td>
+              <td className="muted col-p2 cel-sub">{p.corretora && isCorretora(p.corretora) ? CORRETORA_LABEL[p.corretora] : 'Geral'}</td>
+              <td className={cn('num font-medium cel-valor', admin && 'max-md:right-13!')}>{r0(p.valor)}</td>
+              <td className="num cel-sub" data-rotulo={'pago\u00a0em'}>{dataPt(p.data_pagamento)}</td>
+              <td className={cn('muted col-p3 cel-sub', !p.observacao && 'vazio')}>{p.observacao ?? TRACO}</td>
+              {admin && <td className="text-right cel-acoes"><IconButton tone="danger" aria-label="Excluir pagamento" onClick={() => excluir(p)}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>}
             </tr>
           ))}
         </tbody>

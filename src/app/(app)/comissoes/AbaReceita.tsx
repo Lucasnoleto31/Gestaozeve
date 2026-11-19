@@ -14,10 +14,14 @@ import { cn } from '@/lib/utils'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
 import { Alert } from '@/components/ui/Alert'
+import { Recolhido } from '@/components/ui/Recolhido'
+import { Resumo } from '@/components/gestao/Resumo'
 import { n0, r0 } from '@/components/gestao/Celulas'
 import { TabelaReceitaParceiro } from '@/components/gestao/TabelaReceitaParceiro'
 import { ExtratoAcoes } from './ExtratoAcoes'
-import { fonteKpi, hrefComissoes, pagamentosDoFiltro, round2, type FiltroAba } from './comum'
+import { alemDoLimite, fonteKpi, hrefComissoes, listaDireita, pagamentosDoFiltro, round2, type FiltroAba } from './comum'
+import { MostrarMais } from './MostrarMais'
+import { RecolheNoCelular } from '@/components/ui/RecolheNoCelular'
 
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
@@ -74,6 +78,17 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
     if (corretora) p.set('corretora', corretora)
     return `/extrato?${p.toString()}`
   })()
+  // a divisão do valor do mês e quantos giraram: quatro cartões no computador; no celular, um recolhido
+  const divisao = [
+    { label: 'Corretagem', valor: fmtBRL2(t.parteCorretagem), dinheiro: true, sub: `${de('pctCorretagem', t.corretagem)} · ${fmtNum(t.lotes)} lotes` },
+    { label: 'Zeragem', valor: fmtBRL2(t.parteZeragem), dinheiro: true, sub: `${de('pctZeragem', t.zeragem)} · ${fmtNum(t.zerados)} ${t.zerados === 1 ? 'contrato zerado' : 'contratos zerados'}` },
+    { label: 'Incentivo', valor: fmtBRL2(t.parteIncentivo), dinheiro: true, sub: `${de('pctIncentivo', t.incentivo)} · ${fmtNum(t.comFaixa)} ${t.comFaixa === 1 ? 'cliente com faixa' : 'clientes com faixa'}` },
+    {
+      label: `Giraram em ${mes}`, valor: fmtNum(t.ativos), dinheiro: false,
+      sub: [codigos.length ? `de ${fmtNum(clientesNosCodigos)} ${clientesNosCodigos === 1 ? 'cliente' : 'clientes'} com conta no código ${codigos.join(', ')}` : null,
+        naFicha ? `${fmtNum(naFicha)} ${naFicha === 1 ? 'cliente' : 'clientes'} pela lista da ficha` : null].filter(Boolean).join(' · ') || 'nenhum código ligado',
+    },
+  ]
 
   return (
     <>
@@ -88,38 +103,60 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
         </Alert>
       )}
 
+      {/* Celular (DESIGN.md §8): a página do parceiro abre pelo número dele, em uma frase: quanto tem a receber no
+          mês e o saldo a pagar. São os mesmos valores dos cartões "A receber" e "Saldo a pagar". */}
+      {!antesDoInicio && (
+        <div className="md:hidden">
+          <Resumo frase={`${parceiro} tem ${fmtBRL2(totalMes)} a receber de ${mes}${corrente ? (ultima ? `, parcial (lotes até ${ddmm(ultima)})` : ', parcial (sem lotes no mês ainda)') : ''}. ${
+            saldo > 0 ? `O saldo a pagar até hoje é de ${fmtBRL2(saldo)}.` : saldo < 0 ? `Já foram pagos ${fmtBRL2(-saldo)} acima do gerado até hoje.` : 'Tudo o que foi gerado até hoje já foi pago.'}`} />
+        </div>
+      )}
+
+      {/* No celular ficam os dois cartões que respondem à página (a receber e saldo: a ordem do computador volta por
+          classe) e a divisão por corretagem, zeragem e incentivo desce para um recolhido logo abaixo */}
       <KpiRow cols={6}>
         <KpiCard destaque label={`A receber de ${mes}`} value={fmtBRL2(totalMes)} valueClassName={fonteKpi(fmtBRL2(totalMes))}
           sub={`${corrente ? (ultima ? `parcial · lotes até ${ddmm(ultima)}` : 'parcial · sem lotes no mês ainda') : 'corretagem, zeragem e incentivo'}${btgMes > 0 ? ` · inclui ${fmtBRL2(btgMes)} do BTG` : ''}`} />
-        <KpiCard label="Corretagem" value={fmtBRL2(t.parteCorretagem)} valueClassName={fonteKpi(fmtBRL2(t.parteCorretagem))} sub={`${de('pctCorretagem', t.corretagem)} · ${fmtNum(t.lotes)} lotes`} />
-        <KpiCard label="Zeragem" value={fmtBRL2(t.parteZeragem)} valueClassName={fonteKpi(fmtBRL2(t.parteZeragem))} sub={`${de('pctZeragem', t.zeragem)} · ${fmtNum(t.zerados)} ${t.zerados === 1 ? 'contrato zerado' : 'contratos zerados'}`} />
-        <KpiCard label="Incentivo" value={fmtBRL2(t.parteIncentivo)} valueClassName={fonteKpi(fmtBRL2(t.parteIncentivo))} sub={`${de('pctIncentivo', t.incentivo)} · ${fmtNum(t.comFaixa)} ${t.comFaixa === 1 ? 'cliente com faixa' : 'clientes com faixa'}`} />
-        <KpiCard label="Saldo a pagar" value={fmtBRL2(saldo)} valueClassName={fonteKpi(fmtBRL2(saldo))} tone={saldo < 0 ? 'warn' : 'neutral'}
+        <KpiCard className="md:order-4" label="Saldo a pagar" value={fmtBRL2(saldo)} valueClassName={fonteKpi(fmtBRL2(saldo))} tone={saldo < 0 ? 'warn' : 'neutral'}
           sub={saldo < 0 ? 'pago acima do gerado até hoje' : `gerado ${fmtBRL2(gerado)} menos pago ${fmtBRL2(pago)}`} />
-        <KpiCard label={`Giraram em ${mes}`} value={fmtNum(t.ativos)}
-          sub={[codigos.length ? `de ${fmtNum(clientesNosCodigos)} ${clientesNosCodigos === 1 ? 'cliente' : 'clientes'} com conta no código ${codigos.join(', ')}` : null,
-            naFicha ? `${fmtNum(naFicha)} ${naFicha === 1 ? 'cliente' : 'clientes'} pela lista da ficha` : null].filter(Boolean).join(' · ') || 'nenhum código ligado'} />
+        {divisao.map((d, i) => <KpiCard key={d.label} className={cn('max-md:hidden!', i < 3 ? 'md:order-1' : 'md:order-5')} label={d.label} value={d.valor} valueClassName={d.dinheiro ? fonteKpi(d.valor) : undefined} sub={d.sub} />)}
       </KpiRow>
+      <Recolhido tamanho="linha" titulo="Corretagem, zeragem e incentivo" className="md:hidden">
+        <dl className="divide-y divide-line">
+          {divisao.map(d => (
+            <div key={d.label} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="min-w-0"><dt className="text-dense text-fg">{d.label}</dt><dd className="text-label text-fg-muted">{d.sub}</dd></div>
+              <dd className="num shrink-0 text-dense font-semibold text-fg">{d.valor}</dd>
+            </div>
+          ))}
+        </dl>
+      </Recolhido>
 
       <Panel title={`De onde vem o valor de ${mesLongo(mesRef)}`}
-        subtitle={`O que cada cliente de ${parceiro} gerou no mês e quanto disso vai para ele. Corretagem e zeragem são as do sistema, antes do repasse da corretora e de impostos; o incentivo é o da tela Incentivo${corrente ? ' e pode subir até o fim do mês, conforme os pontos' : ''}.`}
+        subtitle={<>O que cada cliente de {parceiro} gerou no mês e quanto disso vai para ele.<span className="max-md:hidden"> Corretagem e zeragem são as do sistema, antes do repasse da corretora e de impostos; o incentivo é o da tela Incentivo{corrente ? ' e pode subir até o fim do mês, conforme os pontos' : ''}.</span></>}
         action={<ExtratoAcoes matriz={planilhaReceita(res.linhas.map(c => ({ ...c, corretora: rotuloCorretora(c.corretora) })), variasCorretoras)}
           nomeArquivo={nomeArquivoExtrato(parceiro, mesRef, corretora).replace(/^extrato-/, 'participacao-')} aba="Participação" hrefImpressao={hrefImpressao} />}>
+        <MostrarMais total={res.linhas.length}>
         <div className="tbl-wrap max-h-[70vh]">
           <TabelaReceitaParceiro linhas={res.linhas} totais={res.linhas.length ? t : TOTAIS_VAZIOS} parceiro={parceiro} comCorretora={variasCorretoras}
+            classeLinha={alemDoLimite}
             vazio={antesDoInicio ? `A regra começa em ${mesLongo(inicio)}.` : `Nenhum cliente de ${parceiro} operou em ${mesLongo(mesRef)}.`} />
         </div>
+        </MostrarMais>
         {res.linhas.some(c => c.incentivoCliente > 0 && c.incentivo < c.incentivoCliente) && (
-          <p className="mt-2 text-label text-fg-subtle">* Cliente que também operou fora do código do parceiro: entra a fração do incentivo que corresponde aos pontos feitos no código.</p>
+          <p className="mt-2 text-label text-fg-subtle max-md:text-fg-muted">* Cliente que também operou fora do código do parceiro: entra a fração do incentivo que corresponde aos pontos feitos no código.</p>
         )}
         {res.linhas.some(c => c.pctFicha != null) && (
-          <p className="mt-2 text-label text-fg-subtle">Cliente marcado “pela ficha”: {parceiro} está na lista de parceiros da ficha dele e leva esse percentual do que o cliente gerou no mês, em qualquer código nosso.</p>
+          <p className="mt-2 text-label text-fg-subtle max-md:text-fg-muted">Cliente marcado “pela ficha”: {parceiro} está na lista de parceiros da ficha dele e leva esse percentual do que o cliente gerou no mês, em qualquer código nosso.</p>
         )}
       </Panel>
 
-      <Panel title="Mês a mês" subtitle={`Desde ${mesLongo(inicio)}, quando a regra começou. Clique no mês para ver os clientes dele.`}>
+      {/* No celular cada mês é uma linha que abre o mês (tbl-lista): o valor a receber à direita; os lotes, o que foi
+          pago e o que falta na linha de apoio. A divisão por corretagem, zeragem, incentivo e BTG de cada mês está
+          no mês aberto (o recolhido lá de cima). O destaque do mês aberto fica só no computador. */}
+      <Panel title="Mês a mês" subtitle={<>Desde {mesLongo(inicio)}, quando a regra começou.<span className="max-md:hidden"> Clique no mês para ver os clientes dele.</span></>}>
         <div className="tbl-wrap">
-          <table className="tbl tbl-dense">
+          <table className="tbl tbl-dense tbl-lista lista-abre" style={listaDireita('7rem')}>
             <thead>
               <tr>
                 <th>Mês</th><th className="num col-p3">Giraram</th><th className="num col-p2">Lotes</th><th className="num col-p2">Corretagem</th><th className="num col-p2">Zeragem</th>
@@ -134,17 +171,19 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
                 const total = round2(x.total + doBtg)
                 const falta = round2(total - pg)
                 return (
-                  <tr key={m} className={cn(m === mesRef && 'bg-accent-soft')}>
-                    <td className="font-medium"><Link href={hrefComissoes({ parceiro, corretora, mes: m })} className="link">{mesLongo(m)}</Link></td>
+                  <tr key={m} className={cn(m === mesRef && 'md:bg-accent-soft')}>
+                    <td className="cel-titulo font-medium"><Link href={hrefComissoes({ parceiro, corretora, mes: m })} className="link">{mesLongo(m)}</Link></td>
                     <td className={cn('num col-p3', !x.ativos && 'subtle')}>{n0(x.ativos)}</td>
-                    <td className={cn('num col-p2', !x.lotes && 'subtle')}>{n0(x.lotes)}</td>
+                    <td className={cn('num col-p2 cel-sub', !x.lotes && 'subtle vazio')}>{n0(x.lotes)}<span className="md:hidden"> {x.lotes === 1 ? 'lote' : 'lotes'}</span></td>
                     <td className={cn('num col-p2', !x.parteCorretagem && 'subtle')}>{r0(x.parteCorretagem)}</td>
                     <td className={cn('num col-p2', !x.parteZeragem && 'subtle')}>{r0(x.parteZeragem)}</td>
                     <td className={cn('num col-p2', !x.parteIncentivo && 'subtle')}>{r0(x.parteIncentivo)}</td>
-                    {geradoBtg > 0 && <td className={cn('num col-p2', !doBtg && 'subtle')}>{r0(doBtg)}</td>}
-                    <td className={cn('num font-medium', !total && 'subtle')}>{r0(total)}</td>
-                    <td className={cn('num', !pg && 'subtle')}>{r0(pg)}</td>
-                    <td className={cn('num font-medium', falta < 0 ? 'text-warn' : !falta && 'subtle')} title={falta < 0 ? 'pago acima do valor do mês' : undefined}>{r0(falta)}</td>
+                    {geradoBtg > 0 && <td className={cn('num col-p2 cel-sub', !doBtg && 'subtle vazio')} data-rotulo="inclui">{r0(doBtg)}<span className="md:hidden"> do BTG</span></td>}
+                    <td className={cn('num cel-valor font-medium', !total && 'subtle')}><span className={cn(!total && 'max-md:text-fg-subtle')}>{r0(total)}</span></td>
+                    <td className={cn('num cel-sub', !pg && 'subtle vazio')} data-rotulo="pago">{r0(pg)}</td>
+                    <td className={cn('num cel-sub font-medium max-md:font-normal', falta < 0 ? 'text-warn' : !falta && 'subtle vazio')} data-rotulo={falta < 0 ? 'pago\u00a0a\u00a0mais' : 'falta\u00a0pagar'} title={falta < 0 ? 'pago acima do valor do mês' : undefined}>
+                      <span className={cn(falta < 0 && 'max-md:hidden')}>{r0(falta)}</span>{falta < 0 && <span className="text-warn md:hidden">{r0(-falta)}</span>}
+                    </td>
                   </tr>
                 )
               })}
@@ -152,15 +191,15 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
             {janela.length > 1 && (
               <tfoot>
                 <tr className="total">
-                  <td>Desde {mesCurto(inicio)}</td><td className="col-p3" />
-                  <td className="num col-p2">{n0(res.porMes.reduce((s, x) => s + x.t.lotes, 0))}</td>
-                  <td className="num col-p2">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteCorretagem, 0)))}</td>
-                  <td className="num col-p2">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteZeragem, 0)))}</td>
-                  <td className="num col-p2">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteIncentivo, 0)))}</td>
-                  {geradoBtg > 0 && <td className="num col-p2">{r0(geradoBtg)}</td>}
-                  <td className="num">{r0(gerado)}</td>
-                  <td className="num">{r0(pagoNaJanela)}</td>
-                  <td className={cn('num', gerado - pagoNaJanela < 0 && 'text-warn')}>{r0(round2(gerado - pagoNaJanela))}</td>
+                  <td className="cel-titulo">Desde {mesCurto(inicio)}</td><td className="col-p3" />
+                  <td className="num col-p2 cel-sub">{n0(res.porMes.reduce((s, x) => s + x.t.lotes, 0))}<span className="md:hidden"> lotes</span></td>
+                  <td className="num col-p2 cel-sub" data-rotulo="corretagem">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteCorretagem, 0)))}</td>
+                  <td className="num col-p2 cel-sub" data-rotulo="zeragem">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteZeragem, 0)))}</td>
+                  <td className="num col-p2 cel-sub" data-rotulo="incentivo">{r0(round2(res.porMes.reduce((s, x) => s + x.t.parteIncentivo, 0)))}</td>
+                  {geradoBtg > 0 && <td className="num col-p2 cel-sub" data-rotulo="BTG">{r0(geradoBtg)}</td>}
+                  <td className="num cel-valor">{r0(gerado)}</td>
+                  <td className={cn('num cel-sub', !pagoNaJanela && 'vazio')} data-rotulo="pago">{r0(pagoNaJanela)}</td>
+                  <td className={cn('num cel-sub', gerado - pagoNaJanela < 0 && 'text-warn', !round2(gerado - pagoNaJanela) && 'vazio')} data-rotulo={'falta\u00a0pagar'}>{r0(round2(gerado - pagoNaJanela))}</td>
                 </tr>
               </tfoot>
             )}
@@ -170,7 +209,8 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
 
       {extra}
 
-      <Panel title="Como é calculado">
+      <RecolheNoCelular titulo="Como é calculado">
+      <Panel title={<span className="max-md:hidden">Como é calculado</span>}>
         <ul className="max-w-3xl list-disc space-y-1 pl-5 text-dense text-fg-muted">
           {livros.flatMap(l => l.regras.map(r => (
             <li key={`${l.corretora}:${r.desde}`}>
@@ -183,6 +223,7 @@ export async function AbaReceita({ parceiro, corretora, mesRef, regras, admin, b
           <li>Os percentuais ficam em Parâmetros (Parceiros com participação na receita) e o código do parceiro, em Parâmetros › Assessores. A lista de parceiros de um cliente fica na ficha dele (Editar › Parceiros do cliente). Pagamentos são lançados na aba Pagamentos e regras.</li>
         </ul>
       </Panel>
+      </RecolheNoCelular>
     </>
   )
 }

@@ -17,7 +17,9 @@ export function GanhosDoMes({ dias, ganhos, hoje }: { dias: LeadDiaRow[]; ganhos
           series={[{ key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'gain' }, { key: 'contas', nome: 'Contas abertas', tipo: 'bar', cor: 'neutral' }]} altura={200}
           aoClicar={i => { const d = dias[i]; if (d && d.ganhos > 0) setDiaAberto(d.dia) }} />
       </div>
-      <p className="mt-2 text-micro text-fg-subtle">Clique na barra de um dia para ver quem fechou nele.</p>
+      <p className="mt-2 text-micro text-fg-subtle max-md:hidden">Clique na barra de um dia para ver quem fechou nele.</p>
+      {/* no celular não há clique nem barra larga o bastante: o toque vale na coluna inteira do dia */}
+      <p className="mt-2 text-label text-fg-muted md:hidden">Toque em um dia para ver quem fechou nele.</p>
       <ModalGanhosDia dia={diaAberto} ganhos={diaAberto ? ganhosDoDia(ganhos, diaAberto) : []} hoje={hoje} onClose={() => setDiaAberto(null)} />
     </>
   )

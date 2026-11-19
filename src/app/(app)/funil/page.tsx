@@ -50,14 +50,18 @@ export default async function FunilPage({ searchParams }: { searchParams: Promis
 
   return (
     <>
+      {/* No celular (DESIGN.md §8.2) o PageHeader põe as abas antes da linha de mexer (mês e período). O mês
+          fica sempre no mesmo lugar ao trocar de aba; o período, quando existe, vem depois dele (os dois não
+          cabem lado a lado em 390 px). */}
       <PageHeader eyebrow="Leads · todas as corretoras" title="Funil" description={descricao[aba]}
         actions={<>
           {comPeriodo && <SegParam param="periodo" valor={periodo} opcoes={[{ valor: 'mes', label: 'Só o mês' }, { valor: '12m', label: '12 meses' }]} />}
-          <MesPicker valor={mesRef} label="Mês" />
+          <MesPicker valor={mesRef} label="Mês" className="max-md:order-first" />
         </>}>
         <Abas caminho="/funil" query={{ mes: q('mes') ? mesRef.slice(0, 7) : null }} valor={aba} opcoes={ABAS} padrao="mes" rotulo="Seções do funil" />
       </PageHeader>
-      <PageBody>
+      {/* coluna flexível só no celular: deixa cada aba levar para o fim (order) o bloco que ali fica recolhido */}
+      <PageBody className="max-md:flex max-md:flex-col">
         {aba === 'mes' && <AbaMes mesRef={mesRef} corretoras={corretorasDoPerfil(profile)} />}
         {aba === 'calendario' && <AbaCalendario mesRef={mesRef} corretoras={corretorasDoPerfil(profile)} minimo={pregoesParado(q('parado'))} />}
         {aba === 'equipe' && <AbaEquipe mesRef={mesRef} periodo={periodo} />}

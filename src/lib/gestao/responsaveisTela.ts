@@ -64,6 +64,19 @@ export function montarPessoas(d: {
   }).sort((a, b) => b.receita - a.receita || b.lotes - a.lotes || b.detalhe.receita_12m - a.detalhe.receita_12m || a.nome.localeCompare(b.nome))
 }
 
+// Celular: a lista abre só com quem pesa na receita, e o resto fica atrás de "ver os outros". Fica à vista
+// quem tem 1 % ou mais da receita do mês, quem tinha 1 % ou mais da do mês anterior (quem caiu muito é
+// justamente quem a tela quer mostrar) e a pessoa aberta. A ordem da lista não muda; é só o que aparece
+// primeiro. Esconder uma ou duas linhas não vale um botão: com menos de 3 de fora, ficam todas.
+const PESO_PARA_FICAR_A_VISTA = 0.01
+export function pessoasAVista(pessoas: PessoaDoTime[], aberta = ''): Set<string> {
+  const total = pessoas.reduce((s, p) => s + p.receita, 0)
+  const totalAnterior = pessoas.reduce((s, p) => s + p.receitaAnterior, 0)
+  const pesa = (valor: number, soma: number) => soma > 0 && valor >= soma * PESO_PARA_FICAR_A_VISTA
+  const aVista = pessoas.filter(p => p.nome === aberta || pesa(p.receita, total) || pesa(p.receitaAnterior, totalAnterior))
+  return new Set((aVista.length === 0 || pessoas.length - aVista.length < 3 ? pessoas : aVista).map(p => p.nome))
+}
+
 const nomeDoMes = (mes: string) => MESES_LONGOS[parseInt(mes.slice(5, 7), 10) - 1] ?? mes.slice(0, 7)
 const e = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}`)
 const pct0 = (v: number) => `${v < 0 ? '−' : ''}${Math.abs(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} %`
@@ -76,7 +89,9 @@ export function nomeDeFrase(nome: string): string {
 
 // A frase do topo: quem traz a maior parte da receita e quem está abaixo do mês anterior (quem precisa de
 // ajuda). Só entra na comparação quem tinha receita relevante no mês anterior (3 % da base do time ou mais):
-// código com R$ 10 no mês passado não é notícia.
+// código com R$ 10 no mês passado não é notícia. O corte é exportado porque o celular o escreve no "i" da
+// lista, que mostra também quem ficou fora da frase (e, sem isso, a frase parece contradizer a lista).
+export const PESO_NA_FRASE = 0.03
 export function fraseDoTime(pessoas: PessoaDoTime[], mesRef: string, parcial: boolean): string {
   const atual = nomeDoMes(mesRef), anterior = nomeDoMes(somarMeses(mesRef, -1))
   const comReceita = pessoas.filter(p => p.receita > 0)
@@ -86,7 +101,7 @@ export function fraseDoTime(pessoas: PessoaDoTime[], mesRef: string, parcial: bo
     ? `Toda a receita de ${atual} (R$ ${arredondado(maior.receita)}) vem de ${nomeDeFrase(maior.nome)}.`
     : `${nomeDeFrase(maior.nome)} responde por ${pct0(maior.pctReceita)} da receita de ${atual} (R$ ${arredondado(maior.receita)}).`
   const baseDoTime = pessoas.reduce((s, p) => s + (p.base ?? 0), 0)
-  const comparaveis = pessoas.filter(p => p.variacao != null && p.base != null && baseDoTime > 0 && p.base >= baseDoTime * 0.03)
+  const comparaveis = pessoas.filter(p => p.variacao != null && p.base != null && baseDoTime > 0 && p.base >= baseDoTime * PESO_NA_FRASE)
   if (!comparaveis.length) return abre
   const ponto = parcial ? ' no mesmo ponto do mês' : ''
   const abaixo = comparaveis.filter(p => (p.variacao ?? 0) <= -10).sort((a, b) => (a.variacao ?? 0) - (b.variacao ?? 0))

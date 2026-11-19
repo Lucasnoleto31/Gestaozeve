@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evolucaoDoTime, fraseDoTime, montarPessoas, nomeDeFrase, seriesDaEvolucao } from './responsaveisTela'
+import { evolucaoDoTime, fraseDoTime, montarPessoas, nomeDeFrase, pessoasAVista, seriesDaEvolucao } from './responsaveisTela'
 import type { AssessorMensalRow, AssessorResumoRow } from './tipos'
 
 const resumo = (assessor_nome: string, x: Partial<AssessorResumoRow> = {}): AssessorResumoRow => ({
@@ -50,6 +50,25 @@ describe('montarPessoas', () => {
     const [lucas, artur] = time()
     expect(lucas.tendencia).toEqual([500, 8000, 6000])
     expect(artur.tendencia).toEqual([0, 12000, 3000])
+  })
+})
+
+describe('pessoasAVista', () => {
+  // 100 mil no mês e 100 mil no mês anterior: 1 % = R$ 1.000
+  const grande = (nome: string, receita: number, anterior: number) => ({ r: resumo(nome, { receita }), m: mes(nome, '2026-10-01', anterior) })
+  const montar = (xs: { r: AssessorResumoRow; m: AssessorMensalRow }[]) =>
+    montarPessoas({ resumo: xs.map(x => x.r), mensal: xs.map(x => x.m), clientes: [], meses: MESES, mesRef: '2026-11-01', fracaoMesmoPonto: 0.5 })
+  const TIME = [grande('A', 60000, 50000), grande('B', 39000, 44000), grande('Caiu', 90, 5500), grande('P1', 500, 200), grande('P2', 300, 200), grande('P3', 110, 100), grande('Parado', 0, 0)]
+
+  it('fica à vista quem pesa 1 % no mês ou pesava no mês anterior; quem caiu muito não some', () => {
+    expect([...pessoasAVista(montar(TIME))]).toEqual(['A', 'B', 'Caiu'])
+  })
+  it('a pessoa aberta nunca fica escondida', () => {
+    expect([...pessoasAVista(montar(TIME), 'Parado')]).toEqual(['A', 'B', 'Caiu', 'Parado'])
+  })
+  it('com menos de 3 de fora, ou sem receita nenhuma, ficam todas', () => {
+    expect(pessoasAVista(montar(TIME.slice(0, 5))).size).toBe(5)
+    expect(pessoasAVista(montar([grande('X', 0, 0), grande('Y', 0, 0), grande('Z', 0, 0), grande('W', 0, 0)])).size).toBe(4)
   })
 })
 

@@ -60,7 +60,7 @@ export function EditarUsuarioButton({ usuario }: { usuario: Usuario }) {
 
   return (
     <>
-      <IconButton tone="accent" title="Editar usuário" onClick={() => setOpen(true)}>
+      <IconButton tone="accent" title="Editar usuário" aria-label={`Editar ${usuario.nome}`} onClick={() => setOpen(true)}>
         <Pencil className="h-4 w-4" />
       </IconButton>
 

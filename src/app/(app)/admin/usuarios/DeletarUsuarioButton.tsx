@@ -43,7 +43,7 @@ export function DeletarUsuarioButton({ userId, nome }: Props) {
 
   return (
     <>
-      <IconButton tone="danger" title="Excluir usuário" onClick={() => setOpen(true)}>
+      <IconButton tone="danger" title="Excluir usuário" aria-label={`Excluir ${nome}`} onClick={() => setOpen(true)}>
         <Trash2 className="h-4 w-4" />
       </IconButton>
 

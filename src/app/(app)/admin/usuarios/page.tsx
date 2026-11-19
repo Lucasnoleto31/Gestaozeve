@@ -7,8 +7,9 @@ import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { Panel } from '@/components/ui/Panel'
 import { Badge } from '@/components/ui/Badge'
 import { CorretoraBadge } from '@/components/ui/CorretoraBadge'
-import { corretorasDoPerfil } from '@/lib/corretoras'
-import { formatDate } from '@/lib/utils'
+import type { CSSProperties } from 'react'
+import { CORRETORA_LABEL, corretorasDoPerfil } from '@/lib/corretoras'
+import { cn, formatDate } from '@/lib/utils'
 import { NovoUsuarioButton } from './NovoUsuarioButton'
 import { EditarUsuarioButton } from './EditarUsuarioButton'
 import { DeletarUsuarioButton } from './DeletarUsuarioButton'
@@ -53,7 +54,10 @@ export default async function UsuariosPage() {
       <PageBody>
         <Panel>
           <div className="tbl-wrap">
-            <table className="tbl">
+            {/* No celular (DESIGN.md §8.6) cada pessoa vira um item: o nome inteiro em cima; a função, as corretoras
+                e a data de criação embaixo, em palavras; o lápis e a lixeira à direita. O e-mail fica na folha
+                "Editar usuário" (subtítulo e campo) e "Inativo" aparece só na linha de quem está inativo. */}
+            <table className="tbl tbl-lista" style={{ '--lista-direita': '6.5rem' } as CSSProperties}>
               <thead>
                 <tr>
                   <th>Nome</th>
@@ -73,26 +77,36 @@ export default async function UsuariosPage() {
                 )}
                 {usuarios?.map((u) => (
                   <tr key={u.id}>
-                    <td>
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-micro font-semibold text-accent" aria-hidden>
+                    <td className="cel-titulo">
+                      {/* sem a inicial no celular: o nome cabe inteiro */}
+                      <div className="flex items-center gap-2.5 max-md:block">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-micro font-semibold text-accent max-md:hidden" aria-hidden>
                           {(u.nome ?? '?').charAt(0).toUpperCase()}
                         </div>
                         <span className="font-medium">{u.nome}</span>
                       </div>
                     </td>
                     <td className="muted col-p2">{u.email}</td>
-                    <td><Badge variant={u.role === 'admin' ? 'accent' : 'neutral'}>{ROLE_LABEL[u.role] ?? u.role}</Badge></td>
-                    <td>
+                    <td className="cel-sub">
+                      <Badge variant={u.role === 'admin' ? 'accent' : 'neutral'} className="max-md:hidden!">{ROLE_LABEL[u.role] ?? u.role}</Badge>
+                      {/* no celular a função é palavra: a pílula na tinta do Administrador pesava mais que o nome
+                          (o "!" vence a regra da base que mostra o selo da linha de apoio como palavra) */}
+                      <span className="md:hidden">{ROLE_LABEL[u.role] ?? u.role}</span>
+                    </td>
+                    <td className="cel-sub">
                       {u.corretoras == null
-                        ? <span className="muted">Todas</span>
+                        ? <span className="muted"><span className="max-md:hidden">Todas</span><span className="md:hidden">todas as corretoras</span></span>
                         : corretorasDoPerfil(u).length === 0
                           ? <span className="text-warn">Nenhuma</span>
-                          : <span className="inline-flex flex-wrap gap-1">{corretorasDoPerfil(u).map(c => <CorretoraBadge key={c} corretora={c} />)}</span>}
+                          : <>
+                              <span className="inline-flex flex-wrap gap-1 max-md:hidden">{corretorasDoPerfil(u).map(c => <CorretoraBadge key={c} corretora={c} />)}</span>
+                              {/* em palavras no celular: a pílula cinza da Genial ao lado da do BTG parecia "desligada" */}
+                              <span className="md:hidden">{corretorasDoPerfil(u).map(c => CORRETORA_LABEL[c]).join(' e ')}</span>
+                            </>}
                     </td>
-                    <td className="col-p2"><Badge variant={u.ativo ? 'gain' : 'neutral'}>{u.ativo ? 'Ativo' : 'Inativo'}</Badge></td>
-                    <td className="muted whitespace-nowrap col-p3">{formatDate(u.created_at)}</td>
-                    <td>
+                    <td className={cn('col-p2 cel-sub', u.ativo && 'vazio')}><Badge variant={u.ativo ? 'gain' : 'neutral'}>{u.ativo ? 'Ativo' : 'Inativo'}</Badge></td>
+                    <td className="muted whitespace-nowrap col-p3 cel-sub" data-rotulo={'criado em'}>{formatDate(u.created_at)}</td>
+                    <td className="cel-acoes">
                       <div className="flex items-center justify-end gap-1">
                         <EditarUsuarioButton usuario={u} />
                         <DeletarUsuarioButton userId={u.user_id} nome={u.nome} />

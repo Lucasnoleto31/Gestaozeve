@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { contexto, type Params, type SearchParams } from '@/lib/gestao/pagina'
 import {
@@ -14,6 +15,8 @@ import { fmtNum, fmtPct } from '@/lib/format'
 import { PageBody, PageHeader } from '@/components/ui/PageHeader'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { Panel } from '@/components/ui/Panel'
+import { Dica } from '@/components/ui/Dica'
+import { RecolheNoCelular } from '@/components/ui/RecolheNoCelular'
 import { SegParam } from '@/components/gestao/Filtros'
 import { Resumo } from '@/components/gestao/Resumo'
 import { Secao, n2, rCurto, TRACO } from '@/components/gestao/Celulas'
@@ -29,6 +32,16 @@ import { EvolucaoTime } from '../assessores/EvolucaoTime'
 // foto que já existe em outra tela (leads por status, funil da base, top 10 clientes, leads por corretora).
 // Os endereços antigos continuam abrindo: ?mes= escolhe o mês de referência e ?ref= o último dia das séries.
 const vazio = <p className="py-10 text-center text-dense text-fg-subtle">Sem dados no período.</p>
+
+// Celular (DESIGN.md §8): eram 12 gráficos em 6,4 telas. Ali a tela abre pela frase, pela receita e pelos
+// lotes; cada bloco que não é do dia a dia (Captação, Ativação, Retenção, Time e plataformas) fica atrás do
+// próprio título, com o número dele na linha de baixo, e nos blocos abertos (Lotes e Receita) o segundo
+// gráfico também. No computador nada muda: o RecolheNoCelular fica aberto e as trocas abaixo só agem no
+// celular.
+const soNoComputador = (t: ReactNode) => <span className="max-md:hidden">{t}</span>
+// subtítulo de duas ou três linhas vira o "i" ao lado do título, só no celular (§8.9)
+const comDica = (titulo: string, dica: string) => <>{titulo}<Dica texto={dica} className="ml-1.5 md:hidden" /></>
+const nomeDoBloco = (numero: number, titulo: string) => <><span className="mr-1.5 text-fg-subtle">{numero} ·</span>{titulo}</>
 
 export default async function GraficosPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const ctx = await contexto(params, searchParams)
@@ -97,6 +110,26 @@ export default async function GraficosPage({ params, searchParams }: { params: P
   const evolucao = evolucaoDoTime(porPessoa, serieMes.map(l => l.mes))
   const plataformas = juntarPlataformas(mix)
 
+  // ── Textos das linhas de bloco no celular (os mesmos números dos cartões e dos gráficos) ──
+  const DICA_LEADS = 'Leads do escritório inteiro (não só desta corretora) que entraram no período, e os ganhos pela data de fechamento.'
+  const DICA_CONTAS = 'Clientes que migraram no período, pela data de migração, e quantos deles já tiveram algum lote.'
+  const leadsComGanhos = leadsPeriodo ? `${fmtNum(ganhosPeriodo)} ganhos (${fmtPct((ganhosPeriodo / leadsPeriodo) * 100, 0)})` : undefined
+  const contasJaOperaram = migraram ? `${fmtPct((operaram / migraram) * 100, 0)} já operaram` : undefined
+  const ultimoMes = serieMes.at(-1)
+  const ultimoFluxo = fluxo.at(-1)
+  const totalPlataformas = plataformas.reduce((s, p) => s + p.valor, 0)
+  const textoFluxo = `Começaram ou voltaram: operaram no mês e não no anterior. Pararam: operaram no anterior e não no mês.${mesCorrente ? ` ${mesCurto(mesRef)} entra quando fechar.` : ''}`
+  const emAndamento = mesCorrente ? `${mesCurto(mesRef)} ainda está em andamento.` : null
+  // a última barra de lotes por semana é a semana de hoje, ainda pela metade: no celular, onde o número
+  // dela vem escrito no alto ("16/11: 71.646"), o aviso evita que ela pareça uma queda ou um dia só
+  const ultimaSemana = lotesSemana.at(-1)
+  const semanaEmAndamento = ultimaSemana && ultimaSemana.inicio === inicioSemana(hoje) ? `A semana de ${ultimaSemana.label} ainda está em andamento.` : null
+  // "Quanto rende cada lote?" na linha que abre: o último mês fechado, que a frase e o cartão (o período
+  // todo) não mostram
+  const fechadosComLotes = serieMes.filter(l => (l.x?.lotes ?? 0) > 0 && !(mesCorrente && l.mes === mesRef))
+  const ultimoFechado = fechadosComLotes.at(-1)
+  const porLoteFechado = ultimoFechado ? `${mesCurto(ultimoFechado.mes)}: R$ ${n2(Math.round(((ultimoFechado.x?.receita ?? 0) / (ultimoFechado.x?.lotes ?? 1)) * 100) / 100)} por lote` : undefined
+
   return (
     <>
       <PageHeader eyebrow={ctx.eyebrow} title="Gráficos"
@@ -107,31 +140,37 @@ export default async function GraficosPage({ params, searchParams }: { params: P
           apoio={`De ${mesCurto(inicio)} a ${mesCurto(mesRef)}${mesCorrente ? `, com ${mesCurto(mesRef)} ainda em andamento` : ''}. Os leads são do escritório inteiro; o resto é ${ctx.label === 'BTG' ? 'do' : 'da'} ${ctx.label}.`} />
 
         <KpiRow cols={4}>
-          <KpiCard label="Leads recebidos" value={fmtNum(leadsPeriodo)} sub={leadsPeriodo ? `${fmtNum(ganhosPeriodo)} ganhos (${fmtPct((ganhosPeriodo / leadsPeriodo) * 100, 0)})` : undefined}
-            dica="Leads do escritório inteiro (não só desta corretora) que entraram no período, e os ganhos pela data de fechamento." />
-          <KpiCard label="Contas migradas" value={fmtNum(migraram)} sub={migraram ? `${fmtPct((operaram / migraram) * 100, 0)} já operaram` : undefined}
-            dica="Clientes que migraram no período, pela data de migração, e quantos deles já tiveram algum lote." />
-          <KpiCard label="Lotes" value={fmtNum(lotes)} delta={comparacao(lotes, lotesAntes, fmtNum)} />
+          {/* no celular estes dois saem da faixa: os números já estão na frase e na linha dos blocos 1 e 2 */}
+          <KpiCard className="max-md:hidden!" label="Leads recebidos" value={fmtNum(leadsPeriodo)} sub={leadsComGanhos} dica={DICA_LEADS} />
+          <KpiCard className="max-md:hidden!" label="Contas migradas" value={fmtNum(migraram)} sub={contasJaOperaram} dica={DICA_CONTAS} />
+          {/* celular: é a última linha à vista; sem o fio de baixo, que dobrava com o do bloco 1 */}
+          <KpiCard className="max-md:border-b-0!" label="Lotes" value={fmtNum(lotes)} delta={comparacao(lotes, lotesAntes, fmtNum)} />
           <KpiCard destaque label="Receita" value={rCurto(receita)} valueClassName={receita >= 1_000_000 ? 'max-md:text-section' : undefined} delta={comparacao(receita, receitaAntes, rCurto)} sub={lotes > 0 ? `R$ ${n2(Math.round((receita / lotes) * 100) / 100)} por lote` : undefined}
             dica="Corretagem mais zeragem do período. O incentivo da corretora aparece à parte no gráfico de receita." />
         </KpiRow>
 
-        <section>
-          <Secao numero={1} titulo="Captação" descricao="Os leads que chegam e os que viram cliente (escritório inteiro)." />
-          <div className="grid gap-8 xl:grid-cols-2">
-            <Panel title="Quantos leads entram e quantos a gente ganha?" subtitle={leadsDia ? 'Por semana.' : 'Por mês.'}>
-              {captacao.length
-                ? <GraficoSeries colorido dados={captacao} series={[{ key: 'recebidos', nome: 'Recebidos', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'success' }]} altura={240} />
-                : vazio}
-            </Panel>
-            <Panel title="Qual origem mais vira conta?" subtitle="De cada 100 leads da origem, quantos abriram conta. Entre parênteses, os leads recebidos.">
-              {porOrigem.length ? <GraficoBarrasH colorido dados={porOrigem} formato="pct" larguraRotulo={170} /> : vazio}
-            </Panel>
-          </div>
-        </section>
+        <RecolheNoCelular titulo={nomeDoBloco(1, 'Captação')} dica={DICA_LEADS}
+          resumo={leadsPeriodo ? `${fmtNum(leadsPeriodo)} leads recebidos · ${leadsComGanhos}` : 'Nenhum lead no período.'}>
+          <section>
+            <div className="max-md:hidden"><Secao numero={1} titulo="Captação" descricao="Os leads que chegam e os que viram cliente (escritório inteiro)." /></div>
+            <div className="grid gap-8 xl:grid-cols-2">
+              <Panel title="Quantos leads entram e quantos a gente ganha?" subtitle={leadsDia ? 'Por semana.' : 'Por mês.'}>
+                {captacao.length
+                  ? <GraficoSeries colorido dados={captacao} series={[{ key: 'recebidos', nome: 'Recebidos', tipo: 'bar' }, { key: 'ganhos', nome: 'Ganhos', tipo: 'bar', cor: 'success' }]} altura={240} />
+                  : vazio}
+              </Panel>
+              <Panel title={comDica('Qual origem mais vira conta?', 'De cada 100 leads da origem, quantos abriram conta. Entre parênteses, os leads recebidos.')}
+                subtitle={soNoComputador('De cada 100 leads da origem, quantos abriram conta. Entre parênteses, os leads recebidos.')}>
+                {porOrigem.length ? <GraficoBarrasH colorido dados={porOrigem} formato="pct" larguraRotulo={170} /> : vazio}
+              </Panel>
+            </div>
+          </section>
+        </RecolheNoCelular>
 
+        <RecolheNoCelular titulo={nomeDoBloco(2, 'Ativação')} dica={DICA_CONTAS}
+          resumo={migraram ? `${fmtNum(migraram)} contas migradas · ${contasJaOperaram}` : 'Nenhuma conta migrou no período.'}>
         <section>
-          <Secao numero={2} titulo="Ativação" descricao="A conta que entra, migra e começa a operar." />
+          <div className="max-md:hidden"><Secao numero={2} titulo="Ativação" descricao="A conta que entra, migra e começa a operar." /></div>
           <div className="grid gap-8 xl:grid-cols-2">
             <Panel title="Quantas contas entram e quantas migram?" subtitle="Por semana.">
               {contas.length ? <GraficoSeries colorido dados={contas} series={[{ key: 'entradas', nome: 'Entraram', tipo: 'bar' }, { key: 'migrados', nome: 'Migraram', tipo: 'bar', cor: 'success' }]} altura={240} /> : vazio}
@@ -144,23 +183,33 @@ export default async function GraficosPage({ params, searchParams }: { params: P
             </Panel>
           </div>
         </section>
+        </RecolheNoCelular>
 
         <section>
-          <Secao numero={3} titulo="Lotes" descricao="Quanto os clientes operam e quantos estão operando." />
+          <Secao numero={3} titulo="Lotes" descricao={soNoComputador('Quanto os clientes operam e quantos estão operando.')} />
           <div className="grid gap-8 xl:grid-cols-2">
             <Panel title="Quantos lotes por semana?">
+              {/* só no celular, no corpo e não no subtítulo: no computador o cabeçalho fica como era */}
+              {semanaEmAndamento && lotesSemana.length > 0 && <p className="-mt-2 mb-2 text-dense text-fg-muted md:hidden">{semanaEmAndamento}</p>}
               {lotesSemana.length ? <GraficoSeries colorido dados={lotesSemana} series={[{ key: 'lotes', nome: 'Lotes', tipo: 'bar' }]} altura={240} legenda={false} /> : vazio}
             </Panel>
-            <Panel title="Quantos clientes operam em cada mês?" subtitle={mesCorrente ? `${mesCurto(mesRef)} ainda está em andamento.` : undefined}>
-              {serieMes.length ? <GraficoSeries colorido dados={serieMes.map(l => ({ label: mesCurto(l.mes), ativos: l.x?.clientes_ativos ?? 0 }))} series={[{ key: 'ativos', nome: 'Clientes com lotes', tipo: 'bar' }]} altura={240} legenda={false} /> : vazio}
-            </Panel>
+            {/* gráfico secundário: linha discreta, para não parecer um bloco numerado a mais */}
+            <RecolheNoCelular tamanho="linha" titulo="Quantos clientes operam em cada mês?"
+              resumo={ultimoMes ? `${mesCurto(ultimoMes.mes)}: ${fmtNum(ultimoMes.x?.clientes_ativos ?? 0)} clientes com lotes${mesCorrente ? ' (ainda em andamento)' : ''}` : undefined}>
+              <Panel title={soNoComputador('Quantos clientes operam em cada mês?')} subtitle={emAndamento ? soNoComputador(emAndamento) : undefined}>
+                {serieMes.length ? <GraficoSeries colorido dados={serieMes.map(l => ({ label: mesCurto(l.mes), ativos: l.x?.clientes_ativos ?? 0 }))} series={[{ key: 'ativos', nome: 'Clientes com lotes', tipo: 'bar' }]} altura={240} legenda={false} /> : vazio}
+              </Panel>
+            </RecolheNoCelular>
           </div>
         </section>
 
         <section>
-          <Secao numero={4} titulo="Receita" descricao="Quanto entra e quanto cada lote rende." />
+          <Secao numero={4} titulo="Receita" descricao={soNoComputador('Quanto entra e quanto cada lote rende.')} />
           <div className="grid gap-8 xl:grid-cols-2">
-            <Panel title="De onde vem a receita de cada mês?" subtitle="Corretagem, zeragem e, quando existe, o incentivo da corretora.">
+            {/* celular: a legenda já diz os tipos; no lugar fica o aviso do mês em andamento, para a última
+                barra não parecer queda */}
+            <Panel title="De onde vem a receita de cada mês?"
+              subtitle={<>{soNoComputador('Corretagem, zeragem e, quando existe, o incentivo da corretora.')}{emAndamento && <span className="md:hidden">{emAndamento}</span>}</>}>
               {serieMes.length ? (
                 <GraficoSeries colorido formato="brl" altura={240}
                   dados={serieMes.map(l => ({ label: mesCurto(l.mes), corretagem: l.x?.receita_corretagem ?? 0, zeragem: l.x?.receita_zeragem ?? 0, fixa: l.x?.receita_acoes ?? 0, incentivo: l.x?.incentivo ?? 0 }))}
@@ -172,21 +221,25 @@ export default async function GraficosPage({ params, searchParams }: { params: P
                   ]} />
               ) : vazio}
             </Panel>
-            <Panel title="Quanto rende cada lote?" subtitle="Receita do mês dividida pelos lotes do mês, em reais.">
-              {serieMes.some(l => (l.x?.lotes ?? 0) > 0)
-                ? <GraficoSeries colorido formato="dec" altura={240} legenda={false}
-                    dados={serieMes.filter(l => (l.x?.lotes ?? 0) > 0).map(l => ({ label: mesCurto(l.mes), porLote: Math.round(((l.x?.receita ?? 0) / (l.x?.lotes ?? 1)) * 1000) / 1000 }))}
-                    series={[{ key: 'porLote', nome: 'R$ por lote', tipo: 'line' }]} />
-                : vazio}
-            </Panel>
+            <RecolheNoCelular tamanho="linha" titulo="Quanto rende cada lote?" dica="Receita do mês dividida pelos lotes do mês, em reais."
+              resumo={porLoteFechado}>
+              <Panel title={soNoComputador('Quanto rende cada lote?')} subtitle={soNoComputador('Receita do mês dividida pelos lotes do mês, em reais.')}>
+                {serieMes.some(l => (l.x?.lotes ?? 0) > 0)
+                  ? <GraficoSeries colorido formato="dec" altura={240} legenda={false}
+                      dados={serieMes.filter(l => (l.x?.lotes ?? 0) > 0).map(l => ({ label: mesCurto(l.mes), porLote: Math.round(((l.x?.receita ?? 0) / (l.x?.lotes ?? 1)) * 1000) / 1000 }))}
+                      series={[{ key: 'porLote', nome: 'R$ por lote', tipo: 'line' }]} />
+                  : vazio}
+              </Panel>
+            </RecolheNoCelular>
           </div>
         </section>
 
+        <RecolheNoCelular titulo={nomeDoBloco(5, 'Retenção')} dica="Quem começa, quem para e o quanto a operação depende de poucos clientes."
+          resumo={ultimoFluxo ? `${mesCurto(ultimoFluxo.mes)}: ${fmtNum(ultimoFluxo.comecaram)} começaram ou voltaram, ${fmtNum(ultimoFluxo.pararam)} pararam` : undefined}>
         <section>
-          <Secao numero={5} titulo="Retenção" descricao="Quem começa, quem para e o quanto a operação depende de poucos clientes." />
+          <div className="max-md:hidden"><Secao numero={5} titulo="Retenção" descricao="Quem começa, quem para e o quanto a operação depende de poucos clientes." /></div>
           <div className="grid gap-8 xl:grid-cols-2">
-            <Panel title="A carteira está crescendo ou encolhendo?"
-              subtitle={`Começaram ou voltaram: operaram no mês e não no anterior. Pararam: operaram no anterior e não no mês.${mesCorrente ? ` ${mesCurto(mesRef)} entra quando fechar.` : ''}`}>
+            <Panel title={comDica('A carteira está crescendo ou encolhendo?', textoFluxo)} subtitle={soNoComputador(textoFluxo)}>
               {fluxo.length
                 ? <GraficoSeries colorido dados={fluxo.map(f => ({ label: mesCurto(f.mes), comecaram: f.comecaram, pararam: f.pararam }))}
                     series={[{ key: 'comecaram', nome: 'Começaram ou voltaram', tipo: 'bar', cor: 'success' }, { key: 'pararam', nome: 'Pararam', tipo: 'bar', cor: 'danger' }]} altura={240} />
@@ -199,17 +252,21 @@ export default async function GraficosPage({ params, searchParams }: { params: P
             </Panel>
           </div>
         </section>
+        </RecolheNoCelular>
 
+        <RecolheNoCelular titulo={nomeDoBloco(6, 'Time e plataformas')} dica="Quem traz o resultado e por onde os clientes operam."
+          resumo={plataformas[0] && totalPlataformas > 0 ? `${plataformas[0].nome}: ${fmtPct((plataformas[0].valor / totalPlataformas) * 100, 1)} dos lotes` : undefined}>
         <section>
-          <Secao numero={6} titulo="Time e plataformas" descricao="Quem traz o resultado e por onde os clientes operam." />
+          <div className="max-md:hidden"><Secao numero={6} titulo="Time e plataformas" descricao="Quem traz o resultado e por onde os clientes operam." /></div>
           <div className="grid gap-8 xl:grid-cols-2">
             <EvolucaoTime evolucao={evolucao} mesRef={mesRef} parcial={mesCorrente} titulo="Quem traz a receita e os lotes?" comNumeros={false}
-              rodape={<p className="mt-2 text-dense"><Link href={`${base}/assessores`} className="link">Ver cada pessoa em Responsáveis</Link></p>} />
+              rodape={<p className="mt-2 text-dense"><Link href={`${base}/assessores`} className="link max-md:inline-flex max-md:min-h-11 max-md:items-center">Ver cada pessoa em Responsáveis</Link></p>} />
             <Panel title="Em que plataforma os clientes operam?" subtitle="Lotes do período por plataforma.">
               {plataformas.length ? <GraficoRosca colorido dados={plataformas} /> : vazio}
             </Panel>
           </div>
         </section>
+        </RecolheNoCelular>
       </PageBody>
     </>
   )

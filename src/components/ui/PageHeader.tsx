@@ -21,8 +21,11 @@ export function PageHeader({ eyebrow, title, description, actions, stats, childr
 }) {
   // título que a barra do topo já mostra: texto simples, sem pedido para manter
   const tituloNaBarra = typeof title === 'string' && !tituloNoCelular
+  // com o título na barra de cima, as abas (children) sobem para o alto e a linha de mexer (mês, ações)
+  // fica embaixo delas: as abas ficam sempre na mesma altura, de uma tela para outra (§8.2)
+  const abasPrimeiro = !!children && tituloNaBarra && !(description && descricaoNoCelular)
   return (
-    <div className={cn('px-4 pb-2 pt-3 md:pt-6 lg:px-8', className)}>
+    <div className={cn('px-4 pb-2 pt-3 md:pt-6 lg:px-8', abasPrimeiro && 'max-md:flex max-md:flex-col-reverse max-md:gap-3 max-md:pt-1', className)}>
       {/* Título com largura mínima: quando as ações não cabem ao lado, descem para a linha de baixo */}
       <div className="flex flex-col md:flex-row md:flex-wrap md:items-end md:justify-between md:gap-4">
         <div className="min-w-0 md:min-w-[18rem] md:flex-1">

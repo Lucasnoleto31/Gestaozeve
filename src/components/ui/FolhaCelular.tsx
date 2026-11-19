@@ -22,7 +22,11 @@ export function FolhaCelular({ rotulo = 'Filtros', ativos = 0, concluir = 'Ver r
     if (!aberta) return
     const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setAberta(false) }
     window.addEventListener('keydown', tecla)
-    return () => window.removeEventListener('keydown', tecla)
+    // a página de trás não rola enquanto a folha está aberta
+    const raiz = document.documentElement
+    const antes = raiz.style.overflow
+    raiz.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', tecla); raiz.style.overflow = antes }
   }, [aberta])
 
   return (
@@ -33,7 +37,7 @@ export function FolhaCelular({ rotulo = 'Filtros', ativos = 0, concluir = 'Ver r
         {ativos > 0 && <span className="tabular-nums">· {ativos}</span>}
       </button>
       {aberta && <div className="folha-fundo md:hidden" onClick={() => setAberta(false)} aria-hidden />}
-      <div className={cn('folha-celular', className)} data-aberta={aberta}>
+      <div className={cn('folha-celular', className)} data-aberta={aberta} role={aberta ? 'dialog' : undefined} aria-label={aberta ? rotulo : undefined}>
         <div className="flex items-center justify-between md:hidden">
           <p className="text-section font-semibold text-fg">{rotulo}</p>
           <button type="button" className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-md text-fg-muted" aria-label="Fechar" onClick={() => setAberta(false)}>
@@ -41,7 +45,10 @@ export function FolhaCelular({ rotulo = 'Filtros', ativos = 0, concluir = 'Ver r
           </button>
         </div>
         {children}
-        <button type="button" className={cn(buttonClasses('primary', 'md'), 'md:hidden')} onClick={() => setAberta(false)}>{concluir}</button>
+        {/* preso ao pé: com muitos filtros a folha rola e o botão continua à vista */}
+        <div className="folha-pe md:hidden">
+          <button type="button" className={cn(buttonClasses('primary', 'md'), 'w-full')} onClick={() => setAberta(false)}>{concluir}</button>
+        </div>
       </div>
     </>
   )

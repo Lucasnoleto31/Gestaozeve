@@ -239,6 +239,7 @@ de planilha. A mesma `<table>` do computador ganha a classe `tbl-lista` e cada c
 | `cel-sub` | a linha de apoio: as células ficam em fila, separadas por "·". `data-rotulo="resp."` põe o nome do dado na frente. A classe `vazio` esconde a célula sem dado |
 | `cel-valor` | o número, à direita (um por linha). `data-rotulo="lotes"` põe a unidade embaixo |
 | `cel-acoes` | os botões da linha, à direita |
+| `cel-marca` | a caixa de marcar a linha, à esquerda |
 | `cel-bloco` | uma linha inteira embaixo (barra, detalhe que abre) |
 
 - **Célula sem papel some no celular.** Só pode ficar sem papel o que a linha de apoio já diz ou o que a
@@ -250,6 +251,8 @@ de planilha. A mesma `<table>` do computador ganha a classe `tbl-lista` e cada c
 - A largura reservada para o número é `--lista-direita` (padrão 6rem; com botões, 9.5rem): ajuste no
   `style` da tabela quando o número for largo ("R$ 1.234.567") ou houver menos botões.
 - Linha de total: `<tr className="total">` com `cel-titulo` e `cel-valor`.
+- `data-sufixo="tombaram"` numa `cel-sub` põe a palavra depois do número. `sem-seta` na linha tira a seta de
+  quem não tem para onde ir (conta sem cadastro). Com um `cel-bloco` na linha, o número fica na altura do nome.
 - **Matriz mês a mês não vira lista**: continua tabela, rola de lado dentro da moldura com a primeira
   coluna presa, e mostra primeiro os meses mais novos.
 
@@ -257,6 +260,10 @@ de planilha. A mesma `<table>` do computador ganha a classe `tbl-lista` e cada c
 
 No celular `max-h-[…]` em `.tbl-wrap` não vale: a lista corre com a página e termina em "mostrar mais".
 Rolagem dentro de rolagem prende o dedo.
+Lista longa que não é o último bloco da tela mostra as primeiras linhas e o resto atrás de `MostrarMais`
+(`components/ui/MostrarMais.tsx`; as linhas além do limite levam `ALEM_NO_CELULAR`). Bloco que não responde
+à pergunta da tela fica atrás do próprio título com `RecolheNoCelular` (`components/ui/RecolheNoCelular.tsx`):
+fechado no celular, aberto no computador, o mesmo conteúdo nos dois.
 
 ### 8.8 Filtros, etiquetas e abas
 
@@ -277,7 +284,14 @@ Rolagem dentro de rolagem prende o dedo.
   vira "i" ou `max-md:hidden`.
 - Janela (`Modal`) sobe do pé como folha e trava a página de trás.
 
-### 8.10 Antes de dar por pronta uma tela no celular
+### 8.10 Quando a regra da base atrapalha
+
+As regras de celular do `globals.css` ficam fora de camada de propósito: elas precisam vencer os utilitários
+que desenham o computador (`px-5`, `truncate`, `grid-cols-2`). Por isso um utilitário só vence uma
+propriedade que elas definem com o `!` no fim (`max-md:hidden!`, `max-md:right-13!`). Use pouco: se a mesma
+exceção aparecer em duas telas, ela vira regra da base.
+
+### 8.11 Antes de dar por pronta uma tela no celular
 
 - [ ] Foto em 390 px: a resposta (frase, número ou começo da lista) está na primeira tela
 - [ ] Nenhuma rolagem lateral da página e nenhuma caixa com rolagem própria

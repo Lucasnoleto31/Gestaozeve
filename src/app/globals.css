@@ -829,13 +829,13 @@ html {
     padding: 14px 16px;
   }
 
-  .kpi-row > .kpi:nth-child(-n + 2) {
+  .kpi-row:not(.kpi-etiquetas) > .kpi:nth-child(-n + 2) {
     margin-bottom: 6px;
   }
 
   /* o cartão em destaque (o número principal da tela) sobe para o topo, na largura toda, quando a tela
      o desenha depois do segundo: o JSX do computador não muda de ordem */
-  .kpi-row > .kpi.bg-fg:nth-child(n + 3) {
+  .kpi-row:not(.kpi-etiquetas) > .kpi.bg-fg:nth-child(n + 3) {
     order: -1;
     grid-column: 1 / -1;
     margin-bottom: 6px;
@@ -846,7 +846,7 @@ html {
     grid-column: 1 / -1;
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg),
+  .kpi-row:not(.kpi-etiquetas) > .kpi:nth-child(n + 3):not(.bg-fg),
   .kpi-row.kpi-largo > .kpi:nth-child(2):not(.bg-fg) {
     grid-column: 1 / -1;
     display: grid;
@@ -861,7 +861,7 @@ html {
     text-align: left;
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg):last-child {
+  .kpi-row:not(.kpi-etiquetas) > .kpi:nth-child(n + 3):not(.bg-fg):last-child {
     border-bottom: 0;
   }
 
@@ -869,14 +869,14 @@ html {
     margin-bottom: 0;
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-rotulo,
+  .kpi-row:not(.kpi-etiquetas) > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-rotulo,
   .kpi-row.kpi-largo > .kpi:nth-child(2):not(.bg-fg) > .kpi-rotulo {
     grid-area: rotulo;
     font-size: var(--text-dense);
     color: var(--fg);
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-valor,
+  .kpi-row:not(.kpi-etiquetas) > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-valor,
   .kpi-row.kpi-largo > .kpi:nth-child(2):not(.bg-fg) > .kpi-valor {
     grid-area: valor;
     margin: 0;
@@ -885,7 +885,7 @@ html {
     text-align: right;
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-apoio,
+  .kpi-row:not(.kpi-etiquetas) > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-apoio,
   .kpi-row.kpi-largo > .kpi:nth-child(2):not(.bg-fg) > .kpi-apoio {
     grid-area: apoio;
     min-height: 0;
@@ -895,6 +895,10 @@ html {
   /* a comparação do cartão quebra como texto corrido, não em duas colunas */
   .kpi-delta {
     display: inline;
+  }
+
+  .kpi-delta > span {
+    margin-left: 0.3em;
   }
 
   /* Cartões que filtram a lista (KpiRow etiquetas): uma fileira de etiquetas que rola de lado */
@@ -907,8 +911,7 @@ html {
     scrollbar-width: none;
   }
 
-  .kpi-row.kpi-etiquetas > .kpi,
-  .kpi-row.kpi-etiquetas > .kpi:nth-child(n + 3):not(.bg-fg) {
+  .kpi-row.kpi-etiquetas > .kpi {
     display: inline-flex;
     flex: none;
     align-items: baseline;
@@ -1011,6 +1014,7 @@ html {
   .tbl-lista > :is(tbody, tfoot) > tr > td.cel-sub {
     display: inline;
     font-size: var(--text-label);
+    font-weight: 400;
     line-height: 1.5;
     color: var(--fg-muted);
   }
@@ -1030,7 +1034,12 @@ html {
   }
 
   .tbl-lista td.cel-sub[data-rotulo]::before {
-    content: attr(data-rotulo) " ";
+    content: attr(data-rotulo) "\00a0";
+  }
+
+  /* data-sufixo: a palavra depois do número ("26 tombaram") */
+  .tbl-lista td.cel-sub[data-sufixo]::after {
+    content: "\00a0" attr(data-sufixo);
   }
 
   .tbl-lista td.cel-sub:not(.vazio) ~ td.cel-sub:not(.vazio)::before {
@@ -1038,7 +1047,7 @@ html {
   }
 
   .tbl-lista td.cel-sub:not(.vazio) ~ td.cel-sub[data-rotulo]:not(.vazio)::before {
-    content: " · " attr(data-rotulo) " ";
+    content: " · " attr(data-rotulo) "\00a0";
   }
 
   .tbl-lista > :is(tbody, tfoot) > tr > td.cel-valor {
@@ -1081,6 +1090,26 @@ html {
     margin-top: 6px;
   }
 
+  /* com um bloco embaixo (detalhe que abre), o número fica na altura do nome, não no meio de tudo */
+  .tbl-lista > :is(tbody, tfoot) > tr:has(> td.cel-bloco) > td.cel-valor {
+    top: 12px;
+    transform: none;
+  }
+
+  /* cel-marca: a caixa de marcar a linha, à esquerda */
+  .tbl-lista > :is(tbody, tfoot) > tr:has(> td.cel-marca) {
+    padding-left: 2.5rem;
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td.cel-marca {
+    display: block;
+    position: absolute;
+    top: 50%;
+    left: 0;
+    z-index: 1;
+    transform: translateY(-50%);
+  }
+
   /* o que é clicável dentro da linha fica acima do link que pega a linha inteira */
   .tbl-lista td :is(a, button, input, select, summary) {
     position: relative;
@@ -1107,8 +1136,14 @@ html {
     transform: translateY(-50%) rotate(45deg);
   }
 
-  .tbl-lista.lista-abre > tbody > tr > td.cel-valor {
+  .tbl-lista.lista-abre > tbody > tr > td.cel-valor,
+  .tbl-lista.lista-abre > tbody > tr > td.cel-acoes {
     right: 1.1rem;
+  }
+
+  /* sem-seta: linha de uma lista que abre, mas que não tem para onde ir (conta sem cadastro) */
+  .tbl-lista.lista-abre > tbody > tr.sem-seta::after {
+    display: none;
   }
 
   .tbl-lista.lista-abre > tbody > tr > td.cel-titulo a {
@@ -1172,11 +1207,12 @@ html {
   }
 
   .abas-pagina {
+    gap: 2px;
     scrollbar-width: none;
   }
 
   .abas-pagina > a {
-    padding-inline: 10px;
+    padding-inline: 8px;
     font-size: 14px;
   }
 
@@ -1210,6 +1246,19 @@ html {
     flex-direction: column;
     align-items: stretch;
     gap: 6px;
+  }
+
+  .folha-celular[data-aberta="true"] label:has(> input[type="checkbox"], > input[type="radio"]) {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .folha-celular[data-aberta="true"] > .folha-pe {
+    position: sticky;
+    bottom: calc(-16px - env(safe-area-inset-bottom));
+    margin: 0 -16px calc(-16px - env(safe-area-inset-bottom));
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+    background: var(--popover);
   }
 
   .folha-celular[data-aberta="true"] :is(select, input:not([type="checkbox"], [type="radio"])) {

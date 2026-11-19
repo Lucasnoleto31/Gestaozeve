@@ -81,35 +81,50 @@ export default async function IncentivoPage({ params, searchParams }: { params: 
           frase={fraseDoIncentivo({ mesRef, total, comFaixa: comFaixa.length, previsto: incentivoProj ? incentivoProj.total : null, anterior: anterior?.incentivo ?? null, primeiraFaixa })}
           apoio={proximo ? `Mais perto de subir de faixa: ${proximo.nome}, faltam ${fmtNum(proximo.pontos_faltantes ?? 0)} pontos para passar de ${fmtNum(proximo.proxima_faixa ?? 0)}.` : null} />
 
-        <KpiRow cols={4}>
+        {/* Celular (DESIGN.md §8.5): só o incentivo do mês fica como cartão, na largura toda (lado a lado o rótulo
+            quebrava e os dois números ficavam desalinhados); clientes com faixa e 12 meses viram linha.
+            "Mais perto de subir" sai da vista: a linha logo abaixo da frase já diz quem é e quantos pontos faltam.
+            Com o mês em andamento a variação contra o mês fechado ("mês parcial") dá lugar, no celular, a
+            "deve fechar em"; a de clientes com faixa fica em "ver os números mês a mês" (coluna Com faixa). */}
+        <KpiRow cols={4} principalLargo>
           <KpiCard destaque label={`Incentivo em ${mesCurto(mesRef)}`} value={rCurto(total)} delta={variacao(total, anterior?.incentivo, rCurto)}
+            // no computador o envoltório do "deve fechar em" também sai, para o apoio do cartão ficar como era
+            className={cn(incentivoProj && 'max-md:[&_.kpi-delta]:hidden! md:[&_.kpi-apoio>span:has(>[data-celular])]:hidden')}
+            sub={incentivoProj ? <span data-celular className="md:hidden">deve fechar em {rCurto(incentivoProj.total)}</span> : undefined}
             dica={`Bônus pago pela ${ctx.label} por cliente: pontos = lotes × multiplicador do produto; a faixa é o maior mínimo de pontos que o cliente ultrapassou no mês.`} />
           <KpiCard label="Clientes com faixa" value={fmtNum(comFaixa.length)} sub={linhas.length ? `${fmtPct((comFaixa.length / linhas.length) * 100, 0)} dos ${fmtNum(linhas.length)} que pontuam` : undefined}
+            className={cn(incentivoProj && 'max-md:[&_.kpi-delta]:hidden!')}
             delta={variacao(comFaixa.length, anterior?.clientes_com_faixa, fmtNum)} />
-          <KpiCard label="Mais perto de subir" value={proximo ? `${fmtNum(proximo.pontos_faltantes ?? 0)} pontos` : TRACO}
+          <KpiCard label="Mais perto de subir" value={proximo ? `${fmtNum(proximo.pontos_faltantes ?? 0)} pontos` : TRACO} className="max-md:hidden!"
             sub={proximo ? <span className="block truncate" title={proximo.nome}>{proximo.nome} · para passar de {fmtNum(proximo.proxima_faixa ?? 0)}</span> : 'ninguém a caminho de outra faixa'} />
           <KpiCard label="Incentivo em 12 meses" value={rCurto(total12)} sub={meses.length ? `${mesCurto(meses[0])} a ${mesCurto(mesRef)}` : undefined} />
         </KpiRow>
 
-        <Panel title="Incentivo por mês" subtitle={incentivoProj ? `${mesCurto(mesRef)} ainda está em andamento: deve fechar em ${rCurto(incentivoProj.total)}, com ${fmtNum(incentivoProj.comFaixa)} clientes em faixa${incentivoProj.sobem ? ` (${fmtNum(incentivoProj.sobem)} sobem)` : ''}.` : undefined}>
+        <Panel title="Incentivo por mês" subtitle={incentivoProj ? <>
+          <span className="max-md:hidden">{mesCurto(mesRef)} ainda está em andamento: deve fechar em {rCurto(incentivoProj.total)}, com {fmtNum(incentivoProj.comFaixa)} clientes em faixa{incentivoProj.sobem ? ` (${fmtNum(incentivoProj.sobem)} sobem)` : ''}.</span>
+          {/* celular: o valor previsto já está no cartão logo acima; fica só o que ele não diz */}
+          <span className="md:hidden">Deve fechar com {fmtNum(incentivoProj.comFaixa)} clientes com faixa{incentivoProj.sobem ? ` (${fmtNum(incentivoProj.sobem)} sobem)` : ''}.</span>
+        </> : undefined}>
           {meses.length === 0 ? <p className="py-10 text-center text-dense text-fg-subtle">Sem pontos na janela.</p> : (
             <>
               <GraficoSeries dados={meses.map(m => ({ label: mesCurto(m), incentivo: histMap.get(m)?.incentivo ?? 0 }))}
                 series={[{ key: 'incentivo', nome: 'Incentivo', tipo: 'bar', formato: 'brl' }]} formato="brl" altura={240} legenda={false} />
               <Recolhido tamanho="linha" titulo="ver os números mês a mês">
+                {/* matriz mês a mês continua tabela no celular (§8.6): os pontos de cada mês voltam à vista. Para as
+                    cinco colunas caberem em 358 px sem rolar de lado, o título da coluna pode quebrar ("Com faixa") */}
                 <div className="tbl-wrap">
-                  <table className="tbl tbl-dense max-md:[&_td]:px-1.5 max-md:[&_th]:px-1.5">
-                    <thead><tr><th>Mês</th><th className="num col-p2">Pontos</th><th className="num"><span className="md:hidden">Pontuando</span><span className="hidden md:inline">Clientes pontuando</span></th><th className="num">Com faixa</th><th className="num">Incentivo</th></tr></thead>
+                  <table className="tbl tbl-dense max-md:[&_td]:px-1.5 max-md:[&_th]:px-1.5 max-md:[&_th]:whitespace-normal">
+                    <thead><tr><th>Mês</th><th className="num col-p2 max-md:table-cell">Pontos</th><th className="num"><span className="md:hidden">Pontuando</span><span className="hidden md:inline">Clientes pontuando</span></th><th className="num">Com faixa</th><th className="num">Incentivo</th></tr></thead>
                     <tbody>
                       {meses.map(m => {
                         const h = histMap.get(m)
                         return (
                           <tr key={m} className={cn(m === mesRef && 'font-semibold')}>
-                            <td>{mesCurto(m)}</td><td className="num col-p2">{n0(h?.pontos)}</td><td className="num">{n0(h?.clientes_pontuando)}</td><td className="num">{n0(h?.clientes_com_faixa)}</td><td className="num">{rCurto(h?.incentivo)}</td>
+                            <td>{mesCurto(m)}</td><td className="num col-p2 max-md:table-cell">{n0(h?.pontos)}</td><td className="num">{n0(h?.clientes_pontuando)}</td><td className="num">{n0(h?.clientes_com_faixa)}</td><td className="num">{rCurto(h?.incentivo)}</td>
                           </tr>
                         )
                       })}
-                      <tr className="total"><td>Total</td><td className="num col-p2">{n0(hist.reduce((s, h) => s + h.pontos, 0))}</td><td></td><td></td><td className="num">{rCurto(total12)}</td></tr>
+                      <tr className="total"><td>Total</td><td className="num col-p2 max-md:table-cell">{n0(hist.reduce((s, h) => s + h.pontos, 0))}</td><td></td><td></td><td className="num">{rCurto(total12)}</td></tr>
                     </tbody>
                   </table>
                 </div>

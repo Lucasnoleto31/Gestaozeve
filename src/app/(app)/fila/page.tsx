@@ -13,6 +13,7 @@ import { Abas } from '@/components/gestao/Abas'
 import { MeusPontos } from '@/components/gestao/MeusPontos'
 import { MinhaFila } from './MinhaFila'
 import { Distribuir } from './Distribuir'
+import { RecolheNoCelular } from '@/components/ui/RecolheNoCelular'
 
 // A Fila: uma tela só para o trabalho do dia. Antes eram duas (Minha fila e Oportunidades, uma por
 // corretora) que "pareciam fazer a mesma coisa" (Lucas, nov/26).
@@ -51,14 +52,23 @@ export default async function FilaPage({ searchParams }: { searchParams: Promise
   return (
     <>
       <PageHeader eyebrow="Equipe" title="Minha fila">{abas}</PageHeader>
-      <PageBody>
+      {/* No celular a tela abre pela frase da fila (em MinhaFila, que sobe pela ordem): os blocos viram
+          uma coluna para a ordem poder mudar sem mexer no computador */}
+      <PageBody className="max-md:flex max-md:flex-col">
         {dados.semS59 && (
-          <Alert tone="warn" title="Próximo contato ainda não ativado no banco">
+          <Alert tone="warn" title="Próximo contato ainda não ativado no banco" className="max-md:-order-2">
             Rode a S59 no Supabase para combinar retornos; até lá a fila mostra só leads sem contato, leads parados, clientes em risco e campanha.
           </Alert>
         )}
-        {/* remuneração por níveis: só aparece para quem está no modelo, sem segurar a fila */}
-        <Suspense fallback={null}><MeusPontos comLink={profile.role !== 'atendente'} /></Suspense>
+        {/* remuneração por níveis: só aparece para quem está no modelo, sem segurar a fila. No celular
+            fica logo abaixo da frase, numa linha que abre no toque: a primeira tela é das tarefas */}
+        {/* o bloco chega depois (Suspense) e não vem para quem não está no modelo: enquanto não houver a
+            seção dentro, nada aparece e nada ocupa lugar, nem no computador */}
+        <div className="hidden has-[section]:block max-md:-mt-3">
+          <RecolheNoCelular tamanho="linha" titulo="Meus pontos">
+            <Suspense fallback={null}><MeusPontos comLink={profile.role !== 'atendente'} /></Suspense>
+          </RecolheNoCelular>
+        </div>
         <MinhaFila {...dados} />
       </PageBody>
     </>

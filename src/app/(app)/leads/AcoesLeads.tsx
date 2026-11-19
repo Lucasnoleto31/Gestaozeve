@@ -53,9 +53,11 @@ export function AcoesLeads({ responsaveis, status, admin, opcoesOrigem }: { resp
       {admin && <Button variant="secondary" onClick={() => { setImp(true); setErro(null) }}><Upload className="h-4 w-4" aria-hidden />Importar export</Button>}
       <Button onClick={() => setNovo(true)}><Plus className="h-4 w-4" aria-hidden />Novo lead</Button>
       {novo && <LeadForm lead={null} aberto={novo} onClose={() => setNovo(false)} responsaveis={responsaveis} status={status} admin={admin} opcoesOrigem={opcoesOrigem} />}
-      <Modal open={imp} onClose={() => setImp(false)} title="Importar export do formulário" subtitle="Data/Hora, Nome, WhatsApp, CPF, Email, Já opera?, Corretora. Quem já existe não duplica; colunas da equipe completam o que estiver em branco."
+      {/* celular: a janela corta o subtítulo em três linhas; a segunda frase desce para o corpo, inteira */}
+      <Modal open={imp} onClose={() => setImp(false)} title="Importar export do formulário" subtitle={<>Data/Hora, Nome, WhatsApp, CPF, Email, Já opera?, Corretora.<span className="max-md:hidden"> Quem já existe não duplica; colunas da equipe completam o que estiver em branco.</span></>}
         footer={<><Button variant="secondary" onClick={() => setImp(false)}>Fechar</Button><Button disabled={!lido} loading={ocupado} onClick={importar}>Importar {lido ? fmtNum(lido.linhas.length) : ''} leads</Button></>}>
         <div className="space-y-3">
+          <p className="text-label text-fg-muted md:hidden">Quem já existe não duplica; colunas da equipe completam o que estiver em branco.</p>
           {erro && <Alert tone="loss">{erro}</Alert>}
           <input type="file" accept=".xlsx,.xls,.csv" onChange={e => { escolher(e.target.files?.[0] ?? null); e.target.value = '' }} aria-label="Arquivo do formulário" />
           {lido && (

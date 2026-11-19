@@ -27,6 +27,10 @@ import { CORRETORA_LABEL, CORRETORA_SLUG, temListaPropria, type Corretora } from
 import type { AssessoresPorCorretora, LeadRow } from '@/lib/gestao/tipos'
 import { cn } from '@/lib/utils'
 
+// Título de bloco: no celular fica mais forte que o rótulo dos campos (DESIGN.md §8), senão a folha se lê
+// como uma fila só de campos. No computador é o rótulo de sempre.
+const TITULO_BLOCO = 'label max-md:text-dense max-md:font-semibold max-md:text-fg'
+
 // 'Genial' / 'XP' / 'BTG' do formulário → corretora do controle
 function corretoraDoLead(v: string | null): Corretora | null {
   const t = (v ?? '').trim().toUpperCase()
@@ -120,7 +124,7 @@ export function GanhoWizard({ lead, aberto, onClose, corretoras, responsaveis, a
         {erro && <Alert tone="danger">{erro}</Alert>}
 
         <div>
-          <p className="label mb-3">Para onde vai</p>
+          <p className={cn('mb-3', TITULO_BLOCO)}>Para onde vai</p>
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2" role="group" aria-label="Corretora para onde o cliente vai">
               {corretoras.map(c => <Escolha key={c} ativo={f.corretora === c} onClick={() => setF({ ...f, corretora: c, assessor: '' })}><CorretoraBadge corretora={c} /></Escolha>)}
@@ -140,7 +144,7 @@ export function GanhoWizard({ lead, aberto, onClose, corretoras, responsaveis, a
         </div>
 
         <div>
-          <p className="label mb-2">Quem é</p>
+          <p className={cn('mb-2', TITULO_BLOCO)}>Quem é</p>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-dense">
             <span className="min-w-0 text-fg-muted">{quem}</span>
             {!corrigindo && <button type="button" className="link text-label" onClick={() => setCorrigindo(true)}>Corrigir</button>}
@@ -157,7 +161,7 @@ export function GanhoWizard({ lead, aberto, onClose, corretoras, responsaveis, a
         </div>
 
         <div>
-          <p className="label mb-3">Quem cuida e de onde veio</p>
+          <p className={cn('mb-3', TITULO_BLOCO)}>Quem cuida e de onde veio</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Select label="Responsável" value={f.responsavel} onChange={set('responsavel')}>
               <option value="">—</option>

@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
+import { RecolheNoCelular } from '@/components/ui/RecolheNoCelular'
+import { Resumo } from '@/components/gestao/Resumo'
 import { Button, IconButton } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Badge } from '@/components/ui/Badge'
@@ -45,18 +47,48 @@ function useAcao() {
   return { erro, ocupado, rodar, limpar: () => setErro(null) }
 }
 
+// ── Celular (DESIGN.md §8) ─────────────────────────────────────────────────
+// No celular a página tinha dez telas de altura: cada seção fica recolhida atrás do próprio título, com o
+// que está valendo ao lado (o índice da página), e a explicação vai para o "i". No computador tudo aparece
+// aberto, como sempre: o grid repassa a altura da linha ao cartão, para os pares lado a lado continuarem
+// com a mesma altura.
+function NoCelular({ titulo, resumo, dica, children }: { titulo: string; resumo?: ReactNode; dica?: string; children: ReactNode }) {
+  return <RecolheNoCelular titulo={titulo} resumo={resumo} dica={dica} className="md:grid md:[&>div:last-child]:grid">{children}</RecolheNoCelular>
+}
+// o cartão dentro da seção recolhida: no celular a linha de toque já diz o nome, então o cabeçalho sai
+const CARTAO_NO_CELULAR = { className: 'max-md:[&>header]:hidden', bodyClassName: 'max-md:pt-5' }
+// tabela pequena que vira lista com só a lixeira à direita
+const LISTA_LIXEIRA = { '--lista-direita': '3.5rem' } as CSSProperties
+// "1 assessor", "2 assessores"
+const qtd = (n: number, um: string, varios: string) => `${fmtNum(n)} ${n === 1 ? um : varios}`
+// a pendência em âmbar na linha do índice
+const pendente = (texto: string) => <span className="text-warn">{texto}</span>
+
 export function Parametros({ corretora, label, dados }: { corretora: Corretora; label: string; dados: Dados }) {
   // Quem pode ser o parceiro de um assessor: os comissionados e quem tem participação na receita desta corretora
   const regrasReceita = dados.parametros.find(p => p.chave === CHAVE_PARCEIROS_RECEITA)?.valor ?? ''
   const comissionados = dados.responsaveis.filter(r => r.ativo && r.comissionado).map(r => r.nome)
   const comReceita = nomesComRegra(lerParceirosReceita(regrasReceita)).filter(n => !comissionados.some(c => normTexto(c) === normTexto(n)))
+  // a frase do celular: o aviso que a descrição da página dava ("toda mudança recalcula") e as pendências
+  const semCadastro = dados.assessoresNaoCadastrados.length
+  const semMapa = dados.situacoesNaoMapeadas.length
+  const pendencias = [
+    semCadastro ? `${qtd(semCadastro, 'assessor sem cadastro', 'assessores sem cadastro')}, em Assessores` : null,
+    semMapa ? `${qtd(semMapa, 'situação sem mapa', 'situações sem mapa')}, em Status da conta` : null,
+  ].filter((p): p is string => !!p)
   return (
-    <div className="space-y-8">
-      <div className="grid gap-5 xl:grid-cols-2">
+    <div className="space-y-8 max-md:space-y-0">
+      <div className="pb-3 md:hidden">
+        {/* com pendência, ela é a conclusão (o que pede ação) e o aviso de recálculo desce para o apoio */}
+        {pendencias.length
+          ? <Resumo frase={`Pendente: ${pendencias.join('; ')}.`} apoio={`Regras de cálculo da ${label}. Toda mudança recalcula os lotes na hora.`} />
+          : <Resumo frase={`Regras de cálculo da ${label}. Toda mudança recalcula os lotes na hora.`} />}
+      </div>
+      <div className="grid gap-5 xl:grid-cols-2 max-md:gap-0">
         <SecaoGerais corretora={corretora} label={label} parametros={dados.parametros} gerais={dados.gerais} />
         {corretora === 'BTG' ? <SecaoManutencao corretora={corretora} /> : (
           // no BTG a participação de parceiro segue a cadeia do repasse (cartão Repasse, mais abaixo)
-          <div className="space-y-5">
+          <div className="space-y-5 max-md:space-y-0">
             <SecaoManutencao corretora={corretora} />
             <SecaoParceirosReceita key={regrasReceita} corretora={corretora} label={label} valor={regrasReceita} />
           </div>
@@ -64,7 +96,7 @@ export function Parametros({ corretora, label, dados }: { corretora: Corretora; 
         {corretora === 'BTG' && <SecaoBtg corretora={corretora} label={label} parametros={dados.parametros} />}
       </div>
       <SecaoAssessores corretora={corretora} assessores={dados.assessores} naoCadastrados={dados.assessoresNaoCadastrados} responsaveis={dados.responsaveis.filter(r => r.ativo && r.atende_clientes).map(r => r.nome)} parceiros={[...comissionados, ...comReceita]} />
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-2 max-md:gap-0">
         <SecaoStatusConta corretora={corretora} mapa={dados.statusConta} naoMapeadas={dados.situacoesNaoMapeadas} />
         <SecaoConsolidados corretora={corretora} itens={dados.consolidados} />
         <SecaoMultiplicadores corretora={corretora} itens={dados.multiplicadores} />
@@ -99,12 +131,16 @@ function SecaoGerais({ corretora, label, parametros, gerais }: { corretora: Corr
   ]
   const valorDe = (corr: string, chave: string) => (corr === 'GERAL' ? gerais : parametros).find(p => p.chave === chave)?.valor ?? ''
   return (
-    <Panel variant="card" title={`Premissas · ${label}`} subtitle="Os mesmos nomes da aba Premissas da planilha.">
+    <NoCelular titulo={`Premissas · ${label}`} dica="Os mesmos nomes da aba Premissas da planilha."
+      // espaço inseparável entre o nome e o valor: o número não fica sozinho na linha de baixo
+      resumo={`${fmtNum(campos.length)} campos · ZeragemRS ${valorDe(corretora, 'zeragem_padrao') || TRACO} · MesesInativo ${valorDe(corretora, 'meses_inativo') || TRACO}`}>
+    <Panel variant="card" title={`Premissas · ${label}`} subtitle="Os mesmos nomes da aba Premissas da planilha." {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <div className="space-y-4">
         {campos.map(c => <CampoParametro key={c.chave} label={c.label} valor={valorDe(c.corr, c.chave)} tipo={c.tipo} onSalvar={v => rodar(() => salvarParametro(c.corr, c.chave, v), undefined, 'Parâmetro salvo')} />)}
       </div>
     </Panel>
+    </NoCelular>
   )
 }
 
@@ -112,13 +148,25 @@ function CampoParametro({ label, valor, tipo, onSalvar }: { label: string; valor
   const [v, setV] = useState(valor)
   const [salvando, setSalvando] = useState(false)
   const mudou = v !== valor
+  // No celular o campo de uma linha corta a regra longa ("1000:15; 5000:10; …"): o valor gravado aparece
+  // inteiro embaixo, uma regra por linha, só para leitura (o campo continua de uma linha: a regra é gravada
+  // como foi digitada e uma quebra de linha entraria nela)
+  const regras = tipo === 'texto' && valor.length > 24 ? valor.split(';').map(s => s.trim()).filter(Boolean) : []
   return (
-    <div className="flex items-end gap-2">
-      <label className="flex-1">
-        <span className="label block">{label}</span>
-        <input className="field-sm mt-1 w-full" value={v} inputMode={tipo === 'numero' ? 'decimal' : undefined} onChange={e => setV(e.target.value)} />
-      </label>
-      <Button size="sm" variant={mudou ? 'primary' : 'secondary'} disabled={!mudou} loading={salvando} onClick={async () => { setSalvando(true); await onSalvar(v); setSalvando(false) }}>Salvar</Button>
+    <div>
+      <div className="flex items-end gap-2">
+        <label className="flex-1">
+          <span className="label block">{label}</span>
+          {/* sem maiúscula e correção do teclado do celular: "NAO", "PONTOS" e "liquida" têm de ir como estão */}
+          <input className="field-sm mt-1 w-full" value={v} inputMode={tipo === 'numero' ? 'decimal' : undefined} autoCapitalize="none" autoCorrect="off" onChange={e => setV(e.target.value)} />
+        </label>
+        <Button size="sm" variant={mudou ? 'primary' : 'secondary'} disabled={!mudou} loading={salvando} onClick={async () => { setSalvando(true); await onSalvar(v); setSalvando(false) }}>Salvar</Button>
+      </div>
+      {regras.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 break-words text-label text-fg-muted md:hidden">
+          {regras.map((r, i) => <li key={i}>{r}</li>)}
+        </ul>
+      )}
     </div>
   )
 }
@@ -137,13 +185,16 @@ function SecaoParceirosReceita({ corretora, label, valor }: { corretora: Correto
     await rodar(async () => { const r = await salvarParceirosReceita(corretora, v); if (r.ok) setV(r.dados.valor); return r }, undefined, 'Regra salva')
     setSalvando(false)
   }
+  const ajuda = 'Parceiro que recebe uma parte da corretagem, da zeragem e do incentivo dos clientes dele. O valor de cada mês aparece em Comissões.'
   return (
-    <Panel variant="card" title={`Parceiros com participação na receita · ${label}`} subtitle="Parceiro que recebe uma parte da corretagem, da zeragem e do incentivo dos clientes dele. O valor de cada mês aparece em Comissões.">
+    <NoCelular titulo={`Parceiros com participação na receita · ${label}`} dica={ajuda}
+      resumo={regras.length ? [...new Set(regras.map(r => r.nome))].join(', ') : 'ninguém'}>
+    <Panel variant="card" title={`Parceiros com participação na receita · ${label}`} subtitle={ajuda} {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <div className="flex items-end gap-2">
         <label className="flex-1">
           <span className="label block">Regras — &quot;nome:% da corretagem:% da zeragem:% do incentivo:desde AAAA-MM&quot; separadas por ; (ex.: Fabio Ferron:50:50:50:2026-11). Vazio = ninguém</span>
-          <input className="field-sm mt-1 w-full" value={v} onChange={e => setV(e.target.value)} />
+          <input className="field-sm mt-1 w-full" value={v} autoCapitalize="none" autoCorrect="off" onChange={e => setV(e.target.value)} />
         </label>
         <Button size="sm" variant={mudou ? 'primary' : 'secondary'} disabled={!mudou} loading={salvando} onClick={salvar}>Salvar</Button>
       </div>
@@ -157,6 +208,7 @@ function SecaoParceirosReceita({ corretora, label, valor }: { corretora: Correto
         antes do repasse da corretora e de impostos: para repassar só uma parte, use um percentual menor. Para mudar os percentuais a partir de um mês, acrescente outra regra do mesmo parceiro com o novo início.
       </p>
     </Panel>
+    </NoCelular>
   )
 }
 
@@ -180,19 +232,28 @@ function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; labe
     { chave: 'atp_metas', label: 'Metas — "prazo em meses:comissão acumulada:prêmio:observação" separadas por ;', tipo: 'texto' },
   ]
   const salvar = (chave: string) => (v: string) => rodar(() => salvarParametro(corretora, chave, v), undefined, 'Parâmetro salvo')
+  const ajudaRepasse = 'Faturamento bruto → repasse → (–) imposto → (–) Delta → receita líquida dividida entre os sócios. Aparece nos Indicadores mensais do Painel.'
+  const ajudaAtp = 'Prêmios por comissão acumulada dentro do prazo, contado da assinatura. A tela Incentivo acompanha cada meta.'
+  const metas = valorDe('atp_metas').split(';').filter(s => s.trim()).length
+  // no resumo do índice o percentual gravado ("16.5") sai como se lê: "16,5%"
+  const pct = (v: string) => (v.trim() ? `${v.trim().replace('.', ',')}%` : TRACO)
   return (
     <>
-      <Panel variant="card" title={`Repasse · ${label}`} subtitle="Faturamento bruto → repasse → (–) imposto → (–) Delta → receita líquida dividida entre os sócios. Aparece nos Indicadores mensais do Painel.">
+      <NoCelular titulo={`Repasse · ${label}`} dica={ajudaRepasse} resumo={`${fmtNum(repasse.length)} campos · Delta ${pct(valorDe('delta_pct'))} · imposto ${pct(valorDe('imposto_pct'))}`}>
+      <Panel variant="card" title={`Repasse · ${label}`} subtitle={ajudaRepasse} {...CARTAO_NO_CELULAR}>
         {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
         <div className="space-y-4">
           {repasse.map(c => <CampoParametro key={c.chave} label={c.label} valor={valorDe(c.chave)} tipo={c.tipo} onSalvar={salvar(c.chave)} />)}
         </div>
       </Panel>
-      <Panel variant="card" title="ATP Turbo Receita" subtitle="Prêmios por comissão acumulada dentro do prazo, contado da assinatura. A tela Incentivo acompanha cada meta.">
+      </NoCelular>
+      <NoCelular titulo="ATP Turbo Receita" dica={ajudaAtp} resumo={metas ? qtd(metas, 'meta', 'metas') : 'nenhuma meta'}>
+      <Panel variant="card" title="ATP Turbo Receita" subtitle={ajudaAtp} {...CARTAO_NO_CELULAR}>
         <div className="space-y-4">
           {atp.map(c => <CampoParametro key={c.chave} label={c.label} valor={valorDe(c.chave)} tipo={c.tipo} onSalvar={salvar(c.chave)} />)}
         </div>
       </Panel>
+      </NoCelular>
     </>
   )
 }
@@ -201,8 +262,10 @@ function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; labe
 function SecaoManutencao({ corretora }: { corretora: Corretora }) {
   const { erro, ocupado, rodar } = useAcao()
   const [res, setRes] = useState<Record<string, number> | null>(null)
+  const ajuda = 'Refaz a conta principal de cada cliente, o vínculo dos lotes com o cadastro, os valores derivados e o cruzamento de leads.'
   return (
-    <Panel variant="card" title="Manutenção" subtitle="Refaz a conta principal de cada cliente, o vínculo dos lotes com o cadastro, os valores derivados e o cruzamento de leads.">
+    <NoCelular titulo="Manutenção" dica={ajuda} resumo="Recalcular tudo">
+    <Panel variant="card" title="Manutenção" subtitle={ajuda} {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <Button variant="secondary" loading={ocupado} onClick={() => rodar(async () => { const r = await recalcularTudo(corretora); if (r.ok) setRes(r.dados); return r }, undefined, 'Recalculado')}>
         <RefreshCw className="h-4 w-4" aria-hidden />Recalcular tudo
@@ -213,6 +276,7 @@ function SecaoManutencao({ corretora }: { corretora: Corretora }) {
         </p>
       )}
     </Panel>
+    </NoCelular>
   )
 }
 
@@ -231,39 +295,57 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis, 
   const editar = (a: AssessorParam) => setForm({ id: a.id, nome: a.nome, id_assessor: a.id_assessor ?? '', corretagem: String(a.corretagem).replace('.', ','), tipo_zeragem: a.tipo_zeragem, zeragem_fixa: String(a.zeragem_fixa).replace('.', ','), responsavel: a.responsavel ?? '', parceiro: a.parceiro ?? '', ativo: a.ativo })
   const excluir = (a: AssessorParam) => confirm(`Excluir ${a.nome}? Os lotes dele passam a usar tarifa 0 até ser cadastrado de novo.`) && rodar(() => excluirAssessor(corretora, a.id), undefined, 'Assessor excluído')
 
+  // No celular a linha de edição vira um formulário no lugar da linha (cel-bloco): os oito campos um embaixo
+  // do outro, cada um com o nome em cima (antes seis dos oito sumiam junto com as colunas). No computador o
+  // rótulo some e o <label> não desenha caixa (md:contents): a linha fica como sempre foi.
+  const campo = (rotulo: string, controle: ReactNode) => (
+    <label className="block md:contents"><span className="label mb-1 block md:hidden">{rotulo}</span>{controle}</label>
+  )
   const linhaForm = (
     <tr className="bg-accent-soft">
-      <td><input className="field-sm w-full min-w-[200px]" placeholder="Nome como vem no export" value={form?.nome ?? ''} onChange={e => form && setForm({ ...form, nome: e.target.value })} aria-label="Nome" /></td>
-      <td className="col-p3"><input className="field-sm w-24" placeholder="ID" value={form?.id_assessor ?? ''} onChange={e => form && setForm({ ...form, id_assessor: e.target.value })} aria-label="ID do assessor" /></td>
-      <td><input className="field-sm w-20 text-right" value={form?.corretagem ?? ''} onChange={e => form && setForm({ ...form, corretagem: e.target.value })} aria-label="Corretagem" /></td>
-      <td className="col-p2">
-        <select className="field-sm" value={form?.tipo_zeragem ?? 'PADRAO'} onChange={e => form && setForm({ ...form, tipo_zeragem: e.target.value as 'PADRAO' | 'FIXA' })} aria-label="Tipo de zeragem">
+      <td className="cel-bloco">{campo('Nome como vem no export', <input className="field-sm w-full min-w-[200px] max-md:min-w-0" placeholder="Nome como vem no export" value={form?.nome ?? ''} onChange={e => form && setForm({ ...form, nome: e.target.value })} aria-label="Nome" />)}</td>
+      <td className="col-p3 cel-bloco">{campo('ID', <input className="field-sm w-24 max-md:w-full" placeholder="ID" value={form?.id_assessor ?? ''} onChange={e => form && setForm({ ...form, id_assessor: e.target.value })} aria-label="ID do assessor" />)}</td>
+      <td className="cel-bloco">{campo('R$/lote', <input className="field-sm w-20 text-right max-md:w-full max-md:text-left" inputMode="decimal" value={form?.corretagem ?? ''} onChange={e => form && setForm({ ...form, corretagem: e.target.value })} aria-label="Corretagem" />)}</td>
+      <td className="col-p2 cel-bloco">
+        {campo('Zeragem', <select className="field-sm max-md:w-full" value={form?.tipo_zeragem ?? 'PADRAO'} onChange={e => form && setForm({ ...form, tipo_zeragem: e.target.value as 'PADRAO' | 'FIXA' })} aria-label="Tipo de zeragem">
           <option value="PADRAO">PADRAO</option><option value="FIXA">FIXA</option>
-        </select>
+        </select>)}
       </td>
-      <td className="col-p2"><input className="field-sm w-20 text-right" disabled={form?.tipo_zeragem !== 'FIXA'} value={form?.zeragem_fixa ?? ''} onChange={e => form && setForm({ ...form, zeragem_fixa: e.target.value })} aria-label="Zeragem fixa" /></td>
-      <td className="col-p2">
-        <select className="field-sm" value={form?.responsavel ?? ''} onChange={e => form && setForm({ ...form, responsavel: e.target.value })} aria-label="Responsável">
+      <td className="col-p2 cel-bloco">{campo('Zeragem fixa', <input className="field-sm w-20 text-right max-md:w-full max-md:text-left" inputMode="decimal" disabled={form?.tipo_zeragem !== 'FIXA'} value={form?.zeragem_fixa ?? ''} onChange={e => form && setForm({ ...form, zeragem_fixa: e.target.value })} aria-label="Zeragem fixa" />)}</td>
+      <td className="col-p2 cel-bloco">
+        {campo('Responsável', <select className="field-sm max-md:w-full" value={form?.responsavel ?? ''} onChange={e => form && setForm({ ...form, responsavel: e.target.value })} aria-label="Responsável">
           <option value="">—</option>{responsaveis.map(r => <option key={r}>{r}</option>)}
-        </select>
+        </select>)}
       </td>
-      <td className="col-p2">
-        <select className="field-sm" value={form?.parceiro ?? ''} onChange={e => form && setForm({ ...form, parceiro: e.target.value })} aria-label="Parceiro" title="Os clientes deste assessor contam na comissão ou na participação na receita do parceiro">
+      <td className="col-p2 cel-bloco">
+        {campo('Parceiro', <select className="field-sm max-md:w-full" value={form?.parceiro ?? ''} onChange={e => form && setForm({ ...form, parceiro: e.target.value })} aria-label="Parceiro" title="Os clientes deste assessor contam na comissão ou na participação na receita do parceiro">
           <option value="">—</option>{parceiros.map(p => <option key={p}>{p}</option>)}
           {/* parceiro já gravado que saiu da lista: continua escolhido até alguém trocar */}
           {form?.parceiro && !parceiros.includes(form.parceiro) && <option>{form.parceiro}</option>}
-        </select>
+        </select>)}
+        {/* o que o title do campo explica, à vista no celular (no toque o title não existe) */}
+        <span className="mt-1 block text-label text-fg-muted md:hidden">Os clientes deste assessor contam na comissão ou na participação na receita do parceiro.</span>
       </td>
-      <td className="col-p3"><input type="checkbox" checked={form?.ativo ?? true} onChange={e => form && setForm({ ...form, ativo: e.target.checked })} aria-label="Ativo" /></td>
-      <td className="whitespace-nowrap text-right">
+      <td className="col-p3 cel-bloco">
+        <label className="flex items-center gap-2 md:contents">
+          <input type="checkbox" checked={form?.ativo ?? true} onChange={e => form && setForm({ ...form, ativo: e.target.checked })} aria-label="Ativo" />
+          <span className="text-dense md:hidden">Ativo</span>
+        </label>
+      </td>
+      <td className="whitespace-nowrap text-right cel-bloco">
         <IconButton tone="success" aria-label="Salvar" disabled={ocupado} onClick={salvar}><Check className="h-4 w-4" aria-hidden /></IconButton>
         <IconButton aria-label="Cancelar" onClick={() => setForm(null)}><X className="h-4 w-4" aria-hidden /></IconButton>
       </td>
     </tr>
   )
 
+  const ajuda = 'Corretagem em R$ por lote operado. Zeragem padrão usa o ZeragemRS; fixa usa o valor do assessor. O responsável é herdado pelos clientes do assessor; o parceiro recebe a comissão de abertura e ativação dos clientes dele ou, se tiver participação na receita, a parte dele no que esses clientes geram.'
   return (
-    <Panel title="Assessores" subtitle="Corretagem em R$ por lote operado. Zeragem padrão usa o ZeragemRS; fixa usa o valor do assessor. O responsável é herdado pelos clientes do assessor; o parceiro recebe a comissão de abertura e ativação dos clientes dele ou, se tiver participação na receita, a parte dele no que esses clientes geram."
+    <NoCelular titulo="Assessores" dica={ajuda}
+      resumo={<>{qtd(assessores.length, 'cadastrado', 'cadastrados')}{naoCadastrados.length > 0 && <> · {pendente(qtd(naoCadastrados.length, 'sem cadastro', 'sem cadastro'))}</>}</>}>
+    {/* no celular o título e a explicação saem (a linha de toque já diz o nome; a explicação está no "i") e
+        sobra só o botão "+ Assessor" no cabeçalho */}
+    <Panel title={<span className="max-md:hidden">Assessores</span>} subtitle={<span className="max-md:hidden">{ajuda}</span>}
       action={<Button size="sm" onClick={() => setForm(formVazio())} disabled={!!form}><Plus className="h-4 w-4" aria-hidden />Assessor</Button>}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       {naoCadastrados.length > 0 && (
@@ -271,28 +353,30 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis, 
           <div className="mt-2 flex flex-wrap gap-1.5">
             {naoCadastrados.map(a => (
               <button key={a.assessor_nome} type="button" className="chip" onClick={() => setForm(formVazio(a.assessor_nome))} title={`${fmtNum(a.contas)} contas · ${fmtNum(a.lotes)} lotes`}>
-                <Plus className="h-3 w-3" aria-hidden />{a.assessor_nome} <span className="text-fg-subtle">({fmtNum(a.contas)} contas)</span>
+                <Plus className="h-3 w-3" aria-hidden />{a.assessor_nome} <span className="text-fg-subtle">({fmtNum(a.contas)} contas<span className="md:hidden"> · {fmtNum(a.lotes)} lotes</span>)</span>
               </button>
             ))}
           </div>
         </Alert>
       )}
       <div className="tbl-wrap">
-        <table className="tbl tbl-dense">
+        {/* No celular (DESIGN.md §8.6) cada assessor vira um item: o nome inteiro em cima e, embaixo, ID, R$ por
+            lote, zeragem, responsável e parceiro; "Editar" e a lixeira à direita */}
+        <table className="tbl tbl-dense tbl-lista" style={{ '--lista-direita': '8rem' } as CSSProperties}>
           <thead><tr><th>Assessor</th><th className="col-p3">ID</th><th className="num">R$/lote</th><th className="col-p2">Zeragem</th><th className="num col-p2">Zeragem fixa</th><th className="col-p2">Responsável</th><th className="col-p2">Parceiro</th><th className="col-p3">Ativo</th><th><span className="sr-only">Ações</span></th></tr></thead>
           <tbody>
             {form && !form.id && linhaForm}
             {assessores.map(a => form?.id === a.id ? <FragmentRow key={a.id}>{linhaForm}</FragmentRow> : (
               <tr key={a.id} className={cn(!a.ativo && 'opacity-50')}>
-                <td className="font-medium">{a.nome}</td>
-                <td className="muted col-p3">{a.id_assessor ?? TRACO}</td>
-                <td className="num">{n2(a.corretagem)}</td>
-                <td className="col-p2">{a.tipo_zeragem === 'FIXA' ? <Badge variant="accent">fixa</Badge> : <span className="muted">padrão</span>}</td>
-                <td className={cn('num col-p2', a.tipo_zeragem !== 'FIXA' && 'subtle')}>{a.tipo_zeragem === 'FIXA' ? n2(a.zeragem_fixa) : TRACO}</td>
-                <td className="col-p2">{a.responsavel ?? TRACO}</td>
-                <td className="col-p2">{a.parceiro ?? TRACO}</td>
-                <td className="col-p3">{a.ativo ? 'sim' : 'não'}</td>
-                <td className="whitespace-nowrap text-right">
+                <td className="font-medium cel-titulo">{a.nome}</td>
+                <td className={cn('muted col-p3 cel-sub', !a.id_assessor && 'vazio')} data-rotulo="ID">{a.id_assessor ?? TRACO}</td>
+                <td className="num cel-sub" data-rotulo="R$/lote">{n2(a.corretagem)}</td>
+                <td className="col-p2 cel-sub" data-rotulo="zeragem">{a.tipo_zeragem === 'FIXA' ? <Badge variant="accent">fixa</Badge> : <span className="muted">padrão</span>}</td>
+                <td className={cn('num col-p2 cel-sub', a.tipo_zeragem !== 'FIXA' && 'subtle vazio')} data-rotulo="zeragem fixa">{a.tipo_zeragem === 'FIXA' ? n2(a.zeragem_fixa) : TRACO}</td>
+                <td className={cn('col-p2 cel-sub', !a.responsavel && 'vazio')} data-rotulo="resp.">{a.responsavel ?? TRACO}</td>
+                <td className={cn('col-p2 cel-sub', !a.parceiro && 'vazio')} data-rotulo="parceiro">{a.parceiro ?? TRACO}</td>
+                <td className={cn('col-p3 cel-sub', a.ativo && 'vazio')}>{a.ativo ? 'sim' : 'não'}<span className="md:hidden"> ativo</span></td>
+                <td className="whitespace-nowrap text-right cel-acoes">
                   <Button variant="ghost" size="xs" onClick={() => editar(a)}>Editar</Button>
                   <IconButton tone="danger" aria-label={`Excluir ${a.nome}`} onClick={() => excluir(a)}><Trash2 className="h-4 w-4" aria-hidden /></IconButton>
                 </td>
@@ -302,6 +386,7 @@ function SecaoAssessores({ corretora, assessores, naoCadastrados, responsaveis, 
         </table>
       </div>
     </Panel>
+    </NoCelular>
   )
 }
 
@@ -312,8 +397,11 @@ function SecaoStatusConta({ corretora, mapa, naoMapeadas }: { corretora: Correto
   const { erro, ocupado, rodar } = useAcao()
   const [sit, setSit] = useState('')
   const [st, setSt] = useState<'Migrado' | 'Em processamento' | 'Recusou'>('Migrado')
+  const ajuda = 'Situação do export → status do controle. Sem mapa conta como Em processamento.'
   return (
-    <Panel variant="card" title="Status da conta" subtitle="Situação do export → status do controle. Sem mapa conta como Em processamento.">
+    <NoCelular titulo="Status da conta" dica={ajuda}
+      resumo={<>{qtd(mapa.length, 'situação mapeada', 'situações mapeadas')}{naoMapeadas.length > 0 && <> · {pendente(qtd(naoMapeadas.length, 'sem mapa', 'sem mapa'))}</>}</>}>
+    <Panel variant="card" title="Status da conta" subtitle={ajuda} {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       {naoMapeadas.length > 0 && (
         <Alert tone="warn" className="mb-3" title="Situações sem mapa">
@@ -321,60 +409,69 @@ function SecaoStatusConta({ corretora, mapa, naoMapeadas }: { corretora: Correto
         </Alert>
       )}
       <div className="tbl-wrap">
-      <table className="tbl tbl-dense w-full">
+      {/* no celular: cada situação vira um item (o status em palavras embaixo, a lixeira à direita) e a linha de
+          incluir vira os campos um embaixo do outro, com "Mapear" na largura toda (antes ficava fora da tela) */}
+      <table className="tbl tbl-dense w-full tbl-lista" style={LISTA_LIXEIRA}>
         <thead><tr><th>Situação (export)</th><th>Status</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
           {mapa.map(m => (
             <tr key={m.situacao}>
-              <td className="font-medium">{m.situacao}</td>
-              <td><Badge variant={m.status === 'Migrado' ? 'gain' : m.status === 'Recusou' ? 'loss' : 'neutral'}>{m.status}</Badge></td>
-              <td className="text-right"><IconButton tone="danger" aria-label={`Excluir ${m.situacao}`} onClick={() => rodar(() => excluirStatusConta(corretora, m.situacao), undefined, 'Mapa removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
+              <td className="font-medium cel-titulo">{m.situacao}</td>
+              <td className="cel-sub"><Badge variant={m.status === 'Migrado' ? 'gain' : m.status === 'Recusou' ? 'loss' : 'neutral'}>{m.status}</Badge></td>
+              <td className="text-right cel-acoes"><IconButton tone="danger" aria-label={`Excluir ${m.situacao}`} onClick={() => rodar(() => excluirStatusConta(corretora, m.situacao), undefined, 'Mapa removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
             </tr>
           ))}
           <tr>
-            <td><input className="field-sm w-full" placeholder="ATIVA, INATIVA, BLOQUEADA…" value={sit} onChange={e => setSit(e.target.value.toUpperCase())} aria-label="Situação" /></td>
-            <td>
-              <select className="field-sm" value={st} onChange={e => setSt(e.target.value as typeof st)} aria-label="Status">
+            <td className="cel-bloco"><input className="field-sm w-full" placeholder="ATIVA, INATIVA, BLOQUEADA…" value={sit} onChange={e => setSit(e.target.value.toUpperCase())} aria-label="Situação" /></td>
+            <td className="cel-bloco">
+              <select className="field-sm max-md:w-full" value={st} onChange={e => setSt(e.target.value as typeof st)} aria-label="Status">
                 <option>Migrado</option><option>Em processamento</option><option>Recusou</option>
               </select>
             </td>
-            <td className="text-right"><Button size="xs" disabled={!sit || ocupado} onClick={() => rodar(() => salvarStatusConta(corretora, sit, st), () => setSit(''), 'Mapa salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Mapear</Button></td>
+            <td className="text-right cel-bloco"><Button size="xs" className="max-md:w-full" disabled={!sit || ocupado} onClick={() => rodar(() => salvarStatusConta(corretora, sit, st), () => setSit(''), 'Mapa salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Mapear</Button></td>
           </tr>
         </tbody>
       </table>
       </div>
     </Panel>
+    </NoCelular>
   )
 }
 
 // ── Multiplicadores ────────────────────────────────────────────────────────
+// Nas tabelas pequenas, no celular: cada item vira uma linha (nome, valor embaixo, lixeira à direita) e a linha
+// de incluir vira os campos um embaixo do outro, com o botão na largura toda (antes ela alargava a tabela e
+// o botão ficava fora da tela). No computador continuam como tabela.
 function SecaoMultiplicadores({ corretora, itens }: { corretora: Corretora; itens: Dados['multiplicadores'] }) {
   const { erro, ocupado, rodar } = useAcao()
   const [produto, setProduto] = useState('')
   const [pontos, setPontos] = useState('1')
+  const ajuda = 'Pontos por lote operado, pelas 3 primeiras letras do ativo (WINV26 → WIN).'
   return (
-    <Panel variant="card" title="Multiplicadores do incentivo" subtitle="Pontos por lote operado, pelas 3 primeiras letras do ativo (WINV26 → WIN).">
+    <NoCelular titulo="Multiplicadores do incentivo" dica={ajuda} resumo={itens.length ? qtd(itens.length, 'produto', 'produtos') : 'nenhum cadastrado'}>
+    <Panel variant="card" title="Multiplicadores do incentivo" subtitle={ajuda} {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <div className="tbl-wrap">
-      <table className="tbl tbl-dense w-full">
+      <table className="tbl tbl-dense w-full tbl-lista" style={LISTA_LIXEIRA}>
         <thead><tr><th>Produto</th><th className="num">Pontos por lote</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
           {itens.map(m => (
             <tr key={m.produto}>
-              <td className="font-medium">{m.produto}</td>
-              <td className="num">{n2(m.pontos)}</td>
-              <td className="text-right"><IconButton tone="danger" aria-label={`Excluir ${m.produto}`} onClick={() => rodar(() => excluirMultiplicador(corretora, m.produto), undefined, 'Multiplicador removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
+              <td className="font-medium cel-titulo">{m.produto}</td>
+              <td className="num cel-sub" data-sufixo="pontos por lote">{n2(m.pontos)}</td>
+              <td className="text-right cel-acoes"><IconButton tone="danger" aria-label={`Excluir ${m.produto}`} onClick={() => rodar(() => excluirMultiplicador(corretora, m.produto), undefined, 'Multiplicador removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
             </tr>
           ))}
           <tr>
-            <td><input className="field-sm w-28" placeholder="WIN" value={produto} onChange={e => setProduto(e.target.value.toUpperCase())} aria-label="Produto" /></td>
-            <td className="text-right"><input className="field-sm w-20 text-right" value={pontos} onChange={e => setPontos(e.target.value)} aria-label="Pontos" /></td>
-            <td className="text-right"><Button size="xs" disabled={!produto || ocupado} onClick={() => rodar(() => salvarMultiplicador(corretora, produto, numeroBR(pontos)), () => setProduto(''), 'Multiplicador salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
+            <td className="cel-bloco"><input className="field-sm w-28 max-md:w-full" placeholder="WIN" value={produto} onChange={e => setProduto(e.target.value.toUpperCase())} aria-label="Produto" /></td>
+            <td className="text-right cel-bloco"><input className="field-sm w-20 text-right max-md:w-full max-md:text-left" inputMode="decimal" value={pontos} onChange={e => setPontos(e.target.value)} aria-label="Pontos" /></td>
+            <td className="text-right cel-bloco"><Button size="xs" className="max-md:w-full" disabled={!produto || ocupado} onClick={() => rodar(() => salvarMultiplicador(corretora, produto, numeroBR(pontos)), () => setProduto(''), 'Multiplicador salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
           </tr>
         </tbody>
       </table>
       </div>
     </Panel>
+    </NoCelular>
   )
 }
 
@@ -383,29 +480,33 @@ function SecaoFaixas({ corretora, itens }: { corretora: Corretora; itens: Dados[
   const { erro, ocupado, rodar } = useAcao()
   const [min, setMin] = useState('')
   const [valor, setValor] = useState('')
+  const ajuda = 'O cliente entra na maior faixa cujo mínimo ultrapassou. Pago uma vez por cliente por mês.'
   return (
-    <Panel variant="card" title="Faixas do incentivo" subtitle="O cliente entra na maior faixa cujo mínimo ultrapassou. Pago uma vez por cliente por mês.">
+    <NoCelular titulo="Faixas do incentivo" dica={ajuda} resumo={itens.length ? qtd(itens.length, 'faixa', 'faixas') : 'nenhuma cadastrada'}>
+    <Panel variant="card" title="Faixas do incentivo" subtitle={ajuda} {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <div className="tbl-wrap">
-      <table className="tbl tbl-dense w-full">
+      <table className="tbl tbl-dense w-full tbl-lista" style={LISTA_LIXEIRA}>
         <thead><tr><th>Mais de (pontos)</th><th className="num">Incentivo</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
           {itens.map(f => (
             <tr key={f.pontos_min}>
-              <td className="num font-medium">{n0(f.pontos_min)}</td>
-              <td className="num">{r0(f.valor)}</td>
-              <td className="text-right"><IconButton tone="danger" aria-label={`Excluir faixa ${f.pontos_min}`} onClick={() => rodar(() => excluirFaixa(corretora, f.pontos_min), undefined, 'Faixa removida')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
+              {/* no celular sem o cabeçalho da coluna: a linha diz "Mais de 1.000 pontos" */}
+              <td className="num font-medium cel-titulo"><span className="md:hidden">Mais de </span>{n0(f.pontos_min)}<span className="md:hidden"> pontos</span></td>
+              <td className="num cel-sub" data-rotulo="incentivo">{r0(f.valor)}</td>
+              <td className="text-right cel-acoes"><IconButton tone="danger" aria-label={`Excluir faixa ${f.pontos_min}`} onClick={() => rodar(() => excluirFaixa(corretora, f.pontos_min), undefined, 'Faixa removida')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
             </tr>
           ))}
           <tr>
-            <td><input className="field-sm w-28" placeholder="1000" value={min} onChange={e => setMin(e.target.value)} aria-label="Mínimo de pontos" /></td>
-            <td className="text-right"><input className="field-sm w-24 text-right" placeholder="200" value={valor} onChange={e => setValor(e.target.value)} aria-label="Valor" /></td>
-            <td className="text-right"><Button size="xs" disabled={!min || !valor || ocupado} onClick={() => rodar(() => salvarFaixa(corretora, numeroBR(min), numeroBR(valor)), () => { setMin(''); setValor('') }, 'Faixa salva')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
+            <td className="cel-bloco"><input className="field-sm w-28 max-md:w-full" inputMode="decimal" placeholder="1000" value={min} onChange={e => setMin(e.target.value)} aria-label="Mínimo de pontos" /></td>
+            <td className="text-right cel-bloco"><input className="field-sm w-24 text-right max-md:w-full max-md:text-left" inputMode="decimal" placeholder="200" value={valor} onChange={e => setValor(e.target.value)} aria-label="Valor" /></td>
+            <td className="text-right cel-bloco"><Button size="xs" className="max-md:w-full" disabled={!min || !valor || ocupado} onClick={() => rodar(() => salvarFaixa(corretora, numeroBR(min), numeroBR(valor)), () => { setMin(''); setValor('') }, 'Faixa salva')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
           </tr>
         </tbody>
       </table>
       </div>
     </Panel>
+    </NoCelular>
   )
 }
 
@@ -413,8 +514,10 @@ function SecaoFaixas({ corretora, itens }: { corretora: Corretora; itens: Dados[
 function SecaoConsolidados({ corretora, itens }: { corretora: Corretora; itens: Dados['consolidados'] }) {
   const { erro, ocupado, rodar } = useAcao()
   const [nome, setNome] = useState('')
+  const ajuda = 'Clientes cujas contas somam juntas no incentivo pelo nome, mesmo sem CPF no export.'
   return (
-    <Panel variant="card" title="Consolidados" subtitle="Clientes cujas contas somam juntas no incentivo pelo nome, mesmo sem CPF no export.">
+    <NoCelular titulo="Consolidados" dica={ajuda} resumo={itens.length ? qtd(itens.length, 'consolidado', 'consolidados') : 'Nenhum consolidado.'}>
+    <Panel variant="card" title="Consolidados" subtitle={ajuda} {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <ul className="mb-3 flex flex-wrap gap-1.5">
         {itens.length === 0 && <li className="text-label text-fg-subtle">Nenhum consolidado.</li>}
@@ -430,6 +533,7 @@ function SecaoConsolidados({ corretora, itens }: { corretora: Corretora; itens: 
         <Button size="sm" disabled={!nome.trim() || ocupado} onClick={() => rodar(() => salvarConsolidado(corretora, nome), () => setNome(''), 'Consolidado salvo')}><Plus className="h-4 w-4" aria-hidden />Adicionar</Button>
       </div>
     </Panel>
+    </NoCelular>
   )
 }
 
@@ -438,62 +542,74 @@ function SecaoStatusLead({ itens }: { itens: Dados['statusLead'] }) {
   const { erro, ocupado, rodar } = useAcao()
   const [status, setStatus] = useState('')
   const [tipo, setTipo] = useState<'Aberto' | 'Fechado'>('Aberto')
+  const ajuda = 'Aberto conta como em andamento; Fechado sai do funil (Ganho / Perdido). Vale para todas.'
   return (
-    <Panel variant="card" title="Status de lead" subtitle="Aberto conta como em andamento; Fechado sai do funil (Ganho / Perdido). Vale para todas.">
+    <NoCelular titulo="Status de lead" dica={ajuda} resumo={qtd(itens.length, 'status', 'status')}>
+    <Panel variant="card" title="Status de lead" subtitle={ajuda} {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <div className="tbl-wrap">
-      <table className="tbl tbl-dense w-full">
+      <table className="tbl tbl-dense w-full tbl-lista" style={LISTA_LIXEIRA}>
         <thead><tr><th>Status</th><th>Tipo</th><th className="num">Ordem</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
           {itens.map(s => (
             <tr key={s.status}>
-              <td className="font-medium">{s.status}</td>
-              <td className="muted">{s.tipo}</td>
-              <td className="num">{s.ordem}</td>
-              <td className="text-right">{!['Novo', 'Ganho', 'Perdido'].includes(s.status) && <IconButton tone="danger" aria-label={`Excluir ${s.status}`} onClick={() => rodar(() => excluirStatusLead(s.status), undefined, 'Status removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton>}</td>
+              <td className="font-medium cel-titulo">{s.status}</td>
+              <td className="muted cel-sub">{s.tipo}</td>
+              <td className="num cel-sub" data-rotulo="ordem">{s.ordem}</td>
+              <td className="text-right cel-acoes">{!['Novo', 'Ganho', 'Perdido'].includes(s.status) && <IconButton tone="danger" aria-label={`Excluir ${s.status}`} onClick={() => rodar(() => excluirStatusLead(s.status), undefined, 'Status removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton>}</td>
             </tr>
           ))}
           <tr>
-            <td><input className="field-sm w-full" placeholder="Ex.: Reunião marcada" value={status} onChange={e => setStatus(e.target.value)} aria-label="Status" /></td>
-            <td><select className="field-sm" value={tipo} onChange={e => setTipo(e.target.value as 'Aberto' | 'Fechado')} aria-label="Tipo"><option>Aberto</option><option>Fechado</option></select></td>
+            <td className="cel-bloco"><input className="field-sm w-full" placeholder="Ex.: Reunião marcada" value={status} onChange={e => setStatus(e.target.value)} aria-label="Status" /></td>
+            <td className="cel-bloco"><select className="field-sm max-md:w-full" value={tipo} onChange={e => setTipo(e.target.value as 'Aberto' | 'Fechado')} aria-label="Tipo"><option>Aberto</option><option>Fechado</option></select></td>
             <td />
-            <td className="text-right"><Button size="xs" disabled={!status.trim() || ocupado} onClick={() => rodar(() => salvarStatusLead(status, tipo, itens.length + 1), () => setStatus(''), 'Status salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
+            <td className="text-right cel-bloco"><Button size="xs" className="max-md:w-full" disabled={!status.trim() || ocupado} onClick={() => rodar(() => salvarStatusLead(status, tipo, itens.length + 1), () => setStatus(''), 'Status salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
           </tr>
         </tbody>
       </table>
       </div>
     </Panel>
+    </NoCelular>
   )
 }
 
 // ── Responsáveis ───────────────────────────────────────────────────────────
+// No celular cada pessoa vira um item: o nome em cima e, embaixo, as quatro caixas com o nome de cada uma ao
+// lado (as quatro colunas de caixas não cabiam na largura); a lixeira à direita
 function SecaoResponsaveis({ itens }: { itens: Dados['responsaveis'] }) {
   const { erro, ocupado, rodar } = useAcao()
   const [nome, setNome] = useState('')
+  const ajuda = 'Quem atende clientes (herdado via assessor), quem trabalha leads e quem é comissionado por abertura e ativação de conta (tela Comissões). Vale para todas.'
+  // a caixa com o nome dela ao lado, só no celular; no computador o <label> não desenha caixa (md:contents)
+  const caixa = (rotulo: string, controle: ReactNode) => (
+    <label className="inline-flex min-h-[40px] items-center gap-1.5 align-middle md:contents">{controle}<span className="md:hidden">{rotulo}</span></label>
+  )
   return (
-    <Panel variant="card" title="Responsáveis" subtitle="Quem atende clientes (herdado via assessor), quem trabalha leads e quem é comissionado por abertura e ativação de conta (tela Comissões). Vale para todas.">
+    <NoCelular titulo="Responsáveis" dica={ajuda} resumo={`${qtd(itens.filter(r => r.ativo).length, 'ativo', 'ativos')} de ${fmtNum(itens.length)}`}>
+    <Panel variant="card" title="Responsáveis" subtitle={ajuda} {...CARTAO_NO_CELULAR}>
       {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
       <div className="tbl-wrap">
-      <table className="tbl tbl-dense w-full">
+      <table className="tbl tbl-dense w-full tbl-lista" style={LISTA_LIXEIRA}>
         <thead><tr><th>Nome</th><th>Clientes</th><th>Leads</th><th>Comissão</th><th>Ativo</th><th><span className="sr-only">Ações</span></th></tr></thead>
         <tbody>
           {itens.map(r => (
             <tr key={r.nome} className={cn(!r.ativo && 'opacity-50')}>
-              <td className="font-medium">{r.nome}</td>
-              <td><input type="checkbox" checked={r.atende_clientes} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, atende_clientes: e.target.checked }))} aria-label={`${r.nome} atende clientes`} /></td>
-              <td><input type="checkbox" checked={r.atende_leads} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, atende_leads: e.target.checked }))} aria-label={`${r.nome} atende leads`} /></td>
-              <td><input type="checkbox" checked={r.comissionado} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, comissionado: e.target.checked }))} aria-label={`${r.nome} comissionado por abertura e ativação`} /></td>
-              <td><input type="checkbox" checked={r.ativo} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, ativo: e.target.checked }))} aria-label={`${r.nome} ativo`} /></td>
-              <td className="text-right"><IconButton tone="danger" aria-label={`Excluir ${r.nome}`} onClick={() => confirm(`Excluir ${r.nome}?`) && rodar(() => excluirResponsavel(r.nome), undefined, 'Responsável removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
+              <td className="font-medium cel-titulo">{r.nome}</td>
+              <td className="cel-sub">{caixa('Clientes', <input type="checkbox" checked={r.atende_clientes} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, atende_clientes: e.target.checked }))} aria-label={`${r.nome} atende clientes`} />)}</td>
+              <td className="cel-sub">{caixa('Leads', <input type="checkbox" checked={r.atende_leads} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, atende_leads: e.target.checked }))} aria-label={`${r.nome} atende leads`} />)}</td>
+              <td className="cel-sub">{caixa('Comissão', <input type="checkbox" checked={r.comissionado} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, comissionado: e.target.checked }))} aria-label={`${r.nome} comissionado por abertura e ativação`} />)}</td>
+              <td className="cel-sub">{caixa('Ativo', <input type="checkbox" checked={r.ativo} disabled={ocupado} onChange={e => rodar(() => salvarResponsavel({ ...r, ativo: e.target.checked }))} aria-label={`${r.nome} ativo`} />)}</td>
+              <td className="text-right cel-acoes"><IconButton tone="danger" aria-label={`Excluir ${r.nome}`} onClick={() => confirm(`Excluir ${r.nome}?`) && rodar(() => excluirResponsavel(r.nome), undefined, 'Responsável removido')}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>
             </tr>
           ))}
           <tr>
             <td colSpan={5}><input className="field-sm w-full" placeholder="Nome" value={nome} onChange={e => setNome(e.target.value)} aria-label="Nome do responsável" /></td>
-            <td className="text-right"><Button size="xs" disabled={!nome.trim() || ocupado} onClick={() => rodar(() => salvarResponsavel({ nome, atende_clientes: true, atende_leads: true, ativo: true, comissionado: false }), () => setNome(''), 'Responsável salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
+            <td className="text-right cel-bloco"><Button size="xs" className="max-md:w-full" disabled={!nome.trim() || ocupado} onClick={() => rodar(() => salvarResponsavel({ nome, atende_clientes: true, atende_leads: true, ativo: true, comissionado: false }), () => setNome(''), 'Responsável salvo')}><Plus className="h-3.5 w-3.5" aria-hidden />Adicionar</Button></td>
           </tr>
         </tbody>
       </table>
       </div>
     </Panel>
+    </NoCelular>
   )
 }

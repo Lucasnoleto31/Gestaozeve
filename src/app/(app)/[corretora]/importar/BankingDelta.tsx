@@ -3,13 +3,14 @@
 // Banking do mês na tela: sobe a planilha de Banking que a Delta manda ("Artur Fonseca_DW_<mês>.xlsx"),
 // o sistema lê cada bloco (cartão, saldo remunerado…), a parte do escritório e o imposto, e grava o mês.
 // É uma comissão à parte do giro: aparece no Painel, não mexe em lotes. Um clique grava, outro desfaz.
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, FileSpreadsheet, Undo2 } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
+import { Dica } from '@/components/ui/Dica'
 import { useToast } from '@/components/ui/Toast'
 import { TRACO, n0, r0 } from '@/components/gestao/Celulas'
 import { lerAbas } from '@/lib/gestao/lerArquivo'
@@ -20,6 +21,10 @@ import { mesLongo } from '@/lib/gestao/meses'
 import { fmtDataHoraPt, fmtPct } from '@/lib/format'
 import type { Corretora } from '@/lib/corretoras'
 import { cn } from '@/lib/utils'
+
+// as explicações dos blocos: no computador como subtítulo, no celular atrás do "i"
+const AJUDA_BANKING = 'A planilha de Banking que a Delta manda (“Artur Fonseca_DW_<mês>.xlsx”): cartão, saldo remunerado e outros produtos bancários. É uma comissão à parte do giro: entra no Painel e não mexe nos lotes.'
+const AJUDA_GRAVADOS = 'Um registro por mês e por tipo, com as linhas da planilha guardadas: o fora do giro vem do Fechamento do mês e o Banking, da planilha da Delta. Tirar só remove a comissão do Painel.'
 
 type Lido = Extract<LeituraBanking, { ok: true }>
 type Estado =
@@ -83,9 +88,13 @@ export function BankingDelta({ corretora, base, aplicados }: { corretora: Corret
 
   return (
     <>
-      <Panel variant="card" title="Banking do mês" subtitle="A planilha de Banking que a Delta manda (“Artur Fonseca_DW_<mês>.xlsx”): cartão, saldo remunerado e outros produtos bancários. É uma comissão à parte do giro: entra no Painel e não mexe nos lotes.">
+      {/* no celular o parágrafo técnico vai para o "i" e o botão de escolher a planilha ocupa a largura toda */}
+      <Panel variant="card" title="Banking do mês" subtitle={<>
+        <span className="max-md:hidden">{AJUDA_BANKING}</span>
+        <span className="md:hidden">A planilha de Banking da Delta. <Dica texto={AJUDA_BANKING} /></span>
+      </>}>
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <label className={cn('inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-line-strong px-4 text-body text-fg-muted hover:bg-surface-2 hover:text-fg', ocupado && 'pointer-events-none opacity-50')}>
+          <label className={cn('inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-line-strong px-4 text-body text-fg-muted hover:bg-surface-2 hover:text-fg max-md:h-auto max-md:min-h-12 max-md:w-full max-md:justify-center max-md:py-2', ocupado && 'pointer-events-none opacity-50')}>
             <FileSpreadsheet className="h-4 w-4" aria-hidden />
             Escolher a planilha de Banking…
             <input type="file" accept=".xlsx,.xls" className="sr-only" disabled={ocupado} onChange={e => { escolher(e.target.files?.[0] ?? null); e.target.value = '' }} />
@@ -120,23 +129,25 @@ export function BankingDelta({ corretora, base, aplicados }: { corretora: Corret
       </Panel>
 
       {aplicados.length > 0 && (
-        <Panel title="Fora do giro e Banking gravados" subtitle="Um registro por mês e por tipo, com as linhas da planilha guardadas: o fora do giro vem do Fechamento do mês e o Banking, da planilha da Delta. Tirar só remove a comissão do Painel.">
+        <Panel title={<>Fora do giro e Banking gravados <Dica texto={AJUDA_GRAVADOS} className="md:hidden" /></>} subtitle={<span className="max-md:hidden">{AJUDA_GRAVADOS}</span>}>
           {erroDesfazer && <Alert tone="loss" className="mb-3">{erroDesfazer}</Alert>}
           <div className="tbl-wrap">
-            <table className="tbl tbl-dense">
+            {/* no celular cada registro vira um item: o mês e o tipo em cima; a comissão líquida, a planilha e os
+                outros valores embaixo; "Tirar" à direita, à vista (a tabela cortava o botão na borda) */}
+            <table className="tbl tbl-dense tbl-lista" style={{ '--lista-direita': '5.5rem' } as CSSProperties}>
               <thead><tr><th>Mês</th><th>Tipo</th><th className="col-p2">Planilha</th><th className="num col-p3">Linhas</th><th className="num col-p2">Comissão do BTG</th><th className="num col-p2">Parte do escritório</th><th className="num">Comissão líquida</th><th className="col-p3">Gravado</th><th><span className="sr-only">Ações</span></th></tr></thead>
               <tbody>
                 {aplicados.map(a => (
                   <tr key={a.id}>
-                    <td className="font-medium">{mesLongo(a.dados.mes)}</td>
+                    <td className="font-medium cel-titulo">{mesLongo(a.dados.mes)}<span className="font-normal md:hidden"> · {FONTE_ROTULO[a.fonte]}</span></td>
                     <td className="muted whitespace-nowrap">{FONTE_ROTULO[a.fonte]}</td>
-                    <td className="col-p2 max-w-[260px] truncate" title={a.dados.origem ?? a.nome_arquivo}>{a.dados.origem ?? a.nome_arquivo}</td>
-                    <td className="num col-p3">{n0(a.dados.total.linhas)}</td>
-                    <td className="num col-p2">{r0(a.dados.total.comissao)}</td>
-                    <td className="num col-p2">{r0(a.dados.total.parte)}</td>
-                    <td className="num font-semibold">{r0(a.dados.total.liquida)}</td>
-                    <td className="muted col-p3 whitespace-nowrap">{fmtDataHoraPt(a.created_at)}{a.criado_por_nome ? ` · ${a.criado_por_nome}` : ''}</td>
-                    <td className="text-right"><Button variant="ghost" size="xs" loading={desfazendo === a.id} onClick={() => desfazer(a)}><Undo2 className="h-3.5 w-3.5" aria-hidden />Tirar</Button></td>
+                    <td className="col-p2 max-w-[260px] truncate cel-sub" title={a.dados.origem ?? a.nome_arquivo}>{a.dados.origem ?? a.nome_arquivo}</td>
+                    <td className="num col-p3 cel-sub" data-sufixo="linhas">{n0(a.dados.total.linhas)}</td>
+                    <td className="num col-p2 cel-sub" data-rotulo="comissão do BTG">{r0(a.dados.total.comissao)}</td>
+                    <td className="num col-p2 cel-sub" data-rotulo="parte do escritório">{r0(a.dados.total.parte)}</td>
+                    <td className="num font-semibold cel-sub" data-rotulo="comissão líquida">{r0(a.dados.total.liquida)}</td>
+                    <td className="muted col-p3 whitespace-nowrap cel-sub" data-rotulo="gravado">{fmtDataHoraPt(a.created_at)}{a.criado_por_nome ? ` · ${a.criado_por_nome}` : ''}</td>
+                    <td className="text-right cel-acoes"><Button variant="ghost" size="xs" loading={desfazendo === a.id} onClick={() => desfazer(a)}><Undo2 className="h-3.5 w-3.5" aria-hidden />Tirar</Button></td>
                   </tr>
                 ))}
               </tbody>

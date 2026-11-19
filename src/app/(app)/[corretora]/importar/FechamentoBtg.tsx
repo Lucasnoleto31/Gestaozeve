@@ -3,13 +3,14 @@
 // Fechamento do mês do BTG na tela: sobe a planilha que o BTG manda, o sistema cruza cliente × dia ×
 // ativo com os lotes do mês e mostra o plano (corretagem paga por operação, lançamentos que faltaram,
 // o que fica de resíduo e o que está fora do giro); um clique aplica, outro desfaz.
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, FileSpreadsheet, Undo2 } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
+import { Dica } from '@/components/ui/Dica'
 import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { KpiCard, KpiRow } from '@/components/ui/Kpi'
 import { useToast } from '@/components/ui/Toast'
@@ -24,6 +25,10 @@ import { mesLongo } from '@/lib/gestao/meses'
 import { fmtDataHoraPt, fmtNum, fmtPct } from '@/lib/format'
 import type { Corretora } from '@/lib/corretoras'
 import { cn } from '@/lib/utils'
+
+// as explicações dos blocos: no computador como subtítulo, no celular atrás do "i"
+const AJUDA_FECHAMENTO = 'A planilha que o BTG manda (“Artur Fonseca_<mês>.xlsx”, uma aba por livro). O sistema cruza cliente × dia × ativo com os lotes do mês e propõe os ajustes; você confere e aplica.'
+const AJUDA_APLICADOS = 'Cada um é uma importação protegida com o retrato do que mudou; desfazer volta as corretagens, apaga os lançamentos novos e o % do mês.'
 
 // a leitura da planilha mais o quadro de resumo dela (parte do escritório por produto e alíquota de imposto)
 type Lido = Extract<LeituraFechamento, { ok: true }> & { quadro: QuadroFechamento }
@@ -144,9 +149,13 @@ export function FechamentoBtg({ corretora, base, aplicados, zeragemManual }: { c
 
   return (
     <>
-      <Panel variant="card" title="Fechamento do mês" subtitle="A planilha que o BTG manda (“Artur Fonseca_<mês>.xlsx”, uma aba por livro). O sistema cruza cliente × dia × ativo com os lotes do mês e propõe os ajustes; você confere e aplica.">
+      {/* no celular o parágrafo técnico vai para o "i" e o botão de escolher a planilha ocupa a largura toda */}
+      <Panel variant="card" title="Fechamento do mês" subtitle={<>
+        <span className="max-md:hidden">{AJUDA_FECHAMENTO}</span>
+        <span className="md:hidden">A planilha mensal do BTG. <Dica texto={AJUDA_FECHAMENTO} /></span>
+      </>}>
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <label className={cn('inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-line-strong px-4 text-body text-fg-muted hover:bg-surface-2 hover:text-fg', ocupado && 'pointer-events-none opacity-50')}>
+          <label className={cn('inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-line-strong px-4 text-body text-fg-muted hover:bg-surface-2 hover:text-fg max-md:h-auto max-md:min-h-12 max-md:w-full max-md:justify-center max-md:py-2', ocupado && 'pointer-events-none opacity-50')}>
             <FileSpreadsheet className="h-4 w-4" aria-hidden />
             Escolher a planilha do fechamento…
             <input type="file" accept=".xlsx,.xls" className="sr-only" disabled={ocupado} onChange={e => { escolher(e.target.files?.[0] ?? null); e.target.value = '' }} />
@@ -193,22 +202,28 @@ export function FechamentoBtg({ corretora, base, aplicados, zeragemManual }: { c
       </Panel>
 
       {aplicados.length > 0 && (
-        <Panel title="Fechamentos aplicados" subtitle="Cada um é uma importação protegida com o retrato do que mudou; desfazer volta as corretagens, apaga os lançamentos novos e o % do mês.">
+        <Panel title={<>Fechamentos aplicados <Dica texto={AJUDA_APLICADOS} className="md:hidden" /></>} subtitle={<span className="max-md:hidden">{AJUDA_APLICADOS}</span>}>
           {erroDesfazer && <Alert tone="loss" className="mb-3">{erroDesfazer}</Alert>}
           <div className="tbl-wrap">
-            <table className="tbl tbl-dense">
+            {/* no celular cada fechamento vira um item: a planilha em cima, o mês, quando e o que mudou embaixo e
+                "Desfazer" à direita, à vista (a tabela cortava o botão na borda) */}
+            <table className="tbl tbl-dense tbl-lista" style={{ '--lista-direita': '7.5rem' } as CSSProperties}>
               <thead><tr><th>Quando</th><th>Mês</th><th>Planilha</th><th className="num">Corretagens</th><th className="num">Lançamentos</th><th className="num col-p2">Comissão</th><th className="col-p3">Por</th><th><span className="sr-only">Ações</span></th></tr></thead>
               <tbody>
                 {aplicados.map(f => (
                   <tr key={f.id}>
                     <td className="num whitespace-nowrap">{fmtDataHoraPt(f.created_at)}</td>
                     <td>{f.mes ? mesLongo(f.mes) : TRACO}</td>
-                    <td className="max-w-[260px] truncate" title={f.origem ?? f.nome_arquivo}>{f.origem ?? f.nome_arquivo}</td>
-                    <td className="num">{n0(f.ajustadas)}</td>
-                    <td className="num">{n0(f.inseridas)}</td>
-                    <td className="num col-p2">{f.pct != null ? fmtPct(f.pct) : TRACO}</td>
-                    <td className="muted col-p3">{f.criado_por_nome ?? TRACO}</td>
-                    <td className="text-right"><Button variant="ghost" size="xs" loading={desfazendo === f.id} onClick={() => desfazer(f)}><Undo2 className="h-3.5 w-3.5" aria-hidden />Desfazer</Button></td>
+                    <td className="max-w-[260px] truncate cel-titulo" title={f.origem ?? f.nome_arquivo}>
+                      {f.origem ?? f.nome_arquivo}
+                      {/* mês e quando vêm antes da planilha na linha: no celular, logo embaixo do nome */}
+                      <span className="block text-label font-normal text-fg-muted md:hidden">{f.mes ? mesLongo(f.mes) : TRACO} · {fmtDataHoraPt(f.created_at)}</span>
+                    </td>
+                    <td className="num cel-sub" data-sufixo="corretagens">{n0(f.ajustadas)}</td>
+                    <td className="num cel-sub" data-sufixo="lançamentos">{n0(f.inseridas)}</td>
+                    <td className={cn('num col-p2 cel-sub', f.pct == null && 'vazio')} data-rotulo="comissão">{f.pct != null ? fmtPct(f.pct) : TRACO}</td>
+                    <td className={cn('muted col-p3 cel-sub', !f.criado_por_nome && 'vazio')} data-rotulo="por">{f.criado_por_nome ?? TRACO}</td>
+                    <td className="text-right cel-acoes"><Button variant="ghost" size="xs" loading={desfazendo === f.id} onClick={() => desfazer(f)}><Undo2 className="h-3.5 w-3.5" aria-hidden />Desfazer</Button></td>
                   </tr>
                 ))}
               </tbody>

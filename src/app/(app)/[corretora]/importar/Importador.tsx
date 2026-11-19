@@ -6,6 +6,8 @@ import { FileSpreadsheet, Users, BarChart3 } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
+import { Dica } from '@/components/ui/Dica'
+import { RecolheNoCelular } from '@/components/ui/RecolheNoCelular'
 import { useToast } from '@/components/ui/Toast'
 import { lerArquivo } from '@/lib/gestao/lerArquivo'
 import { lerClientes, lerLotes, resumoLotes, type ClienteImport, type LoteImport } from '@/lib/gestao/planilhas'
@@ -132,25 +134,29 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
   }
 
   const ocupado = estado.fase === 'lendo' || estado.fase === 'enviando'
+  const colunasAceitas = tipo === 'lotes'
+    ? 'Colunas aceitas: Sinacor/CD_CONTA_COM_DIGITO, Data/DATA_CONTRATO, Ativo, Qtd. Contratos, Modo, Plataforma, Assessor, ID_CLIENTE, NOME_CLIENTE…'
+    : 'Export de clientes (DT_PARTITION … ID_ASSESSOR) ou a sua própria lista (Nome, CPF, Telefone, Conta…). Cada linha é casada por CPF → conta → telefone → nome; Parceiro, Data de Entrada, Observações e Motivo da Recusa também entram.'
 
   return (
-    <Panel variant="card" title="Nova importação" subtitle={`Escolha o tipo e o arquivo (.xlsx, .xls ou .csv exportado da ${label}).`}>
+    <Panel variant="card" title="Nova importação" subtitle={<>
+      <span className="max-md:hidden">Escolha o tipo e o arquivo (.xlsx, .xls ou .csv exportado da {label}).</span>
+      {/* no celular a lista de colunas aceitas sai do meio do caminho e fica atrás do "i" */}
+      <span className="md:hidden">Arquivo .xlsx, .xls ou .csv da {label}. <Dica texto={colunasAceitas} /></span>
+    </>}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="seg">
+        <div className="seg max-md:w-full max-md:[&>button]:flex-1 max-md:[&>button]:justify-center">
           <button type="button" data-active={tipo === 'lotes'} disabled={ocupado} onClick={() => { setTipo('lotes'); setEstado({ fase: 'vazio' }) }}><BarChart3 className="h-4 w-4" aria-hidden />Lotes (export)</button>
           <button type="button" data-active={tipo === 'clientes'} disabled={ocupado} onClick={() => { setTipo('clientes'); setEstado({ fase: 'vazio' }) }}><Users className="h-4 w-4" aria-hidden />Clientes (cadastro)</button>
         </div>
-        <label className={cn('inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-line-strong px-4 text-body text-fg-muted hover:bg-surface-2 hover:text-fg', ocupado && 'pointer-events-none opacity-50')}>
+        {/* no celular é a ação da tela: botão principal, na tinta e na largura toda (no computador, como sempre) */}
+        <label className={cn('inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-dashed border-line-strong px-4 text-body text-fg-muted hover:bg-surface-2 hover:text-fg max-md:h-12 max-md:w-full max-md:justify-center max-md:border-solid max-md:border-fg max-md:bg-fg max-md:font-medium max-md:text-bg', ocupado && 'pointer-events-none opacity-50')}>
           <FileSpreadsheet className="h-4 w-4" aria-hidden />
           Escolher arquivo…
           <input type="file" accept=".xlsx,.xls,.csv,.txt" className="sr-only" disabled={ocupado} onChange={e => { escolher(e.target.files?.[0] ?? null); e.target.value = '' }} />
         </label>
       </div>
-      <p className="mb-4 text-label text-fg-subtle">
-        {tipo === 'lotes'
-          ? 'Colunas aceitas: Sinacor/CD_CONTA_COM_DIGITO, Data/DATA_CONTRATO, Ativo, Qtd. Contratos, Modo, Plataforma, Assessor, ID_CLIENTE, NOME_CLIENTE…'
-          : 'Export de clientes (DT_PARTITION … ID_ASSESSOR) ou a sua própria lista (Nome, CPF, Telefone, Conta…). Cada linha é casada por CPF → conta → telefone → nome; Parceiro, Data de Entrada, Observações e Motivo da Recusa também entram.'}
-      </p>
+      <p className="mb-4 text-label text-fg-subtle max-md:hidden">{colunasAceitas}</p>
 
       {estado.fase === 'lendo' && <Alert tone="neutral">Lendo o arquivo…</Alert>}
       {estado.fase === 'erro' && <Alert tone="loss" title="Não importado">{estado.erro}</Alert>}
@@ -171,8 +177,8 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
 
       {estado.fase === 'clientes' && (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Resumo label="Arquivo" valor={estado.nome} />
+          <div className="grid gap-3 max-sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Resumo label="Arquivo" valor={estado.nome} largo />
             <Resumo label="Linhas" valor={fmtNum(estado.linhas.length)} />
             <Resumo label="Com conta" valor={fmtNum(estado.linhas.filter(l => l.conta).length)} sub={estado.linhas.some(l => !l.conta) ? `${fmtNum(estado.linhas.filter(l => !l.conta).length)} sem conta` : undefined} />
             <Resumo label="Com CPF/CNPJ" valor={fmtNum(estado.linhas.filter(l => l.documento).length)} />
@@ -182,7 +188,7 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
           {estado.faltando.length > 0 && <Alert tone="warn" title="Colunas não encontradas (vão ficar em branco)">{estado.faltando.join(', ')}</Alert>}
           <Previa cabecalhos={['Conta', 'Nome', 'CPF/CNPJ', 'Assessor', 'Situação', 'Migração', 'Telefone']} linhas={estado.linhas.slice(0, 5).map(l => [l.conta, l.nome, l.documento, l.assessor, l.situacao_conta, dataPt(l.data_habilitacao), l.telefone])} />
           <p className="text-label text-fg-muted">Quem já existe é completado (campo vazio não apaga); quem não existe entra como cliente novo. Linhas com conta criam/atualizam a conta e ligam os lotes dela.</p>
-          <div className="flex gap-2">
+          <div className="flex gap-2 max-md:[&>button]:flex-1">
             <Button onClick={importarClientesAgora}>Importar {fmtNum(estado.linhas.length)} linhas</Button>
             <Button variant="ghost" onClick={() => setEstado({ fase: 'vazio' })}>Cancelar</Button>
           </div>
@@ -191,8 +197,8 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
 
       {estado.fase === 'lotes' && (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Resumo label="Arquivo" valor={estado.nome} />
+          <div className="grid gap-3 max-sm:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            <Resumo label="Arquivo" valor={estado.nome} largo />
             <Resumo label="Linhas" valor={fmtNum(estado.resumo.linhas)} />
             <Resumo label="Período" valor={`${dataPt(estado.resumo.dataMin)} a ${dataPt(estado.resumo.dataMax)}`} sub={`${estado.resumo.dias} dias com giro`} />
             <Resumo label="Lotes operados" valor={fmtNum(estado.resumo.operados)} />
@@ -227,7 +233,7 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
               <span><span className="font-medium">Acrescentar</span><br /><span className="text-label text-fg-muted">Grava todas as linhas por cima do que já existe (use só quando o arquivo traz dias novos). Linhas repetidas viram lotes duplicados.</span></span>
             </label>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 max-md:[&>button]:flex-1">
             <Button onClick={importarLotesAgora} disabled={estado.existentes == null}>Importar {fmtNum(estado.resumo.linhas)} linhas</Button>
             <Button variant="ghost" onClick={() => setEstado({ fase: 'vazio' })}>Cancelar</Button>
           </div>
@@ -237,23 +243,28 @@ export function Importador({ corretora, label, modoZeragem }: { corretora: Corre
   )
 }
 
-function Resumo({ label, valor, sub }: { label: string; valor: string; sub?: string }) {
+// largo = o nome do arquivo: no celular ocupa a linha toda e quebra em vez de cortar (o title não existe no toque)
+function Resumo({ label, valor, sub, largo }: { label: string; valor: string; sub?: string; largo?: boolean }) {
   return (
-    <div className="rounded-md bg-surface-2 px-3 py-2">
+    <div className={cn('rounded-md bg-surface-2 px-3 py-2', largo && 'max-sm:col-span-2')}>
       <p className="label">{label}</p>
-      <p className="truncate text-dense font-semibold text-fg" title={valor}>{valor}</p>
+      <p className={cn('truncate text-dense font-semibold text-fg', largo && 'max-md:whitespace-normal max-md:break-all')} title={valor}>{valor}</p>
       {sub && <p className="text-micro text-fg-subtle">{sub}</p>}
     </div>
   )
 }
 
+// A prévia das primeiras linhas do arquivo é conferência, não decisão: no celular fica atrás de uma linha
+// (aberta, rola de lado dentro da moldura, como no computador)
 function Previa({ cabecalhos, linhas }: { cabecalhos: string[]; linhas: (string | null)[][] }) {
   return (
+    <RecolheNoCelular titulo="Ver as primeiras linhas do arquivo" tamanho="linha">
     <div className="tbl-wrap">
       <table className="tbl tbl-dense">
         <thead><tr>{cabecalhos.map(c => <th key={c}>{c}</th>)}</tr></thead>
         <tbody>{linhas.map((l, i) => <tr key={i}>{l.map((v, j) => <td key={j} className="max-w-[220px] truncate">{v || '—'}</td>)}</tr>)}</tbody>
       </table>
     </div>
+    </RecolheNoCelular>
   )
 }

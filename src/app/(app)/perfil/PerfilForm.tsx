@@ -28,7 +28,8 @@ function StatusBanner({ status }: { status: Status }) {
 // Fora dos componentes de seção: criar componentes durante o render reinicia o estado deles.
 function EyeToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
   return (
-    <button type="button" onClick={onToggle} className="text-fg-subtle hover:text-fg" aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}>
+    // no celular o olho ganha 44 × 44 px de toque (o ícone fica no mesmo lugar): só o ícone de 16 px escapava do dedo
+    <button type="button" onClick={onToggle} className="text-fg-subtle hover:text-fg max-md:flex max-md:h-11 max-md:w-11 max-md:items-center max-md:justify-center" aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}>
       {show ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
     </button>
   )
@@ -42,8 +43,8 @@ function SenhaField({ label, value, onChange, placeholder, show, onToggle, error
     <Field label={label} error={error}>
       <div className="relative">
         <input type={show ? 'text' : 'password'} value={value} onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder} className="w-full pr-10" autoComplete="new-password" />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2"><EyeToggle show={show} onToggle={onToggle} /></div>
+          placeholder={placeholder} className="w-full pr-10 max-md:pr-12" autoComplete="new-password" />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 max-md:right-0"><EyeToggle show={show} onToggle={onToggle} /></div>
       </div>
     </Field>
   )

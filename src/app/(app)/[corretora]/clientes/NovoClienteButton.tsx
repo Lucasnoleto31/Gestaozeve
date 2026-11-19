@@ -60,7 +60,12 @@ export function NovoClienteButton({ corretora, base, responsaveis, assessores, h
 
   return (
     <>
-      <Button size="sm" onClick={() => setAberto(true)}><Plus className="h-4 w-4" aria-hidden />Novo cliente</Button>
+      {/* No celular o botão fica só com o fio: ali o destaque na tinta é do grupo escolhido na lista. Em tela
+          muito estreita (menos de 370 px) sobra só o "+", para o mês caber inteiro na mesma linha; o nome
+          fica para o leitor de tela. */}
+      <Button size="sm" className="max-md:border-line-strong max-md:bg-transparent max-md:text-fg max-[369px]:w-11 max-[369px]:px-0" onClick={() => setAberto(true)}>
+        <Plus className="h-4 w-4" aria-hidden /><span className="max-[369px]:sr-only">Novo cliente</span>
+      </Button>
       <Modal open={aberto} onClose={() => setAberto(false)} title="Novo cliente" subtitle={`Cliente levado para a ${CORRETORA_LABEL[corretora]}. Se o CPF, a conta, o telefone ou o nome já existirem, o cadastro é completado em vez de duplicado.`} size="lg"
         footer={<><Button variant="secondary" onClick={() => setAberto(false)}>Cancelar</Button><Button type="submit" form="form-novo-cliente" loading={salvando}>Cadastrar</Button></>}>
         <form id="form-novo-cliente" onSubmit={salvar} className="space-y-4">

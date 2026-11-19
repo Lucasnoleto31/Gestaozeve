@@ -52,6 +52,8 @@ export default async function ClientesPage({ params, searchParams }: { params: P
     entraram30d ? `${fmtNum(entraram30d)} ${entraram30d === 1 ? 'entrou' : 'entraram'} nos últimos 30 dias` : null,
     migraram7d ? `${fmtNum(migraram7d)} ${migraram7d === 1 ? 'conta migrou' : 'contas migraram'} nos últimos 7` : null,
   ].filter(Boolean).join(' e ')
+  // no celular a descrição do cabeçalho não aparece: este movimento vai na segunda linha da frase da lista
+  const movimento = `${fmtNum(contas)} ${contas === 1 ? 'conta' : 'contas'}${recente ? `; ${recente}` : ''}.`
 
   return (
     <>
@@ -61,7 +63,8 @@ export default async function ClientesPage({ params, searchParams }: { params: P
         description={`Como está cada cliente em ${mesCurto(mesRef)}. São ${fmtNum(clientes.length)} clientes em ${fmtNum(contas)} contas${recente ? `; ${recente}` : ''}.`}
         actions={<>
           <NovoClienteButton corretora={corretora} base={base} responsaveis={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)} assessores={assessores[corretora]} hoje={hoje} opcoesOrigem={opcoesOrigem} />
-          <MesPicker valor={mesRef} />
+          {/* no celular o mês vem na frente e divide uma linha só com o botão */}
+          <MesPicker valor={mesRef} className="max-md:order-first max-md:min-w-0 max-md:flex-1 max-md:flex-nowrap max-md:[&>input]:w-full max-md:[&>input]:min-w-0" />
         </>}
       />
       <PageBody>
@@ -69,7 +72,7 @@ export default async function ClientesPage({ params, searchParams }: { params: P
           clientes={compactar(clientes, CAMPOS_CLIENTE_LINHA)} base={base} mesRef={mesRef} corretora={corretora}
           comAcoes podeExcluir={listaPropria && admin}
           atendentes={responsaveis.filter(x => x.atende_clientes).map(x => x.nome)}
-          filtrosSalvos={fi} visaoInicial={visao} fora={fora} mesParam={ctx.mesEscolhido ? mesRef.slice(0, 7) : null}
+          filtrosSalvos={fi} visaoInicial={visao} fora={fora} mesParam={ctx.mesEscolhido ? mesRef.slice(0, 7) : null} movimento={movimento}
         />
       </PageBody>
     </>

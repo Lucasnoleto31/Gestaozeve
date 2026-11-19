@@ -5,12 +5,18 @@
 // lista com um toque. Abaixo, uma linha só de controles: a busca, "Filtros" (os filtros de cadastro ficam
 // recolhidos e viram etiquetas quando ligados) e as colunas. No Resumo as colunas acompanham o grupo
 // escolhido; as outras visões (Atendimento, Giro e receita, Cadastro) trazem as demais. O CSV leva tudo.
+// No celular (DESIGN.md §8) a mesma marcação muda de desenho: a frase com a conclusão, a busca com
+// "Filtros" (os filtros sobem numa folha), os grupos como etiquetas numa fileira e a tabela como lista:
+// o nome, o estado em palavras, uma data, o responsável e um número; a linha inteira abre a ficha.
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, Download, Pencil, Search, SlidersHorizontal, X } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { ArrowDown, ArrowUp, Download, MessageCircle, Pencil, Search, SlidersHorizontal, X } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
 import { Button } from '@/components/ui/Button'
+import { Dica } from '@/components/ui/Dica'
+import { FolhaCelular } from '@/components/ui/FolhaCelular'
+import { Resumo } from '@/components/gestao/Resumo'
 import { ExcluirClienteButton } from './ExcluirClienteButton'
 import { AtribuirCampanha } from './AtribuirCampanha'
 import type { Corretora } from '@/lib/corretoras'
@@ -62,11 +68,10 @@ function guardarVisao(v: VisaoClientes) {
 // ── Colunas ────────────────────────────────────────────────────────────────
 type Ctx = {
   base: string; mesParam?: string | null; nomeCookie: string; mesRef: MesRef; fora: Record<string, GiroFora>
-  estadoNoNome: boolean   // a visão tem a coluna "Como está": no celular ela some e o estado desce para baixo do nome
 }
 type Coluna = {
   campo?: keyof ClienteLinha     // ordena por este campo ao clicar no cabeçalho
-  titulo: (x: Ctx) => ReactNode
+  titulo: (x: Ctx) => string
   num?: boolean                  // cabeçalho à direita, como a célula
   dica?: string
   td: (c: ClienteLinha, cls: string | undefined, x: Ctx) => ReactNode
@@ -76,9 +81,9 @@ const COLUNAS: Record<ColunaCliente, Coluna> = {
   nome: {
     campo: 'nome', titulo: () => 'Cliente',
     td: (c, cls, x) => (
-      <td className={cn('col-nome max-w-[190px] truncate md:max-w-[240px]', cls)}>
+      // cel-titulo: no celular o nome fica inteiro, em cima, e o link pega a linha toda
+      <td className={cn('col-nome cel-titulo max-w-[190px] truncate md:max-w-[240px]', cls)}>
         <Link href={`${x.base}/clientes/${c.cliente_id}${x.mesParam ? `?mes=${x.mesParam}` : ''}`} onClick={() => lembrarAberto(x.nomeCookie, c.cliente_id)} className={cn('link', c.nivel === 'Alto' && 'font-semibold')}>{c.nome}</Link>
-        {x.estadoNoNome && <span className="mt-1 block md:hidden"><MomentoBadge cliente={c} /></span>}
       </td>
     ),
   },
@@ -137,8 +142,8 @@ const COLUNAS: Record<ColunaCliente, Coluna> = {
   migracao: { campo: 'data_migracao', titulo: () => 'Migrou em', num: true, td: (c, cls) => <td className={cn('num', cls)}>{dataCurta(c.data_migracao)}</td> },
   entrada: { campo: 'data_entrada', titulo: () => 'Entrou em', num: true, td: (c, cls) => <td className={cn('num', cls, !c.data_entrada && 'subtle')}>{dataCurta(c.data_entrada)}</td> },
   parceiro: { campo: 'parceiro', titulo: () => 'Parceiro', td: (c, cls) => <td className={cn('muted', cls)}>{c.parceiro ?? TRACO}</td> },
-  lotes_mes: { campo: 'lotes_mes', titulo: x => <>Lotes {mesCurto(x.mesRef)}</>, num: true, td: (c, cls) => <td className={cn('num font-medium', cls, !c.lotes_mes && 'subtle')}>{n0(c.lotes_mes)}</td> },
-  receita_mes: { campo: 'receita_mes', titulo: x => <>Receita {mesCurto(x.mesRef)}</>, num: true, td: (c, cls) => <td className={cn('num', cls, !c.receita_mes && 'subtle')}>{r0(c.receita_mes)}</td> },
+  lotes_mes: { campo: 'lotes_mes', titulo: x => `Lotes ${mesCurto(x.mesRef)}`, num: true, td: (c, cls) => <td className={cn('num font-medium', cls, !c.lotes_mes && 'subtle')}>{n0(c.lotes_mes)}</td> },
+  receita_mes: { campo: 'receita_mes', titulo: x => `Receita ${mesCurto(x.mesRef)}`, num: true, td: (c, cls) => <td className={cn('num', cls, !c.receita_mes && 'subtle')}>{r0(c.receita_mes)}</td> },
   lotes_12m: { campo: 'lotes_12m', titulo: () => 'Lotes 12 m', num: true, td: (c, cls) => <td className={cn('num font-medium', cls, !c.lotes_12m && 'subtle')}>{n0(c.lotes_12m)}</td> },
   receita_12m: { campo: 'receita_12m', titulo: () => 'Receita 12 m', num: true, td: (c, cls) => <td className={cn('num', cls, !c.receita_12m && 'subtle')}>{r0(c.receita_12m)}</td> },
   ultimo_giro: { campo: 'ultimo_giro', titulo: () => 'Último giro', num: true, td: (c, cls) => <td className={cn('num', cls, !c.ultimo_giro && 'subtle')}>{dataCurta(c.ultimo_giro)}</td> },
@@ -161,6 +166,100 @@ const COLUNAS: Record<ColunaCliente, Coluna> = {
   },
 }
 
+// ── A linha no celular ───────────────────────────────────────────────────────
+// No celular a tabela vira lista (tbl-lista) e a linha tem uma anatomia só, qualquer que seja a visão de
+// colunas guardada: o nome; embaixo, o estado em palavras, uma data e o responsável; à direita, um número.
+// O número acompanha o grupo, como a primeira coluna de número do Resumo: lotes do mês em Todos e
+// Operando, a média em Em risco (é por ela que o grupo vem ordenado), os 12 meses em Inativos.
+type NumeroDaLinha = { id: 'lotes_mes' | 'media_3m' | 'lotes_12m'; valor: (c: ClienteLinha) => number }
+const NUMERO_DO_GRUPO: Record<Momento | '', NumeroDaLinha | null> = {
+  '': { id: 'lotes_mes', valor: c => c.lotes_mes },
+  operando: { id: 'lotes_mes', valor: c => c.lotes_mes },
+  risco: { id: 'media_3m', valor: c => Math.round(c.lotes_media_3m) },
+  inativo: { id: 'lotes_12m', valor: c => c.lotes_12m },
+  nunca: null, abertura: null, recusou: null,
+}
+// Quem ainda não girou não tem número para mostrar: no lugar fica o atalho do WhatsApp
+const SEM_GIRO: readonly Momento[] = ['nunca', 'abertura', 'recusou']
+type Celular = {
+  estado: boolean                // o estado muda de uma linha para outra (Todos, Em risco, Inativos): entra na linha de apoio
+  numero: NumeroDaLinha | null
+  ano: string                    // o ano do mês da tela: data do mesmo ano sai sem o ano
+}
+// espaço que não quebra: cola o nome do dado ao valor na linha de apoio
+const NBSP = '\u00A0'
+// "18/11" quando a data é do ano da tela; de outro ano, "02/12/25" (na linha de apoio cada letra conta)
+const diaMes = (iso: string | null | undefined, ano: string) => (!iso ? null : iso.slice(0, 4) === ano ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : dataCurta(iso))
+
+// O WhatsApp de quem ainda não girou (no celular, no lugar do número); null quando não há telefone
+const whatsDaLinha = (c: ClienteLinha) => (SEM_GIRO.includes(momentoDoCliente(c)) ? linkTelefone(c.telefone) : null)
+// O botão com a palavra "WhatsApp" é mais largo que o número: a linha que o tem guarda mais espaço à direita
+// (a seta fica a 1,1 rem da borda e o botão começa depois dela), para ele não cobrir o nome
+const DIREITA_DO_WHATSAPP = '5.75rem'
+
+// As células que só existem no celular (no computador ficam escondidas e não ocupam coluna). O resto do
+// cadastro e do giro do cliente está na ficha, a um toque.
+function celulasDoCelular(c: ClienteLinha, cel: Celular) {
+  const m = momentoDoCliente(c)
+  const semGiro = SEM_GIRO.includes(m)
+  // uma data por linha: o último giro de quem já girou; de quem não girou, quando migrou ou quando entrou.
+  // "Parou há 12 dias" e "Inativo há 5 meses" já dizem quando foi o último giro: ali a data só repetiria o
+  // estado (o dia exato está na ficha)
+  const estadoDizQuando = cel.estado && (m === 'inativo' ? !!c.meses_sem_giro : c.risco === 'parou' && !!c.dias_sem_giro)
+  const [rotulo, data] = m === 'nunca' ? ['migrou em', c.data_migracao] : m === 'abertura' ? ['entrou em', c.data_entrada] : m === 'recusou' || estadoDizQuando ? ['', null] : ['último giro', c.ultimo_giro]
+  const valor = !semGiro && cel.numero ? cel.numero.valor(c) : null
+  const wa = whatsDaLinha(c)
+  return (
+    <>
+      {cel.estado && <td className="cel-sub md:hidden"><MomentoBadge cliente={c} /></td>}
+      {/* data-rotulo: a base cola o nome do dado ao valor; o espaço dentro de "último giro" também não
+          quebra, para a linha de apoio só quebrar entre um fato e outro */}
+      <td className={cn('cel-sub md:hidden', !data && 'vazio')} data-rotulo={data ? rotulo.replace(' ', NBSP) : undefined}>{data && diaMes(data, cel.ano)}</td>
+      <td className={cn('cel-sub md:hidden', !c.responsavel && 'vazio')} data-rotulo="resp.">{c.responsavel}</td>
+      {valor != null && <td className="cel-valor md:hidden">{valor ? fmtNum(valor) : <span className="subtle font-normal">{TRACO}</span>}</td>}
+      {wa && (
+        // a linha abre a ficha; o WhatsApp é um alvo próprio, ao lado da seta. A palavra fica à vista: só o
+        // balão, no lugar onde as outras linhas têm o número, não diz o que o toque faz
+        <td className="cel-acoes md:hidden">
+          <a href={wa} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp de ${c.nome}`}
+            className="inline-flex h-11 min-w-11 flex-col items-center justify-center gap-0.5 rounded-md border border-line px-1.5 text-micro font-medium text-fg-muted">
+            <MessageCircle className="h-4 w-4" aria-hidden />
+            WhatsApp
+          </a>
+        </td>
+      )}
+    </>
+  )
+}
+
+// As ordens que o celular oferece em "Filtros": lá não há cabeçalho de coluna para tocar
+const ORDENS_DO_CELULAR: readonly { id: ColunaCliente; dir: 'asc' | 'desc'; como: string }[] = [
+  { id: 'lotes_mes', dir: 'desc', como: 'maior primeiro' },
+  { id: 'media_3m', dir: 'desc', como: 'maior primeiro' },
+  { id: 'lotes_12m', dir: 'desc', como: 'maior primeiro' },
+  { id: 'ultimo_giro', dir: 'desc', como: 'mais recente primeiro' },
+  { id: 'migracao', dir: 'desc', como: 'mais recente primeiro' },
+  { id: 'entrada', dir: 'desc', como: 'mais recente primeiro' },
+  { id: 'nome', dir: 'asc', como: 'A a Z' },
+]
+
+// A conclusão da tela em uma frase (no celular, onde a descrição do cabeçalho não aparece). Usa as
+// contagens dos grupos, para nunca discordar deles; sem verbo no presente, para servir a um mês passado.
+function fraseDaBase(operando: number, risco: number, emQueda: number, pararam: number, mes: string): string {
+  // o número fica colado à palavra (espaço que não quebra): "28" sozinho no fim da linha não diz nada
+  const operam = operando ? `${fmtNum(operando)}${NBSP}${operando === 1 ? 'cliente' : 'clientes'} operando` : 'Nenhum cliente operando'
+  if (!risco) return operando ? `${operam} em ${mes} e nenhum em risco.` : `${operam} em ${mes}.`
+  const partes = [emQueda ? `${fmtNum(emQueda)}${NBSP}em${NBSP}queda` : null, pararam ? `${fmtNum(pararam)}${NBSP}${pararam === 1 ? 'parou' : 'pararam'}` : null].filter(Boolean).join(' e ')
+  return `${operam} e ${fmtNum(risco)}${NBSP}em${NBSP}risco em ${mes}${partes ? `: ${partes}` : ''}.`
+}
+
+// Um filtro de "Filtros". No computador o seletor fica solto na faixa, como sempre. No celular ele sobe
+// na folha, um por linha: sem escolha, o próprio campo diz o nome ("Responsável: todos"); com um valor
+// escolhido o campo mostra só o valor, e aí o nome aparece em cima dele.
+function Filtro({ nome, escolhido, className, children }: { nome: string; escolhido: boolean; className?: string; children: ReactNode }) {
+  return <label className={cn('md:contents', className)}><span className={cn('label', escolhido ? 'md:hidden' : 'hidden')}>{nome}</span>{children}</label>
+}
+
 // Lista sem ninguém girando em outra corretora (referência estável, para não refazer as contas à toa)
 const SEM_GIRO_FORA: Record<string, GiroFora> = {}
 
@@ -170,11 +269,13 @@ function Conta({ n }: { n: number }) {
 }
 
 // Um grupo da base: o nome, quantos clientes e o que ele quer dizer. Um toque filtra a lista; o
-// escolhido fica na tinta (no celular a linha de explicação some para os seis caberem em três fileiras).
+// escolhido fica na tinta. No celular cada cartão vira uma etiqueta (nome e número) numa fileira que
+// rola de lado; a explicação do grupo escolhido aparece em cima da lista.
 function CartaoGrupo({ rotulo, n, nota, ativo, alerta, onClick }: { rotulo: string; n: number; nota: string; ativo: boolean; alerta?: boolean; onClick: () => void }) {
   return (
     <button type="button" aria-pressed={ativo} onClick={onClick} aria-label={`${rotulo}: ${fmtNum(n)} ${n === 1 ? 'cliente' : 'clientes'}, ${nota}`}
       className={cn('kpi min-w-0 cursor-pointer px-5 py-4 text-left transition-colors', ativo ? 'bg-fg' : 'hover:bg-surface-2')}>
+      {/* na fileira de etiquetas os filhos valem pela posição: o nome, o número e a nota (que some no celular) */}
       <span className={cn('label block', ativo && 'text-bg/70')}>{rotulo}</span>
       <span className={cn('mt-1.5 block truncate text-kpi font-bold tracking-tight tabular-nums', ativo ? 'text-bg' : alerta ? 'text-warn' : 'text-fg')}>{fmtNum(n)}</span>
       <span className={cn('mt-1.5 hidden text-micro md:block', ativo ? 'text-bg/70' : 'text-fg-muted')}>{nota}</span>
@@ -203,7 +304,7 @@ function ForaDaLista({ corretora, base, termo, mesParam }: { corretora: Corretor
       <p className="text-fg-muted">Fora deste filtro, com “{t}”:</p>
       <ul className="mt-1.5 divide-y divide-line">
         {itens.slice(0, 6).map(it => (
-          <li key={it.id} className="py-1.5">
+          <li key={it.id} className="py-1.5 max-md:py-2.5">
             <Link href={`${base}/clientes/${it.id}${mesParam ? `?mes=${mesParam}` : ''}`} className="link font-medium">{it.nome}</Link>
             <span className="block text-micro text-fg-subtle">{[it.conta ? `conta ${it.conta}` : null, it.documento, telefoneCurto(it.telefone)].filter(Boolean).join(' · ')}</span>
           </li>
@@ -213,8 +314,9 @@ function ForaDaLista({ corretora, base, termo, mesParam }: { corretora: Corretor
   )
 }
 
-export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, filtrosSalvos, visaoInicial = 'resumo', fora = SEM_GIRO_FORA, corretora, comAcoes = false, podeExcluir = false, atendentes = [] }: {
+export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, filtrosSalvos, visaoInicial = 'resumo', fora = SEM_GIRO_FORA, corretora, comAcoes = false, podeExcluir = false, atendentes = [], movimento }: {
   clientes: Compacto<ClienteLinha>; base: string; mesRef: MesRef; mesParam?: string | null; filtrosSalvos: ValoresFiltro; corretora: Corretora
+  movimento?: string   // contas, entradas e migrações recentes (a página calcula): a segunda linha da frase no celular
   visaoInicial?: VisaoClientes   // a visão de colunas que a pessoa escolheu da última vez (cookie lido pela página)
   fora?: Record<string, GiroFora>   // por cliente, o giro dele em outra corretora do escritório (só quem tem)
   comAcoes?: boolean; podeExcluir?: boolean
@@ -239,6 +341,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
   // visão de colunas: escolha da pessoa, guardada por um ano (não some com os filtros)
   const [visao, setVisao] = useState<VisaoClientes>(() => visaoNoNavegador() ?? visaoInicial)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
+  const fileiraGrupos = useRef<HTMLDivElement>(null)
 
   // opções tiradas dos dados, sem perder o valor guardado que não aparece mais (senão o filtro fica escondido)
   const responsaveis = useMemo(() => comEscolhido([...new Set(clientes.map(c => c.responsavel ?? ''))].filter(Boolean).sort(), f.responsavel), [clientes, f.responsavel])
@@ -293,7 +396,7 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
     return atual.col === col ? { col, dir: atual.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: typeof clientes[0]?.[col] === 'number' ? 'desc' : 'asc' }
   })
   const colunasVisao = colunasDaVisao(visao, f.momento)
-  const x: Ctx = { base, mesParam, nomeCookie, mesRef, fora, estadoNoNome: colunasVisao.some(([id]) => id === 'momento') }
+  const x: Ctx = { base, mesParam, nomeCookie, mesRef, fora }
   // Cabeçalho de uma coluna, ordenável quando ela tem campo (função, não componente: evita remontar a cada render)
   const cabecalho = ([id, prio]: ColunaDaVisao) => {
     const col = COLUNAS[id]
@@ -329,6 +432,49 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
   const etiquetas = etiquetasDosFiltros(f)
   const nColunas = colunasVisao.length + (comAcoes ? 2 : 0)
   const grupo = (MOMENTOS as readonly string[]).includes(f.momento) ? (f.momento as Momento) : null
+  const tituloLista = grupo ? `${MOMENTO_GRUPO[grupo]} · ${fmtNum(filtrados.length)} ${filtrados.length === 1 ? 'cliente' : 'clientes'}`
+    : filtrados.length === clientes.length ? `Todos os clientes · ${fmtNum(clientes.length)}` : `${fmtNum(filtrados.length)} de ${fmtNum(clientes.length)} clientes`
+  const limparFiltros = () => setF(a => ({ ...SEM_FILTRO_CLIENTES, momento: a.momento, risco: a.risco }))
+  // ── só no celular ──
+  // a linha da lista: o estado entra onde ele muda de uma linha para outra (a mesma regra do Resumo)
+  const numero = NUMERO_DO_GRUPO[grupo ?? '']
+  const cel: Celular = { estado: colunasDaVisao('resumo', f.momento).some(([id]) => id === 'momento'), numero, ano: mesRef.slice(0, 4) }
+  // a largura guardada à direita para o número (a linha do WhatsApp guarda a sua): o bastante para "182.340"; com número
+  // de milhão à mostra, um pouco mais. O resto da linha fica para o nome e a linha de apoio.
+  const larguraDoNumero = numero && visiveis.some(c => numero.valor(c) >= 1_000_000) ? '5.75rem' : '4.25rem'
+  // "Ordenar por", dentro de Filtros: mostra sempre a ordem que está valendo (a do grupo ou a escolhida)
+  const ordemTexto = `${String(ordem.col)}:${ordem.dir}`
+  const ordens = ORDENS_DO_CELULAR.map(o => ({ valor: `${String(COLUNAS[o.id].campo)}:${o.dir}`, texto: `${COLUNAS[o.id].titulo(x)} (${o.como})` }))
+  if (!ordens.some(o => o.valor === ordemTexto)) {
+    // ordem escolhida num cabeçalho, no computador, que não está na lista curta do celular
+    const conhecida = ORDENS_DO_CELULAR.find(o => COLUNAS[o.id].campo === ordem.col)
+    const col = conhecida ? COLUNAS[conhecida.id] : Object.values(COLUNAS).find(c => c.campo === ordem.col)
+    ordens.unshift({ valor: ordemTexto, texto: `${col ? col.titulo(x) : String(ordem.col)} (${ordem.dir === 'asc' ? 'crescente' : 'decrescente'})` })
+  }
+  const escolherOrdem = (v: string) => {
+    const o = lerOrdem(v), padrao = ordemDoGrupo(f.momento)
+    setOrdemEscolhida(o && (o.col !== padrao.col || o.dir !== padrao.dir) ? o : null)
+  }
+  // os grupos são uma fileira que rola de lado: o escolhido vem para a vista (ao voltar da ficha com
+  // "Recusaram" guardado, por exemplo). Mexe só na rolagem lateral da fileira, nunca na da página.
+  useEffect(() => {
+    const fileira = fileiraGrupos.current
+    const ativo = fileira?.querySelector('[aria-pressed="true"]')
+    if (!fileira || !ativo) return
+    const a = ativo.getBoundingClientRect(), b = fileira.getBoundingClientRect()
+    if (a.left < b.left + 16) fileira.scrollLeft += a.left - b.left - 16
+    else if (a.right > b.right - 16) fileira.scrollLeft += a.right - b.right + 16
+  }, [grupo])
+  // dentro de "Em risco": só quem parou ou só quem está em queda (ao lado da busca no computador; em cima
+  // da lista no celular)
+  const recortesDeRisco = (cls?: string) => (
+    <>
+      <button type="button" className={cn('chip', cls)} data-active={f.risco === 'parou'} aria-pressed={f.risco === 'parou'} onClick={() => sel('risco', f.risco === 'parou' ? '' : 'parou')}
+        title="Giraram nos últimos 3 meses e estão sem giro há dias">Pararam<Conta n={pararam} /></button>
+      <button type="button" className={cn('chip', cls)} data-active={f.risco === 'em queda'} aria-pressed={f.risco === 'em queda'} onClick={() => sel('risco', f.risco === 'em queda' ? '' : 'em queda')}
+        title="No ritmo atual fecham o mês bem abaixo da média dos 3 meses anteriores">Em queda<Conta n={emQueda} /></button>
+    </>
+  )
   // "Recusaram" só vira cartão quando existe alguém (ou quando é o grupo escolhido)
   const grupos = MOMENTOS.filter(m => m !== 'recusou' || (porMomento.get(m) ?? 0) > 0 || grupo === m)
   const notaDoGrupo = (m: Momento) => (m === 'risco' && emQueda + pararam > 0 ? `${fmtNum(emQueda)} em queda · ${fmtNum(pararam)} ${pararam === 1 ? 'parou' : 'pararam'}` : MOMENTO_RESUMO[m])
@@ -340,101 +486,152 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
   }
 
   return (
-    <>
-      <div className={cn('kpi-row panel grid grid-cols-2 overflow-hidden', grupos.length > 5 ? 'md:grid-cols-4 xl:grid-cols-7' : 'md:grid-cols-3 xl:grid-cols-6')} role="group" aria-label="Clientes por situação">
+    // No celular a ordem é outra (DESIGN.md §8.2): a frase, a busca com "Filtros", os grupos e a lista. A
+    // marcação é a mesma do computador: ali esta moldura vira uma coluna e a busca sobe por ordem de CSS.
+    <div className="max-md:flex max-md:flex-col">
+      {/* a conclusão em uma frase; com busca ou filtro ligado ela sai: as contagens passam a ser do recorte e
+          a frase soaria como a conclusão da base inteira (as etiquetas dos filtros já dizem o recorte) */}
+      {!temFiltro && (
+        <div className="mb-4 md:hidden max-md:order-first">
+          <Resumo frase={fraseDaBase(porMomento.get('operando') ?? 0, porMomento.get('risco') ?? 0, emQueda, pararam, mesCurto(mesRef))} apoio={movimento} />
+        </div>
+      )}
+
+      {/* kpi-etiquetas: no celular os cartões viram etiquetas numa fileira que rola de lado */}
+      <div ref={fileiraGrupos} className={cn('kpi-row kpi-etiquetas panel grid grid-cols-2 overflow-hidden max-md:mb-4 md:mb-8', grupos.length > 5 ? 'md:grid-cols-4 xl:grid-cols-7' : 'md:grid-cols-3 xl:grid-cols-6')} role="group" aria-label="Clientes por situação">
         <CartaoGrupo rotulo="Todos" n={total} nota={`${fmtNum(giraram)} giraram em ${mesCurto(mesRef)}`} ativo={!grupo} onClick={() => escolherGrupo('')} />
         {grupos.map(m => (
           <CartaoGrupo key={m} rotulo={MOMENTO_GRUPO[m]} n={porMomento.get(m) ?? 0} nota={notaDoGrupo(m)} ativo={grupo === m} alerta={m === 'risco' && (porMomento.get(m) ?? 0) > 0} onClick={() => escolherGrupo(m)} />
         ))}
       </div>
 
+      {/* no celular o cabeçalho do bloco some (o título da lista vai numa linha só, logo acima dela; o CSV, para
+          dentro de Filtros) e o bloco se desfaz, para a busca poder subir para cima dos grupos */}
       <Panel
-        title={grupo ? `${MOMENTO_GRUPO[grupo]} · ${fmtNum(filtrados.length)} ${filtrados.length === 1 ? 'cliente' : 'clientes'}`
-          : filtrados.length === clientes.length ? `Todos os clientes · ${fmtNum(clientes.length)}` : `${fmtNum(filtrados.length)} de ${fmtNum(clientes.length)} clientes`}
+        className="max-md:contents max-md:[&>header]:hidden" bodyClassName="max-md:contents"
+        title={tituloLista}
         subtitle={grupo
           ? `${MOMENTO_EXPLICA[grupo]}${grupo === 'nunca' && comAcoes ? ' Marque as linhas para atribuir a um atendente.' : ''}`
           : 'Clique no nome para abrir a ficha. Os cartões acima separam a base pelo estado de cada cliente.'}
         action={<Button variant="secondary" size="sm" onClick={exportar} title="Baixa a lista filtrada com todas as colunas"><Download className="h-4 w-4" aria-hidden />CSV</Button>}
       >
-        <div className="mb-3 space-y-2">
+        {/* flex com gap (e não space-y): a fileira de etiquetas existe escondida no computador quando só há
+            "Giram em outra corretora" (que lá fica ao lado da busca), e escondida ela não pode somar espaço */}
+        <div className="mb-3 flex flex-col gap-2 max-md:order-first">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="relative w-full sm:w-auto">
+            <label className="relative w-full sm:w-auto max-md:min-w-0 max-md:flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-subtle" aria-hidden />
-              <input className="field-sm w-full pl-8 sm:w-80" placeholder="Procurar: nome, telefone, CPF ou conta" value={f.busca} onChange={e => sel('busca', e.target.value)}
+              {/* No celular a busca divide a linha com "Filtros" e o texto de ajuda do computador ficaria cortado:
+                  ali ele fica invisível e o curto, logo abaixo, faz o papel dele enquanto o campo está vazio
+                  (16 px, a letra dos campos no celular) */}
+              <input className="field-sm w-full pl-8 sm:w-80 max-md:w-full! max-md:placeholder:text-transparent" placeholder="Procurar: nome, telefone, CPF ou conta" value={f.busca} onChange={e => sel('busca', e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); abrirUnico() } }} aria-label="Procurar um cliente na lista" />
+              {!f.busca && <span className="pointer-events-none absolute left-8 top-1/2 -translate-y-1/2 text-base text-fg-subtle md:hidden" aria-hidden>Procurar cliente</span>}
             </label>
-            {/* dentro de "Em risco": só quem parou ou só quem está em queda */}
-            {grupo === 'risco' && (
-              <>
-                <button type="button" className="chip" data-active={f.risco === 'parou'} aria-pressed={f.risco === 'parou'} onClick={() => sel('risco', f.risco === 'parou' ? '' : 'parou')}
-                  title="Giraram nos últimos 3 meses e estão sem giro há dias">Pararam<Conta n={pararam} /></button>
-                <button type="button" className="chip" data-active={f.risco === 'em queda'} aria-pressed={f.risco === 'em queda'} onClick={() => sel('risco', f.risco === 'em queda' ? '' : 'em queda')}
-                  title="No ritmo atual fecham o mês bem abaixo da média dos 3 meses anteriores">Em queda<Conta n={emQueda} /></button>
-              </>
-            )}
+            {grupo === 'risco' && recortesDeRisco('max-md:hidden')}
             {(giramFora > 0 || f.fora) && (
-              <button type="button" className="chip" data-active={f.fora === 'sim'} aria-pressed={f.fora === 'sim'} onClick={() => sel('fora', f.fora === 'sim' ? '' : 'sim')}
+              <button type="button" className="chip max-md:hidden" data-active={f.fora === 'sim'} aria-pressed={f.fora === 'sim'} onClick={() => sel('fora', f.fora === 'sim' ? '' : 'sim')}
                 title="Giram em outra corretora do escritório no mês: quem não gira aqui já opera lá">Giram em outra corretora<Conta n={giramFora} /></button>
             )}
-            <button type="button" className="chip" data-active={filtrosAbertos} aria-expanded={filtrosAbertos} onClick={() => setFiltrosAbertos(a => !a)}
+            <button type="button" className="chip max-md:hidden" data-active={filtrosAbertos} aria-expanded={filtrosAbertos} onClick={() => setFiltrosAbertos(a => !a)}
               title="Status, responsável, campanha de ativação, contato, assessor, alertas, grupo de corretagem e nível">
               <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />Filtros{etiquetas.length > 0 && <Conta n={etiquetas.length} />}
             </button>
-            {temFiltro && <button type="button" className="link text-label" onClick={() => setF(a => ({ ...SEM_FILTRO_CLIENTES, momento: a.momento, risco: a.risco }))}>limpar filtros</button>}
-            <div className="flex max-w-full items-center gap-2 sm:ml-auto">
+            {temFiltro && <button type="button" className="link text-label max-md:hidden" onClick={limparFiltros}>limpar filtros</button>}
+            {/* as visões de colunas são do computador: no celular a linha tem um desenho só */}
+            <div className="flex max-w-full items-center gap-2 sm:ml-auto max-md:hidden">
               <span className="label">Colunas</span>
               <div className="seg" role="group" aria-label="Colunas da tabela">
                 {VISOES_CLIENTES.map(v => <button key={v} type="button" data-active={visao === v} onClick={() => escolherVisao(v)}>{VISAO_ROTULO[v]}</button>)}
               </div>
             </div>
+
+            {/* Os filtros de cadastro são os mesmos campos nos dois tamanhos. No computador abrem na faixa de
+                baixo com o botão "Filtros" acima; no celular sobem numa folha, um por linha, junto com o que lá
+                não tem outro lugar: a ordem e a planilha. "Giram em outra corretora" fica fora da folha, à vista
+                com a contagem, na fileira de etiquetas logo abaixo. */}
+            <FolhaCelular ativos={etiquetas.length} concluir={`Ver ${fmtNum(filtrados.length)} ${filtrados.length === 1 ? 'cliente' : 'clientes'}`}
+              botaoClassName="max-md:min-h-11!" className={filtrosAbertos ? 'md:flex md:w-full md:flex-wrap md:items-center md:gap-2' : 'md:hidden'}>
+              <div className="md:contents max-md:flex max-md:flex-col max-md:gap-2.5">
+                {/* o Status vai para o fim da folha: os grupos de cima já dizem o mesmo com outras palavras */}
+                <Filtro nome="Status" escolhido={!!f.status} className="max-md:order-last">
+                  <select className="field-sm min-w-0" value={f.status} onChange={e => sel('status', e.target.value)} aria-label="Status">
+                    <option value="">Status: todos</option>{STATUS_CLIENTE.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </Filtro>
+                <Filtro nome="Responsável" escolhido={!!f.responsavel}>
+                  <select className="field-sm min-w-0" value={f.responsavel} onChange={e => sel('responsavel', e.target.value)} aria-label="Responsável">
+                    <option value="">Responsável: todos</option>{responsaveis.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </Filtro>
+                <Filtro nome="Ativação" escolhido={!!f.ativacao}>
+                  <select className="field-sm min-w-0" value={f.ativacao} onChange={e => sel('ativacao', e.target.value)} aria-label="Ativação" title="Atendente da campanha de ativação (não é o responsável)">
+                    <option value="">Ativação: todos</option>
+                    {ativacoes.map(a => <option key={a} value={a}>{a}</option>)}
+                    <option value="sem">sem atendente</option>
+                  </select>
+                </Filtro>
+                <Filtro nome="Contato" escolhido={!!f.contato}>
+                  <select className="field-sm min-w-0" value={f.contato} onChange={e => sel('contato', e.target.value)} aria-label="Contato" title="Contatos registrados na ficha do cliente (campanha de ativação)">
+                    <option value="">Contato: todos</option>
+                    <option value="sim">já chamados</option>
+                    <option value="nao">ainda não chamados</option>
+                  </select>
+                </Filtro>
+                <Filtro nome="Assessor" escolhido={!!f.assessor}>
+                  <select className="field-sm min-w-0 md:max-w-[220px]" value={f.assessor} onChange={e => sel('assessor', e.target.value)} aria-label="Assessor">
+                    <option value="">Assessor: todos</option>{assessores.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </Filtro>
+                <Filtro nome="Alertas" escolhido={!!f.alerta}>
+                  <select className="field-sm min-w-0" value={f.alerta} onChange={e => sel('alerta', e.target.value)} aria-label="Alertas" title="Algo a completar no cadastro">
+                    <option value="">Alertas: todos</option>
+                    <option value="qualquer">com algum alerta</option>
+                    {alertas.map(a => <option key={a} value={a}>{a === 'contas' ? 'mais de uma conta' : a}</option>)}
+                  </select>
+                </Filtro>
+                <Filtro nome="Grupo de corretagem" escolhido={!!f.grupo}>
+                  <select className="field-sm min-w-0" value={f.grupo} onChange={e => sel('grupo', e.target.value)} aria-label="Grupo de corretagem">
+                    <option value="">Grupo de corretagem: todos</option>
+                    {GRUPOS_CORRETAGEM.map(g => <option key={g} value={g}>{g}</option>)}
+                    <option value="vazio">não informado</option>
+                  </select>
+                </Filtro>
+                <Filtro nome="Nível" escolhido={!!f.nivel}>
+                  <select className="field-sm min-w-0" value={f.nivel} onChange={e => sel('nivel', e.target.value)} aria-label="Nível" title="Nível pela média de lotes/mês dos 3 meses anteriores">
+                    <option value="">Nível: todos</option>
+                    {NIVEIS.map(n => <option key={n} value={n}>{n} ({fmtNum(porNivel.get(n) ?? 0)})</option>)}
+                    <option value="vazio">sem giro nos 3 meses</option>
+                  </select>
+                </Filtro>
+              </div>
+              <label className="md:hidden">
+                <span className="label">Ordenar por</span>
+                <select className="field-sm min-w-0" value={ordemTexto} onChange={e => escolherOrdem(e.target.value)}>
+                  {ordens.map(o => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
+                </select>
+              </label>
+              <Button variant="secondary" className="md:hidden" onClick={exportar}><Download className="h-4 w-4" aria-hidden />Baixar planilha (CSV)</Button>
+              {temFiltro && <button type="button" className="link text-label md:hidden" onClick={limparFiltros}>limpar filtros</button>}
+            </FolhaCelular>
           </div>
 
-          {filtrosAbertos && (
-            <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center">
-              <select className="field-sm min-w-0" value={f.status} onChange={e => sel('status', e.target.value)} aria-label="Status">
-                <option value="">Status: todos</option>{STATUS_CLIENTE.map(s => <option key={s}>{s}</option>)}
-              </select>
-              <select className="field-sm min-w-0" value={f.responsavel} onChange={e => sel('responsavel', e.target.value)} aria-label="Responsável">
-                <option value="">Responsável: todos</option>{responsaveis.map(s => <option key={s}>{s}</option>)}
-              </select>
-              <select className="field-sm min-w-0" value={f.ativacao} onChange={e => sel('ativacao', e.target.value)} aria-label="Ativação" title="Atendente da campanha de ativação (não é o responsável)">
-                <option value="">Ativação: todos</option>
-                {ativacoes.map(a => <option key={a} value={a}>{a}</option>)}
-                <option value="sem">sem atendente</option>
-              </select>
-              <select className="field-sm min-w-0" value={f.contato} onChange={e => sel('contato', e.target.value)} aria-label="Contato" title="Contatos registrados na ficha do cliente (campanha de ativação)">
-                <option value="">Contato: todos</option>
-                <option value="sim">já chamados</option>
-                <option value="nao">ainda não chamados</option>
-              </select>
-              <select className="field-sm min-w-0 md:max-w-[220px]" value={f.assessor} onChange={e => sel('assessor', e.target.value)} aria-label="Assessor">
-                <option value="">Assessor: todos</option>{assessores.map(s => <option key={s}>{s}</option>)}
-              </select>
-              <select className="field-sm min-w-0" value={f.alerta} onChange={e => sel('alerta', e.target.value)} aria-label="Alertas" title="Algo a completar no cadastro">
-                <option value="">Alertas: todos</option>
-                <option value="qualquer">com algum alerta</option>
-                {alertas.map(a => <option key={a} value={a}>{a === 'contas' ? 'mais de uma conta' : a}</option>)}
-              </select>
-              <select className="field-sm min-w-0" value={f.grupo} onChange={e => sel('grupo', e.target.value)} aria-label="Grupo de corretagem">
-                <option value="">Grupo de corretagem: todos</option>
-                {GRUPOS_CORRETAGEM.map(g => <option key={g} value={g}>{g}</option>)}
-                <option value="vazio">não informado</option>
-              </select>
-              <select className="field-sm min-w-0" value={f.nivel} onChange={e => sel('nivel', e.target.value)} aria-label="Nível" title="Nível pela média de lotes/mês dos 3 meses anteriores">
-                <option value="">Nível: todos</option>
-                {NIVEIS.map(n => <option key={n} value={n}>{n} ({fmtNum(porNivel.get(n) ?? 0)})</option>)}
-                <option value="vazio">sem giro nos 3 meses</option>
-              </select>
-            </div>
-          )}
-          {/* filtro recolhido e ligado aparece como etiqueta: um toque tira */}
-          {!filtrosAbertos && etiquetas.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
+          {/* filtro recolhido e ligado aparece como etiqueta: um toque tira. No celular a folha de filtros
+              fica fechada quase sempre, então as etiquetas ficam sempre à vista, e com elas "Giram em outra
+              corretora" com a contagem (no computador ela fica ao lado da busca): um toque liga, outro tira */}
+          {(etiquetas.length > 0 || giramFora > 0 || f.fora) && (
+            <div className={cn('flex flex-wrap items-center gap-1.5', (filtrosAbertos || etiquetas.length === 0) && 'md:hidden')}>
+              {(giramFora > 0 || f.fora) && (
+                <button type="button" className="chip md:hidden" data-active={f.fora === 'sim'} aria-pressed={f.fora === 'sim'} onClick={() => sel('fora', f.fora === 'sim' ? '' : 'sim')}>
+                  Giram em outra corretora<Conta n={giramFora} />{f.fora && <X className="h-3 w-3" aria-hidden />}
+                </button>
+              )}
               {etiquetas.map(e => (
                 <button key={e.chave} type="button" className="chip" data-active="true" onClick={() => sel(e.chave, '')} title="Tirar este filtro">
                   {e.texto}<X className="h-3 w-3" aria-hidden />
                 </button>
               ))}
+              {temFiltro && <button type="button" className="link text-label md:hidden" onClick={limparFiltros}>limpar filtros</button>}
             </div>
           )}
         </div>
@@ -450,8 +647,25 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
           </div>
         )}
 
+        {/* só no celular: o título da lista numa linha, com o nome do número da direita (lá a lista não tem
+            cabeçalho de coluna); com um grupo escolhido, o que ele é em poucas palavras e o resto no "i" */}
+        <div className="md:hidden">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="min-w-0 text-dense font-semibold text-fg">{tituloLista}</h2>
+            {numero && visiveis.length > 0 && <span className="shrink-0 pr-[1.1rem] text-label text-fg-muted">{COLUNAS[numero.id].titulo(x)}</span>}
+          </div>
+          {grupo && (
+            <p className="mt-0.5 flex items-center gap-1.5 text-label text-fg-muted">
+              {MOMENTO_RESUMO[grupo].charAt(0).toUpperCase() + MOMENTO_RESUMO[grupo].slice(1)}
+              <Dica texto={MOMENTO_EXPLICA[grupo]} />
+            </p>
+          )}
+          {grupo === 'risco' && <div className="trilho mt-2.5">{recortesDeRisco()}</div>}
+        </div>
+
         <div className="tbl-wrap max-h-[70vh]">
-          <table className="tbl tbl-dense">
+          {/* tbl-lista lista-abre: no celular cada linha é um item que abre a ficha (as células dizem o papel) */}
+          <table className="tbl tbl-dense tbl-lista lista-abre" style={{ '--lista-direita': larguraDoNumero } as CSSProperties}>
             <thead>
               <tr>
                 {comAcoes && (
@@ -461,27 +675,30 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
                   </th>
                 )}
                 {colunasVisao.map(cabecalho)}
-                {/* editar e excluir ficam fora do celular: lá a tabela é só para achar o cliente e abrir a ficha */}
+                {/* editar e excluir ficam fora do celular: lá a lista é só para achar o cliente e abrir a ficha */}
                 {comAcoes && <th className="col-p2 w-20"><span className="sr-only">Ações</span></th>}
               </tr>
             </thead>
             <tbody>
               {visiveis.length === 0 && (
                 <tr>
-                  <td colSpan={nColunas} className="py-10 text-center text-dense text-fg-subtle">
-                    {grupo ? `Nenhum cliente em “${MOMENTO_GRUPO[grupo]}” com esses filtros.` : 'Nenhum cliente com esses filtros.'}
+                  <td colSpan={nColunas} className="py-10 text-center text-dense text-fg-subtle max-md:py-8! max-md:text-center!">
+                    {/* grupo vazio sem filtro nenhum: no celular a mensagem não manda procurar um filtro que não existe */}
+                    {grupo ? <>Nenhum cliente em “{MOMENTO_GRUPO[grupo]}”<span className={cn(!temFiltro && 'max-md:hidden')}> com esses filtros</span>.</> : 'Nenhum cliente com esses filtros.'}
                     <ForaDaLista corretora={corretora} base={base} termo={f.busca} mesParam={mesParam} />
                   </td>
                 </tr>
               )}
               {visiveis.map(c => (
-                <tr key={c.cliente_id} data-linha={c.cliente_id} className={cn(selecionados.has(c.cliente_id) && 'bg-accent-soft')}>
+                <tr key={c.cliente_id} data-linha={c.cliente_id} className={cn(selecionados.has(c.cliente_id) && 'bg-accent-soft')}
+                  style={whatsDaLinha(c) ? { '--lista-direita': DIREITA_DO_WHATSAPP } as CSSProperties : undefined}>
                   {comAcoes && (
                     <td className="col-p2">
                       <input type="checkbox" checked={selecionados.has(c.cliente_id)} onChange={e => marcar([c.cliente_id], e.target.checked)} aria-label={`Marcar ${c.nome}`} />
                     </td>
                   )}
                   {colunasVisao.map(([id, prio]) => <Fragment key={id}>{COLUNAS[id].td(c, prio && `col-${prio}`, x)}</Fragment>)}
+                  {celulasDoCelular(c, cel)}
                   {comAcoes && (
                     <td className="col-p2">
                       <div className="flex items-center justify-end gap-1">
@@ -498,13 +715,14 @@ export function TabelaClientes({ clientes: compacto, base, mesRef, mesParam, fil
           </table>
         </div>
         {filtrados.length > visiveis.length && (
-          <div className="py-2 text-center">
-            <button type="button" className="link text-label" onClick={() => setLimite(n => n + 200)}>
+          <div className="py-2 text-center max-md:pt-3">
+            {/* no celular é um botão largo: a lista corre com a página e termina aqui */}
+            <button type="button" className="link text-label max-md:flex max-md:min-h-11 max-md:w-full max-md:items-center max-md:justify-center max-md:rounded-md max-md:border max-md:border-line-strong max-md:text-dense! max-md:no-underline!" onClick={() => setLimite(n => n + 200)}>
               mostrar mais ({n0(filtrados.length - visiveis.length)} restantes)
             </button>
           </div>
         )}
       </Panel>
-    </>
+    </div>
   )
 }

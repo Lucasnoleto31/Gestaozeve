@@ -58,7 +58,18 @@
   --color-sb-active: var(--surface-3);
   --color-sb-accent: var(--accent);
 
-  /* Escala tipográfica: papéis do HIG no desktop, em Poppins (DESIGN.md §2.2) */
+  /* Raio (controle 10; folha +6, painel +2, chip −2) e sombra */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-float: var(--elev-float);
+}
+
+/* Escala tipográfica: papéis do HIG no desktop, em Poppins (DESIGN.md §2.2). Fica fora do bloco "inline"
+   de propósito: assim as classes text-* apontam para a variável, e o celular sobe a escala trocando só
+   a variável (§8.4), sem regra por classe (max-md:text-label continua funcionando). */
+@theme {
   --text-micro: 11px;
   --text-micro--line-height: 1.3;
   --text-label: 12px;
@@ -75,13 +86,6 @@
   --text-kpi--line-height: 1.25;
   --text-display: 32px;
   --text-display--line-height: 1.19;
-
-  /* Raio (controle 10; folha +6, painel +2, chip −2) e sombra */
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --shadow-float: var(--elev-float);
 }
 
 /* ─── Paleta clara (ficha padrão do Midiakit: medida no Business Plan XP) ───
@@ -804,32 +808,6 @@ html {
     --text-kpi: 26px;
   }
 
-  /* as classes de tamanho trazem o valor embutido (@theme inline): sobem aqui, uma a uma */
-  .text-micro {
-    font-size: 12px;
-  }
-
-  .text-label {
-    font-size: 13px;
-  }
-
-  .text-dense,
-  .text-body {
-    font-size: 15px;
-  }
-
-  .text-section {
-    font-size: 18px;
-  }
-
-  .text-title {
-    font-size: 24px;
-  }
-
-  .text-kpi {
-    font-size: 26px;
-  }
-
   /* Tabela que continua tabela no celular (matriz mês a mês) fica na letra compacta, para caber */
   .tbl:not(.tbl-lista) {
     font-size: 13px;
@@ -852,6 +830,14 @@ html {
   }
 
   .kpi-row > .kpi:nth-child(-n + 2) {
+    margin-bottom: 6px;
+  }
+
+  /* o cartão em destaque (o número principal da tela) sobe para o topo, na largura toda, quando a tela
+     o desenha depois do segundo: o JSX do computador não muda de ordem */
+  .kpi-row > .kpi.bg-fg:nth-child(n + 3) {
+    order: -1;
+    grid-column: 1 / -1;
     margin-bottom: 6px;
   }
 
@@ -1045,17 +1031,14 @@ html {
 
   .tbl-lista td.cel-sub[data-rotulo]::before {
     content: attr(data-rotulo) " ";
-    color: var(--fg-subtle);
   }
 
   .tbl-lista td.cel-sub:not(.vazio) ~ td.cel-sub:not(.vazio)::before {
     content: " · ";
-    color: var(--fg-subtle);
   }
 
   .tbl-lista td.cel-sub:not(.vazio) ~ td.cel-sub[data-rotulo]:not(.vazio)::before {
     content: " · " attr(data-rotulo) " ";
-    color: var(--fg-subtle);
   }
 
   .tbl-lista > :is(tbody, tfoot) > tr > td.cel-valor {
@@ -1079,7 +1062,7 @@ html {
     display: block;
     font-size: 12px;
     font-weight: 400;
-    color: var(--fg-subtle);
+    color: var(--fg-muted);
   }
 
   .tbl-lista > :is(tbody, tfoot) > tr > td.cel-acoes {

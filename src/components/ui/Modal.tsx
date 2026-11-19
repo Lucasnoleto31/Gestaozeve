@@ -27,11 +27,13 @@ export function Modal({ open, onClose, title, subtitle, actions, size = 'md', fo
     if (!open) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    // a página de trás não rola enquanto a janela está aberta (no celular a folha cobre quase tudo)
+    // no celular a página de trás não rola enquanto a folha está aberta (ela cobre quase tudo). No
+    // computador fica como sempre foi: travar ali faz a barra de rolagem sumir e a página pular.
     const raiz = document.documentElement
     const antes = raiz.style.overflow
-    raiz.style.overflow = 'hidden'
-    return () => { window.removeEventListener('keydown', onKey); raiz.style.overflow = antes }
+    const celular = window.matchMedia('(max-width: 767.98px)').matches
+    if (celular) raiz.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', onKey); if (celular) raiz.style.overflow = antes }
   }, [open, onClose])
 
   if (!open) return null

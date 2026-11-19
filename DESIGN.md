@@ -212,13 +212,15 @@ campo já diz o mês.
 ### 8.4 Letra
 
 No celular a escala sobe um degrau: `micro` 12, `label` 13, `dense` e `body` 15, `section` 18, `title` 24,
-`kpi` 26. Nenhum dado abaixo de 12 px. Tabela que continua tabela (matriz mês a mês) fica em 13 px, para
+`kpi` 26. As classes `text-*` apontam para a variável (a escala fica num `@theme` próprio, fora do bloco
+`inline`), então o celular troca só a variável e `max-md:text-label` continua valendo. Nenhum dado abaixo de 12 px. Tabela que continua tabela (matriz mês a mês) fica em 13 px, para
 caber. Campos de formulário em 16 px (o iPhone dá zoom abaixo disso).
 
 ### 8.5 Cartões de número (`KpiRow`)
 
 Os **dois primeiros** ficam como cartão, lado a lado; **do terceiro em diante viram linha** (nome e apoio
-à esquerda, número à direita). A ordem dos cartões decide quem fica na frente: os dois números que
+à esquerda, número à direita). O cartão em destaque sobe sozinho para o topo, na largura toda, quando a
+tela o desenha depois do segundo. A ordem dos cartões decide quem fica na frente: os dois números que
 respondem à tela vêm primeiro. No máximo quatro números à vista; o resto vai para um `Recolhido`.
 `<KpiRow principalLargo>` deixa só o primeiro como cartão, na largura toda, e os outros em linha: use quando
 o apoio dos cartões é longo e, lado a lado, quebraria em três ou quatro linhas.

@@ -47,7 +47,7 @@ export function TopBar({ corretoraPadrao, corretoras }: { corretoraPadrao: Corre
 
   return (
     <header className="safe-top sticky top-0 z-30 flex min-h-[52px] items-center gap-2.5 border-b border-line bg-bg/90 px-4 backdrop-blur lg:hidden">
-      <Link href="/dashboard" className="flex h-8 shrink-0 items-center" aria-label="Início">
+      <Link href="/dashboard" className={cn('flex h-8 shrink-0 items-center', comTroca && sel.filtro && 'max-[389px]:hidden')} aria-label="Início">
         <Marca className="h-6 w-8" />
       </Link>
       <p className="min-w-0 flex-1 truncate text-section font-semibold tracking-tight text-fg" aria-label="Tela aberta">{tituloDaRota(pathname)}</p>

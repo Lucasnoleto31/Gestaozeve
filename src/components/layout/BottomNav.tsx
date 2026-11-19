@@ -44,7 +44,7 @@ export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadr
   return (
     <>
     {/* o conteúdo some aos poucos antes de passar por trás da barra, em vez de aparecer cortado no vidro */}
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 h-32 bg-gradient-to-t from-bg via-bg/85 to-transparent lg:hidden" aria-hidden />
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 h-36 bg-[linear-gradient(to_top,var(--bg)_66%,transparent)] lg:hidden" aria-hidden />
     <nav
       className="bottom-nav fixed inset-x-4 z-30 rounded-[26px] border border-line-strong/60 bg-surface/85 p-1.5 shadow-float backdrop-blur-xl backdrop-saturate-150 lg:hidden"
       aria-label="Atalhos"

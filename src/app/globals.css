@@ -855,7 +855,13 @@ html {
     margin-bottom: 6px;
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) {
+  /* principalLargo: só o primeiro fica como cartão, na largura toda */
+  .kpi-row.kpi-largo > .kpi:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg),
+  .kpi-row.kpi-largo > .kpi:nth-child(2):not(.bg-fg) {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -873,13 +879,19 @@ html {
     border-bottom: 0;
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-rotulo {
+  .kpi-row.kpi-largo > .kpi:nth-child(2) {
+    margin-bottom: 0;
+  }
+
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-rotulo,
+  .kpi-row.kpi-largo > .kpi:nth-child(2):not(.bg-fg) > .kpi-rotulo {
     grid-area: rotulo;
     font-size: var(--text-dense);
     color: var(--fg);
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-valor {
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-valor,
+  .kpi-row.kpi-largo > .kpi:nth-child(2):not(.bg-fg) > .kpi-valor {
     grid-area: valor;
     margin: 0;
     overflow: visible;
@@ -887,7 +899,8 @@ html {
     text-align: right;
   }
 
-  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-apoio {
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-apoio,
+  .kpi-row.kpi-largo > .kpi:nth-child(2):not(.bg-fg) > .kpi-apoio {
     grid-area: apoio;
     min-height: 0;
     margin-top: 2px;

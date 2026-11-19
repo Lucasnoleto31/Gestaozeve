@@ -220,6 +220,8 @@ caber. Campos de formulário em 16 px (o iPhone dá zoom abaixo disso).
 Os **dois primeiros** ficam como cartão, lado a lado; **do terceiro em diante viram linha** (nome e apoio
 à esquerda, número à direita). A ordem dos cartões decide quem fica na frente: os dois números que
 respondem à tela vêm primeiro. No máximo quatro números à vista; o resto vai para um `Recolhido`.
+`<KpiRow principalLargo>` deixa só o primeiro como cartão, na largura toda, e os outros em linha: use quando
+o apoio dos cartões é longo e, lado a lado, quebraria em três ou quatro linhas.
 `<KpiRow etiquetas>` é para cartões que filtram a lista (os estados de Clientes): no celular viram uma
 fileira de etiquetas que rola de lado, todas à vista. Cartão feito à mão (um `<button className="kpi">`)
 usa as classes `kpi-rotulo`, `kpi-valor` e `kpi-apoio` nos três filhos.

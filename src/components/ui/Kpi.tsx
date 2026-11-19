@@ -111,8 +111,10 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, d
 // Faixa única com divisórias (não N caixas). No celular (DESIGN.md §8): os dois primeiros ficam como
 // cartão, lado a lado, e do terceiro em diante viram linha (nome e apoio à esquerda, número à direita),
 // para a faixa não ocupar a tela inteira. `etiquetas` = cartões que filtram a lista (Clientes): no celular
-// viram uma fileira de etiquetas que rola de lado.
-export function KpiRow({ children, cols = 4, className, etiquetas }: { children: ReactNode; cols?: 2 | 3 | 4 | 5 | 6 | 7; className?: string; etiquetas?: boolean }) {
+// viram uma fileira de etiquetas que rola de lado. `principalLargo` = no celular só o primeiro fica como
+// cartão, na largura toda, e os outros viram linha: para quando o apoio dos cartões é longo e, lado a lado,
+// quebraria em três ou quatro linhas.
+export function KpiRow({ children, cols = 4, className, etiquetas, principalLargo }: { children: ReactNode; cols?: 2 | 3 | 4 | 5 | 6 | 7; className?: string; etiquetas?: boolean; principalLargo?: boolean }) {
   const grid = {
     2: 'grid-cols-2',
     3: 'grid-cols-2 md:grid-cols-3',
@@ -121,5 +123,5 @@ export function KpiRow({ children, cols = 4, className, etiquetas }: { children:
     6: 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6',
     7: 'grid-cols-2 md:grid-cols-4 2xl:grid-cols-7',
   }[cols]
-  return <div className={cn('kpi-row panel grid overflow-hidden', etiquetas && 'kpi-etiquetas', grid, className)}>{children}</div>
+  return <div className={cn('kpi-row panel grid overflow-hidden', etiquetas && 'kpi-etiquetas', principalLargo && 'kpi-largo', grid, className)}>{children}</div>
 }

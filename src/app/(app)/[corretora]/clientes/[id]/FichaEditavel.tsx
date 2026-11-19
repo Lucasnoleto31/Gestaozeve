@@ -118,7 +118,7 @@ export function FichaEditavel({ corretora, clienteId, admin, cadastro, manuais, 
 
   return (
     <>
-      <Button variant="secondary" size="sm" onClick={() => setAberto(true)}><Pencil className="h-3.5 w-3.5" />Editar</Button>
+      <Button variant="secondary" size="sm" className="max-md:h-11" onClick={() => setAberto(true)}><Pencil className="h-3.5 w-3.5" />Editar</Button>
       <Modal open={aberto} onClose={fechar} title="Editar cliente" subtitle="Status, responsável e campos manuais do controle (e, para o administrador, o cadastro básico)." size="lg"
         footer={<><Button variant="secondary" onClick={fechar}>Cancelar</Button><Button onClick={salvar} loading={salvando}>Salvar</Button></>}>
         <div className="space-y-4">

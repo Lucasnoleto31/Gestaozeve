@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { Panel } from '@/components/ui/Panel'
@@ -13,6 +13,7 @@ import { dataPt, n2, TRACO } from '@/components/gestao/Celulas'
 import type { Corretora } from '@/lib/corretoras'
 import type { TarifaCliente } from '@/lib/gestao/tipos'
 import { numeroBR } from '@/lib/gestao/planilhas'
+import { cn } from '@/lib/utils'
 
 export function TarifasCliente({ corretora, clienteId, tarifas, admin, tarifaAtual, nota }: {
   corretora: Corretora
@@ -62,17 +63,25 @@ export function TarifasCliente({ corretora, clienteId, tarifas, admin, tarifaAtu
           </div>
         </div>
       )}
+      {/* No celular (DESIGN.md §8) cada tarifa é um item (tbl-lista): "desde 01/09/2026" em cima e, embaixo,
+          o valor por lote e a observação; a lixeira à direita. A tarifa zerada sai escrita "tarifa zero", o
+          mesmo nome da pendência (o traço se lia como falta de dado). A linha de "sem tarifa cadastrada" não
+          aparece lá: o subtítulo já diz a situação. */}
       <div className="tbl-wrap">
-      <table className="tbl tbl-dense w-full">
+      <table className="tbl tbl-dense tbl-lista w-full" style={{ '--lista-direita': '3.25rem' } as CSSProperties}>
         <thead><tr><th>Vigência</th><th className="num">R$/lote</th><th>Observação</th>{admin && <th><span className="sr-only">Ações</span></th>}</tr></thead>
         <tbody>
-          {tarifas.length === 0 && <tr><td colSpan={admin ? 4 : 3} className="py-4 text-center text-label text-fg-subtle">Sem tarifa cadastrada · usa a do assessor</td></tr>}
+          {tarifas.length === 0 && <tr className="max-md:hidden!"><td colSpan={admin ? 4 : 3} className="py-4 text-center text-label text-fg-subtle">Sem tarifa cadastrada · usa a do assessor</td></tr>}
           {tarifas.map(t => (
             <tr key={t.id}>
-              <td className="num">{dataPt(t.vigencia)}</td>
-              <td className="num font-medium">{n2(t.corretagem)}</td>
-              <td className="muted">{t.observacao ?? TRACO}</td>
-              {admin && <td className="text-right"><IconButton tone="danger" aria-label="Excluir tarifa" onClick={() => excluir(t.id)}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>}
+              <td className="cel-titulo num"><span className="md:hidden">desde </span>{dataPt(t.vigencia)}</td>
+              <td className="cel-sub num font-medium">
+                {t.corretagem
+                  ? <>{n2(t.corretagem)}<span className="md:hidden"> R$/lote</span></>
+                  : <><span className="max-md:hidden">{TRACO}</span><span className="md:hidden">tarifa zero</span></>}
+              </td>
+              <td className={cn('cel-sub muted', !t.observacao && 'vazio')}>{t.observacao ?? TRACO}</td>
+              {admin && <td className="cel-acoes text-right"><IconButton tone="danger" aria-label="Excluir tarifa" onClick={() => excluir(t.id)}><Trash2 className="h-4 w-4" aria-hidden /></IconButton></td>}
             </tr>
           ))}
         </tbody>

@@ -6,6 +6,7 @@ import type { LeadDoCliente } from '@/lib/gestao/consultasFicha'
 import { Panel } from '@/components/ui/Panel'
 import { StatusLeadBadge, TRACO, dataPt } from '@/components/gestao/Celulas'
 import { cn } from '@/lib/utils'
+import { MostrarMais } from '@/components/ui/MostrarMais'
 
 export type Ficha = Awaited<ReturnType<typeof clienteFicha>>
 export type Pendencia = { estado: 'ok' | 'info' | 'warn'; texto: string }
@@ -38,27 +39,48 @@ export function pendenciasDaFicha({ resumo, cadastro, contas }: Ficha): Pendenci
 
 const ICONE = { ok: Check, info: Info, warn: AlertTriangle } as const
 const COR = { ok: 'text-gain', info: 'text-fg-subtle', warn: 'text-warn' } as const
+// Celular: o que falta resolver vem primeiro, depois as observações e, por último, o que está em ordem
+const ORDEM = { warn: 'max-md:order-1', info: 'max-md:order-2', ok: 'max-md:order-3' } as const
 
-export function ListaPendencias({ itens }: { itens: Pendencia[] }) {
-  return (
-    <ul className="space-y-2 text-dense">
+// A mesma classe que ALEM_NO_CELULAR (components/ui/MostrarMais): na linha que, no celular, só aparece
+// depois do toque no MostrarMais que a envolve. Fica copiada aqui porque esta ficha é componente de
+// servidor, e o que um módulo 'use client' exporta chega ao servidor como referência, não como texto:
+// importada de lá, a classe sumiria e a lista viria inteira. Um dentro do outro também serve: a linha só
+// aparece quando todos os que a envolvem foram abertos.
+export const ALEM_NO_CELULAR = 'max-md:group-data-[tudo=false]/mais:hidden!'
+// Na BarraCelula de uma lista do celular (tbl-lista): fica só o número, à direita; a barrinha é da tabela
+export const SEM_BARRA_NO_CELULAR = 'max-md:[&_.bar-track]:hidden'
+
+// recolherOk e hrefTarifas valem só no celular (aba Cadastro): os itens em ordem ficam atrás de
+// "N itens em ordem" e a pendência de tarifa ganha o caminho para a aba onde ela se resolve.
+export function ListaPendencias({ itens, recolherOk = false, hrefTarifas }: { itens: Pendencia[]; recolherOk?: boolean; hrefTarifas?: string }) {
+  const emOrdem = itens.filter(a => a.estado === 'ok').length
+  const lista = (
+    <ul className="space-y-2 text-dense max-md:flex max-md:flex-col max-md:gap-2.5 max-md:space-y-0">
       {itens.map((a, i) => {
         const Icone = ICONE[a.estado]
         return (
-          <li key={i} className="flex items-start gap-2">
-            <Icone className={cn('mt-0.5 h-4 w-4 shrink-0', COR[a.estado])} aria-hidden />
-            <span className={a.estado === 'warn' ? 'text-fg' : 'text-fg-muted'}>{a.texto}</span>
+          <li key={i} className={cn('flex items-start gap-2', ORDEM[a.estado], recolherOk && a.estado === 'ok' && ALEM_NO_CELULAR)}>
+            {/* no celular o "i" é o botão que abre explicação (Dica): a observação leva um ponto, para não parecer botão */}
+            <Icone className={cn('mt-0.5 h-4 w-4 shrink-0', COR[a.estado], a.estado === 'info' && 'max-md:hidden')} aria-hidden />
+            {a.estado === 'info' && <span className="mx-1 mt-2 h-2 w-2 shrink-0 rounded-full bg-line-strong md:hidden" aria-hidden />}
+            <span className={a.estado === 'warn' ? 'text-fg' : 'text-fg-muted'}>
+              {a.texto}
+              {hrefTarifas && a.estado === 'warn' && /tarifa/i.test(a.texto) && <> <Link href={hrefTarifas} className="link whitespace-nowrap md:hidden">ver tarifas</Link></>}
+            </span>
           </li>
         )
       })}
     </ul>
   )
+  if (!recolherOk || emOrdem === 0) return lista
+  return <MostrarMais rotulo={`${emOrdem} ${emOrdem === 1 ? 'item em ordem' : 'itens em ordem'}`}>{lista}</MostrarMais>
 }
 
 // De onde o cliente veio: o lead ligado a ele, o que respondeu no formulário e o que ficou anotado
 export function LeadDeOrigem({ leads }: { leads: LeadDoCliente[] }) {
   return (
-    <Panel variant="card" title="Lead de origem" subtitle="O que o cliente respondeu no formulário, quem atendeu e o que ficou anotado."
+    <Panel variant="card" title="Lead de origem" subtitle={<span className="max-md:hidden">O que o cliente respondeu no formulário, quem atendeu e o que ficou anotado.</span>}
       action={<Link href="/leads" className="link text-dense">Leads</Link>}>
       <ul className="space-y-4">
         {leads.map(l => (

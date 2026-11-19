@@ -25,7 +25,7 @@ export function Badge({ children, variant = 'neutral', className }: {
   className?: string
 }) {
   return (
-    <span className={cn('inline-flex h-[22px] items-center gap-1 whitespace-nowrap rounded-sm px-2 text-micro font-medium', VARIANT[variant], className)}>
+    <span className={cn('selo inline-flex h-[22px] items-center gap-1 whitespace-nowrap rounded-sm px-2 text-micro font-medium', VARIANT[variant], className)}>
       {children}
     </span>
   )

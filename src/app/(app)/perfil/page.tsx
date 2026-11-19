@@ -31,6 +31,7 @@ export default async function PerfilPage() {
           </span>
         }
         description={`${profile.email} · membro desde ${membroDesde}`}
+        descricaoNoCelular
         actions={<Badge variant="accent">{ROLE_LABELS[profile.role] ?? profile.role}</Badge>}
       />
       <PageBody className="max-w-2xl">

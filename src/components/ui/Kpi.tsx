@@ -55,7 +55,7 @@ export function DeltaPill({ delta, destaque }: { delta: KpiDelta; destaque?: boo
   const anteriorTxt = delta.anterior != null ? (delta.fmt ?? String)(delta.anterior) : '—'
   return (
     <span
-      className={cn('inline-flex items-baseline gap-1 text-micro font-semibold tabular-nums', cor)}
+      className={cn('kpi-delta inline-flex items-baseline gap-1 text-micro font-semibold tabular-nums', cor)}
       title={`Anterior: ${anteriorTxt} · ${rotulo}`}
     >
       {fmtDelta(pct)}
@@ -89,7 +89,7 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, d
   const tom = TOM[tone]
   return (
     <div className={cn('kpi min-w-0 px-5 py-4', destaque && 'bg-fg', className)}>
-      <p className={cn('label flex items-center gap-1.5', destaque && 'text-bg/70')}>{label}{dica && <Dica texto={dica} destaque={destaque} />}</p>
+      <p className={cn('kpi-rotulo label flex items-center gap-1.5', destaque && 'text-bg/70')}>{label}{dica && <Dica texto={dica} destaque={destaque} />}</p>
       {loading ? (
         <div className="mt-2 space-y-2">
           <div className="skeleton h-7 w-28" />
@@ -97,8 +97,8 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, d
         </div>
       ) : (
         <>
-          <p className={cn('mt-1.5 truncate text-kpi font-bold tracking-tight tabular-nums', destaque ? 'text-bg' : tom === 'gain' ? 'text-gain' : tom === 'loss' ? 'text-loss' : tom === 'warn' ? 'text-warn' : 'text-fg', valueClassName)}>{value}</p>
-          <div className="mt-1.5 flex min-h-[16px] flex-wrap items-center gap-x-2 gap-y-0.5">
+          <p className={cn('kpi-valor mt-1.5 truncate text-kpi font-bold tracking-tight tabular-nums', destaque ? 'text-bg' : tom === 'gain' ? 'text-gain' : tom === 'loss' ? 'text-loss' : tom === 'warn' ? 'text-warn' : 'text-fg', valueClassName)}>{value}</p>
+          <div className="kpi-apoio mt-1.5 flex min-h-[16px] flex-wrap items-center gap-x-2 gap-y-0.5">
             {delta && <DeltaPill delta={delta} destaque={destaque} />}
             {sub && <span className={cn('text-micro', destaque ? 'text-bg/70' : 'text-fg-muted')}>{sub}</span>}
           </div>
@@ -108,8 +108,11 @@ export function KpiCard({ label, value, sub, tone = 'neutral', delta, loading, d
   )
 }
 
-// Faixa única com divisórias (não N caixas). No mobile vira grade de 2 colunas.
-export function KpiRow({ children, cols = 4, className }: { children: ReactNode; cols?: 2 | 3 | 4 | 5 | 6 | 7; className?: string }) {
+// Faixa única com divisórias (não N caixas). No celular (DESIGN.md §8): os dois primeiros ficam como
+// cartão, lado a lado, e do terceiro em diante viram linha (nome e apoio à esquerda, número à direita),
+// para a faixa não ocupar a tela inteira. `etiquetas` = cartões que filtram a lista (Clientes): no celular
+// viram uma fileira de etiquetas que rola de lado.
+export function KpiRow({ children, cols = 4, className, etiquetas }: { children: ReactNode; cols?: 2 | 3 | 4 | 5 | 6 | 7; className?: string; etiquetas?: boolean }) {
   const grid = {
     2: 'grid-cols-2',
     3: 'grid-cols-2 md:grid-cols-3',
@@ -118,5 +121,5 @@ export function KpiRow({ children, cols = 4, className }: { children: ReactNode;
     6: 'grid-cols-2 md:grid-cols-3 xl:grid-cols-6',
     7: 'grid-cols-2 md:grid-cols-4 2xl:grid-cols-7',
   }[cols]
-  return <div className={cn('kpi-row panel grid overflow-hidden', grid, className)}>{children}</div>
+  return <div className={cn('kpi-row panel grid overflow-hidden', etiquetas && 'kpi-etiquetas', grid, className)}>{children}</div>
 }

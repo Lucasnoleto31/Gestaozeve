@@ -749,10 +749,10 @@ html {
    células que atravessam a linha (vazio, total, formulário) ficam como estão; em tabela que começa pela
    caixa de seleção, a coluna do nome leva a classe col-nome (e a caixa, col-p2: some no celular). */
 @media (max-width: 767.98px) {
-  .tbl-wrap .tbl th:first-child:not(:has(input)),
-  .tbl-wrap .tbl td:first-child:not([colspan]):not(:has(input[type="checkbox"])),
-  .tbl-wrap .tbl th.col-nome,
-  .tbl-wrap .tbl td.col-nome {
+  .tbl-wrap .tbl:not(.tbl-lista) th:first-child:not(:has(input)),
+  .tbl-wrap .tbl:not(.tbl-lista) td:first-child:not([colspan]):not(:has(input[type="checkbox"])),
+  .tbl-wrap .tbl:not(.tbl-lista) th.col-nome,
+  .tbl-wrap .tbl:not(.tbl-lista) td.col-nome {
     position: sticky;
     left: 0;
     z-index: 2;
@@ -764,26 +764,490 @@ html {
     border-right: 1px solid var(--line);
   }
 
-  .tbl-wrap .tbl th:first-child:not(:has(input)),
-  .tbl-wrap .tbl th.col-nome {
+  .tbl-wrap .tbl:not(.tbl-lista) th:first-child:not(:has(input)),
+  .tbl-wrap .tbl:not(.tbl-lista) th.col-nome {
     z-index: 3;
   }
 
   /* dentro de card a tabela está sobre a superfície do card */
-  .panel .tbl-wrap .tbl td:first-child:not([colspan]):not(:has(input[type="checkbox"])),
-  .panel .tbl-wrap .tbl td.col-nome {
+  .panel .tbl-wrap .tbl:not(.tbl-lista) td:first-child:not([colspan]):not(:has(input[type="checkbox"])),
+  .panel .tbl-wrap .tbl:not(.tbl-lista) td.col-nome {
     background: var(--surface);
   }
 
-  .tbl-wrap .tbl tbody tr:hover td:first-child:not([colspan]),
-  .tbl-wrap .tbl tr.total td:first-child:not([colspan]),
-  .tbl-wrap .tbl tbody tr:hover td.col-nome {
+  .tbl-wrap .tbl:not(.tbl-lista) tbody tr:hover td:first-child:not([colspan]),
+  .tbl-wrap .tbl:not(.tbl-lista) tr.total td:first-child:not([colspan]),
+  .tbl-wrap .tbl:not(.tbl-lista) tbody tr:hover td.col-nome {
     background: var(--surface);
   }
 
   /* abas e seletores que rolam de lado: sem barra de rolagem aparente */
   nav[aria-label] {
     scrollbar-width: none;
+  }
+}
+
+/* ─── Celular: a tela abre pela resposta, a letra sobe e a tabela vira lista (DESIGN.md §8) ─────────
+   Tudo aqui vale só abaixo de 768 px: o computador não muda. Pedido do Lucas em 18/11/2026: "está muito
+   confuso e não consigo entender nada". O que as fotos de 390 px mostraram: tabela sem colunas, lista
+   presa numa caixa com rolagem própria, letra de 11 e 13 px e o conteúdo começando na terceira tela. */
+@media (max-width: 767.98px) {
+  /* A letra sobe um degrau: lista e texto em 15 px, nenhum dado abaixo de 12 px */
+  :root {
+    --text-micro: 12px;
+    --text-label: 13px;
+    --text-dense: 15px;
+    --text-dense--line-height: 1.4;
+    --text-body: 15px;
+    --text-section: 18px;
+    --text-title: 24px;
+    --text-kpi: 26px;
+  }
+
+  /* as classes de tamanho trazem o valor embutido (@theme inline): sobem aqui, uma a uma */
+  .text-micro {
+    font-size: 12px;
+  }
+
+  .text-label {
+    font-size: 13px;
+  }
+
+  .text-dense,
+  .text-body {
+    font-size: 15px;
+  }
+
+  .text-section {
+    font-size: 18px;
+  }
+
+  .text-title {
+    font-size: 24px;
+  }
+
+  .text-kpi {
+    font-size: 26px;
+  }
+
+  /* Tabela que continua tabela no celular (matriz mês a mês) fica na letra compacta, para caber */
+  .tbl:not(.tbl-lista) {
+    font-size: 13px;
+  }
+
+  /* Nenhuma caixa com rolagem própria: a lista corre com a página */
+  .tbl-wrap {
+    max-height: none;
+  }
+
+  /* ── Cartões de número: os dois primeiros lado a lado; do terceiro em diante, uma linha cada
+     (nome e apoio à esquerda, número à direita). A faixa de 6 cartões deixa de ocupar a tela. */
+  .kpi-row {
+    column-gap: 10px;
+    row-gap: 0;
+  }
+
+  .kpi-row > .kpi {
+    padding: 14px 16px;
+  }
+
+  .kpi-row > .kpi:nth-child(-n + 2) {
+    margin-bottom: 6px;
+  }
+
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "rotulo valor" "apoio valor";
+    align-items: center;
+    column-gap: 12px;
+    padding: 12px 2px;
+    border-radius: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    text-align: left;
+  }
+
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg):last-child {
+    border-bottom: 0;
+  }
+
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-rotulo {
+    grid-area: rotulo;
+    font-size: var(--text-dense);
+    color: var(--fg);
+  }
+
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-valor {
+    grid-area: valor;
+    margin: 0;
+    overflow: visible;
+    font-size: 19px;
+    text-align: right;
+  }
+
+  .kpi-row > .kpi:nth-child(n + 3):not(.bg-fg) > .kpi-apoio {
+    grid-area: apoio;
+    min-height: 0;
+    margin-top: 2px;
+  }
+
+  /* a comparação do cartão quebra como texto corrido, não em duas colunas */
+  .kpi-delta {
+    display: inline;
+  }
+
+  /* Cartões que filtram a lista (KpiRow etiquetas): uma fileira de etiquetas que rola de lado */
+  .kpi-row.kpi-etiquetas {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin-inline: -16px;
+    padding-inline: 16px;
+    scrollbar-width: none;
+  }
+
+  .kpi-row.kpi-etiquetas > .kpi,
+  .kpi-row.kpi-etiquetas > .kpi:nth-child(n + 3):not(.bg-fg) {
+    display: inline-flex;
+    flex: none;
+    align-items: baseline;
+    gap: 7px;
+    min-height: 40px;
+    margin: 0;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--surface);
+  }
+
+  .kpi-row.kpi-etiquetas > .kpi.bg-fg {
+    background: var(--fg);
+  }
+
+  .kpi-row.kpi-etiquetas > .kpi > * {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .kpi-row.kpi-etiquetas > .kpi > :nth-child(2) {
+    font-weight: 700;
+  }
+
+  .kpi-row.kpi-etiquetas > .kpi > :nth-child(n + 3) {
+    display: none;
+  }
+
+  /* ── Tabela que vira lista (classe tbl-lista na <table>) ──────────────────────────────────────
+     Cada linha é um item. As células dizem o papel pela classe:
+       cel-titulo  o nome, em cima (um por linha)
+       cel-sub     linha de apoio: as células ficam em fila, separadas por "·"; data-rotulo="resp." põe o
+                   nome do dado na frente; a classe vazio esconde a célula sem dado
+       cel-valor   o número, à direita (um por linha); data-rotulo põe a unidade embaixo
+       cel-acoes   os botões da linha, à direita
+       cel-bloco   linha inteira embaixo (barra, detalhe que abre)
+     Célula sem papel some no celular: só fica sem papel o que a linha de apoio ou a tela de destino já
+     mostra. lista-abre na tabela = a linha leva a outra tela: o link do título pega a linha inteira. */
+  .tbl-wrap:has(> .tbl-lista) {
+    overflow: visible;
+    border-radius: 0;
+  }
+
+  .tbl.tbl-lista,
+  .tbl-lista > tbody,
+  .tbl-lista > tfoot {
+    display: block;
+  }
+
+  .tbl-lista > thead {
+    display: none;
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr {
+    display: block;
+    position: relative;
+    min-height: 56px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .tbl-lista > tbody > tr:last-child {
+    border-bottom: 0;
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td {
+    display: none;
+    position: static;
+    max-width: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+    text-align: left;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td[colspan] {
+    display: block;
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr:has(> td.cel-valor) {
+    padding-right: var(--lista-direita, 6rem);
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr:has(> td.cel-acoes) {
+    padding-right: var(--lista-direita, 9.5rem);
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td.cel-titulo {
+    display: block;
+    font-weight: 500;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td.cel-sub {
+    display: inline;
+    font-size: var(--text-label);
+    line-height: 1.5;
+    color: var(--fg-muted);
+  }
+
+  /* selo de estado na linha de apoio: vira a palavra na cor do estado, sem moldura */
+  .tbl-lista td.cel-sub .selo:not(.bg-fg) {
+    display: inline;
+    height: auto;
+    padding: 0;
+    border: 0;
+    font-size: inherit;
+    white-space: normal;
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td.vazio {
+    display: none;
+  }
+
+  .tbl-lista td.cel-sub[data-rotulo]::before {
+    content: attr(data-rotulo) " ";
+    color: var(--fg-subtle);
+  }
+
+  .tbl-lista td.cel-sub:not(.vazio) ~ td.cel-sub:not(.vazio)::before {
+    content: " · ";
+    color: var(--fg-subtle);
+  }
+
+  .tbl-lista td.cel-sub:not(.vazio) ~ td.cel-sub[data-rotulo]:not(.vazio)::before {
+    content: " · " attr(data-rotulo) " ";
+    color: var(--fg-subtle);
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td.cel-valor {
+    display: block;
+    position: absolute;
+    top: 50%;
+    right: 0;
+    max-width: 48%;
+    transform: translateY(-50%);
+    font-size: 17px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25;
+    text-align: right;
+    white-space: nowrap;
+    color: var(--fg);
+  }
+
+  .tbl-lista td.cel-valor[data-rotulo]::after {
+    content: attr(data-rotulo);
+    display: block;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--fg-subtle);
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td.cel-acoes {
+    display: flex;
+    position: absolute;
+    top: 50%;
+    right: 0;
+    z-index: 1;
+    align-items: center;
+    gap: 4px;
+    transform: translateY(-50%);
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr > td.cel-bloco {
+    display: block;
+    margin-top: 6px;
+  }
+
+  /* o que é clicável dentro da linha fica acima do link que pega a linha inteira */
+  .tbl-lista td :is(a, button, input, select, summary) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .tbl-lista.lista-abre > tbody > tr {
+    padding-right: 1.5rem;
+  }
+
+  .tbl-lista.lista-abre > tbody > tr:has(> td.cel-valor) {
+    padding-right: calc(var(--lista-direita, 6rem) + 1.1rem);
+  }
+
+  .tbl-lista.lista-abre > tbody > tr:not(:has(> td[colspan]))::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 3px;
+    width: 7px;
+    height: 7px;
+    border-top: 1.5px solid var(--fg-subtle);
+    border-right: 1.5px solid var(--fg-subtle);
+    transform: translateY(-50%) rotate(45deg);
+  }
+
+  .tbl-lista.lista-abre > tbody > tr > td.cel-valor {
+    right: 1.1rem;
+  }
+
+  .tbl-lista.lista-abre > tbody > tr > td.cel-titulo a {
+    position: static;
+    text-decoration: none;
+  }
+
+  .tbl-lista.lista-abre > tbody > tr > td.cel-titulo a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr.total {
+    margin-top: 4px;
+    padding-inline: 12px;
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr.total:has(> td.cel-valor) {
+    padding-right: calc(var(--lista-direita, 6rem) + 12px);
+  }
+
+  .tbl-lista > :is(tbody, tfoot) > tr.total > td.cel-valor {
+    right: 12px;
+  }
+
+  /* ── Etiquetas, seletores e abas no tamanho do dedo ── */
+  .chip {
+    min-height: 38px;
+    padding: 0 13px;
+    font-size: 14px;
+  }
+
+  .seg > button {
+    min-height: 36px;
+    padding: 4px 12px;
+  }
+
+  /* fileira que rola de lado até a borda da tela (etapas, grupos, atalhos) */
+  .trilho {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    margin-inline: -16px;
+    padding-inline: 16px;
+    scrollbar-width: none;
+  }
+
+  .trilho > * {
+    flex: none;
+  }
+
+  .trilho::-webkit-scrollbar,
+  .kpi-etiquetas::-webkit-scrollbar,
+  .abas-pagina::-webkit-scrollbar {
+    display: none;
+  }
+
+  .abas-pagina {
+    scrollbar-width: none;
+  }
+
+  .abas-pagina > a {
+    padding-inline: 10px;
+    font-size: 14px;
+  }
+
+  /* ── Folha de filtros (FolhaCelular): os filtros da tela ficam atrás do botão "Filtros" e sobem
+     numa folha, um por linha. São os mesmos campos do computador, não uma cópia. ── */
+  .folha-celular {
+    display: none;
+  }
+
+  .folha-celular[data-aberta="true"] {
+    display: flex;
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 50;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    max-height: 86dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    background: var(--popover);
+    box-shadow: var(--elev-float);
+    animation: fadeIn 0.15s ease both;
+  }
+
+  .folha-celular[data-aberta="true"] label {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .folha-celular[data-aberta="true"] :is(select, input:not([type="checkbox"], [type="radio"])) {
+    width: 100%;
+    max-width: none;
+  }
+
+  .folha-fundo {
+    position: fixed;
+    inset: 0;
+    z-index: 49;
+    background: rgba(0, 0, 0, 0.55);
+    animation: fadeIn 0.15s ease both;
+  }
+}
+
+/* Toque: o "i" da explicação não estica a linha do rótulo e ganha área de dedo; link tem cara de link
+   (no toque não existe o sublinhado do mouse) */
+@media (hover: none) and (pointer: coarse) {
+  button.dica-btn {
+    position: relative;
+    min-height: 0;
+  }
+
+  button.dica-btn::after {
+    content: "";
+    position: absolute;
+    inset: -14px;
+  }
+
+  .link {
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 3px;
   }
 }
 

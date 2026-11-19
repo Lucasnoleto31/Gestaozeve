@@ -30,8 +30,9 @@ Princípios, em ordem:
    ficha respiram (20 px dentro do card, também no celular).
 6. **Nada que lembre tela gerada:** ícone de brilho, ícone em quadradinho tintado, pílula tintada com
    seta, número contando, rótulo em caixa alta com palavra colorida, sombra colorida, hover que cresce.
-7. **Celular como aplicativo (390 px):** título grande no topo, barra de abas flutuante de vidro no pé,
-   sem rolagem horizontal da página; toque mínimo de 44 px.
+7. **Celular como aplicativo (390 px):** o nome da tela e a troca de corretora na barra de cima, barra de
+   abas flutuante de vidro no pé, sem rolagem horizontal da página; toque mínimo de 44 px. O celular tem
+   desenho próprio: ver §8.
 8. **Movimento mínimo:** fade de 180 ms no que aparece, escala 0,97 no toque, nada em carga de página.
    `prefers-reduced-motion` respeitado no CSS e nos gráficos.
 
@@ -79,7 +80,7 @@ Fonte: **Poppins** (uma família só, via `next/font`; pesos 300, 400, 500, 600 
 título e número, Regular 400 no corpo, Light 300 no subtítulo ao lado do título, itálico só em rótulo.
 Números: `font-variant-numeric: tabular-nums` em qualquer valor (`.num`, KPI, eixos).
 
-Papéis do HIG no desktop (tamanho/entrelinha); no telefone a escala sobe (34 · 28 · 22 · 20 · 17):
+Papéis do HIG no desktop (tamanho/entrelinha); no telefone a escala sobe um degrau (§8.4):
 
 | Nome | Tamanho / altura | Peso | Uso |
 |---|---|---|---|
@@ -118,7 +119,7 @@ Fora da escala só por exceção documentada aqui.
 | **Barra em célula / Heatmap** | Barra de dados só em tabela de ranking, uma coluna. Heatmap só nas matrizes mês × linha (giro mensal, receita mensal): `gain-soft` para lotes, `accent-soft` para receita, intensidade por raiz quadrada. |
 | **Modal** | Centro, raio lg, `--shadow-float`, título `section`, rodapé com ações à direita, fecha com Esc e clique fora. |
 | **Tabs / Segmentado** | Trilho `--surface-3`, item ativo `--surface` + `--fg`; sem sombra interna. |
-| **Navegação** | Desktop: cabeçalho fixo em três colunas (marca + seletor de corretora · cápsula com Início, Painel, Clientes, Giro diário, Receita, Leads e "Mais" · data e conta). Celular: barra fina no topo, menu completo como gaveta e barra de abas flutuante de vidro no pé (Início, Painel, Clientes, Leads, Menu). |
+| **Navegação** | Desktop: cabeçalho fixo em três colunas (marca + seletor de corretora · cápsula com Início, Painel, Clientes, Giro diário, Receita, Leads e "Mais" · data e conta). Celular: barra de cima com o nome da tela e a troca de corretora, menu completo como gaveta e barra de abas flutuante de vidro no pé (Início, Painel, Clientes, Leads, Fila, Menu); ver §8.1. |
 | **Toast** | Canto inferior direito (mobile: inferior centralizado), superfície, hairline, ícone de estado, some em 4 s. Sem lib. |
 | **Skeleton / Vazio / Erro** | Skeleton segue a forma final (faixa de KPI, tabela de N linhas, gráfico). Vazio: ícone 20 px `--fg-subtle`, frase curta, ação. Erro: mensagem + "Tentar de novo". |
 
@@ -170,3 +171,113 @@ Contraste AA; foco visível (anel 2 px `--focus`, offset 2); alvos ≥ 44 px no 
 - [ ] Escuro e claro conferidos; foco visível
 - [ ] loading / vazio / erro existem
 - [ ] Antes × depois comparados; autocrítica feita
+
+## 8. Celular (abaixo de 768 px; a casca vale abaixo de 1024 px)
+
+Pedido do Lucas em 18/11/2026: "Melhore a versão de todo o sistema para celular, está muito confuso e não
+consigo entender nada". As fotos de 390 px mostraram por quê: a tabela perdia as colunas para caber, a
+lista ficava presa numa caixa com rolagem própria, quase todo o texto estava em 11 e 13 px e o conteúdo
+começava na segunda ou terceira tela. **O celular não é o computador encolhido.** Tudo o que está aqui
+vale só no celular: o computador não muda. As regras de CSS ficam num bloco só, no fim de `globals.css`.
+
+### 8.1 A casca
+
+- **Barra de cima** (`TopBar`): a marca, o **nome da tela** (o mesmo do menu) e, nas telas que dependem da
+  corretora, a troca **Genial | BTG** a um toque. Em Comissões a troca é o filtro da tela (com "Todas"); na
+  aba Distribuir da Fila, a corretora da lista. Na ficha de um cliente e nas operações de um dia a corretora
+  aparece só como texto (trocar tiraria a pessoa da tela). Tema e sair moram no Menu.
+- **Barra de baixo** (`BottomNav`): os mesmos seis atalhos. "Menu" fica aceso quando a tela aberta só existe
+  no Menu (Giro diário, Receita, Funil, Comissões…). Atrás da barra há um degradê: o conteúdo some aos
+  poucos em vez de aparecer cortado no vidro.
+- **Menu** (gaveta): páginas em duas colunas, itens de 44 px, cabe numa tela; tema e sair no pé.
+- **A primeira tela tem cerca de 680 px úteis** (844 menos a barra de cima e a de baixo). É nesse espaço
+  que a resposta da tela precisa caber.
+
+### 8.2 A ordem de uma tela
+
+1. Abas da página (`Abas`), se houver. 2. A linha de mexer: mês e ações do dia a dia. 3. **A frase com a
+conclusão** (`Resumo`). 4. Até dois números em cartão e os demais em linha. 5. A lista ou o gráfico.
+A lista (ou o primeiro número) tem de aparecer na primeira tela. O que não é do dia a dia vai para um
+`Recolhido` ou para a folha de filtros.
+
+### 8.3 Cabeçalho da página (`PageHeader`)
+
+No celular a seção (eyebrow) e o título em texto simples somem da vista: a barra de cima já diz o nome da
+tela (o título continua para o leitor de tela). `tituloNoCelular` mantém o título que é informação (nome
+do parceiro, "Operações de 17/11"); título que é um elemento (o voltar da ficha, o nome no perfil) fica
+sempre. A descrição também some: a tela abre pela frase. `descricaoNoCelular` mantém a descrição que traz
+dado que a tela não repete (e-mail e "membro desde" no perfil). O rótulo "Mês de referência" some: o
+campo já diz o mês.
+
+### 8.4 Letra
+
+No celular a escala sobe um degrau: `micro` 12, `label` 13, `dense` e `body` 15, `section` 18, `title` 24,
+`kpi` 26. Nenhum dado abaixo de 12 px. Tabela que continua tabela (matriz mês a mês) fica em 13 px, para
+caber. Campos de formulário em 16 px (o iPhone dá zoom abaixo disso).
+
+### 8.5 Cartões de número (`KpiRow`)
+
+Os **dois primeiros** ficam como cartão, lado a lado; **do terceiro em diante viram linha** (nome e apoio
+à esquerda, número à direita). A ordem dos cartões decide quem fica na frente: os dois números que
+respondem à tela vêm primeiro. No máximo quatro números à vista; o resto vai para um `Recolhido`.
+`<KpiRow etiquetas>` é para cartões que filtram a lista (os estados de Clientes): no celular viram uma
+fileira de etiquetas que rola de lado, todas à vista. Cartão feito à mão (um `<button className="kpi">`)
+usa as classes `kpi-rotulo`, `kpi-valor` e `kpi-apoio` nos três filhos.
+
+### 8.6 Tabela vira lista (`tbl-lista`)
+
+Lista de pessoas, clientes, leads, parceiros, operações: no celular cada linha é um item, não uma linha
+de planilha. A mesma `<table>` do computador ganha a classe `tbl-lista` e cada célula diz o papel:
+
+| Classe na célula | O que vira no celular |
+|---|---|
+| `cel-titulo` | o nome, em cima, inteiro (até duas linhas) |
+| `cel-sub` | a linha de apoio: as células ficam em fila, separadas por "·". `data-rotulo="resp."` põe o nome do dado na frente. A classe `vazio` esconde a célula sem dado |
+| `cel-valor` | o número, à direita (um por linha). `data-rotulo="lotes"` põe a unidade embaixo |
+| `cel-acoes` | os botões da linha, à direita |
+| `cel-bloco` | uma linha inteira embaixo (barra, detalhe que abre) |
+
+- **Célula sem papel some no celular.** Só pode ficar sem papel o que a linha de apoio já diz ou o que a
+  tela de destino mostra (a ficha, a edição). Nada some sem ter onde ser achado.
+- A linha de apoio diz o **estado em palavras** ("Operando", "Parou há 12 dias") e mais um ou dois fatos.
+  O selo (`Badge`) dentro dela vira a palavra na cor do estado, sem moldura.
+- `lista-abre` na tabela quando a linha leva a outra tela: aparece a seta e o link do título pega a linha
+  inteira. O que é clicável dentro da linha (WhatsApp, botões) continua funcionando.
+- A largura reservada para o número é `--lista-direita` (padrão 6rem; com botões, 9.5rem): ajuste no
+  `style` da tabela quando o número for largo ("R$ 1.234.567") ou houver menos botões.
+- Linha de total: `<tr className="total">` com `cel-titulo` e `cel-valor`.
+- **Matriz mês a mês não vira lista**: continua tabela, rola de lado dentro da moldura com a primeira
+  coluna presa, e mostra primeiro os meses mais novos.
+
+### 8.7 Nenhuma caixa com rolagem própria
+
+No celular `max-h-[…]` em `.tbl-wrap` não vale: a lista corre com a página e termina em "mostrar mais".
+Rolagem dentro de rolagem prende o dedo.
+
+### 8.8 Filtros, etiquetas e abas
+
+- Uma linha: a busca e o botão **Filtros**. Os demais campos ficam em `FolhaCelular` (os mesmos campos do
+  computador, que no celular sobem numa folha, um por linha; `ativos` mostra quantos estão ligados).
+  Filtro ligado aparece fora da folha, como etiqueta que se remove.
+- Fileira de etiquetas (etapas, grupos, atalhos): classe `trilho`, rola de lado até a borda da tela.
+- "Colunas" (visões de colunas) não aparece no celular: a linha da lista já diz o que importa.
+- `Abas` rola de lado e traz a aba aberta para a vista.
+
+### 8.9 Toque e texto
+
+- Alvo de 44 px. Link tem sublinhado (no toque não existe o destaque do mouse). O "i" (`Dica`) abre no
+  toque e fecha no toque seguinte.
+- **Nada de informação só em `title=`**: no toque ela não existe. O que importa vai para a linha de apoio
+  ou para o "i".
+- Sem instrução de mouse ("clique na linha", "passe o mouse"). Subtítulo de bloco com mais de uma linha
+  vira "i" ou `max-md:hidden`.
+- Janela (`Modal`) sobe do pé como folha e trava a página de trás.
+
+### 8.10 Antes de dar por pronta uma tela no celular
+
+- [ ] Foto em 390 px: a resposta (frase, número ou começo da lista) está na primeira tela
+- [ ] Nenhuma rolagem lateral da página e nenhuma caixa com rolagem própria
+- [ ] Cada coluna escondida tem lugar: linha de apoio, linha que abre, ficha ou edição
+- [ ] Nenhum texto de dado abaixo de 12 px; nomes inteiros, sem reticências
+- [ ] Os mesmos números do computador (é só apresentação)
+- [ ] O computador não mudou

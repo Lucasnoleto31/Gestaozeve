@@ -27,7 +27,11 @@ export function Modal({ open, onClose, title, subtitle, actions, size = 'md', fo
     if (!open) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // a página de trás não rola enquanto a janela está aberta (no celular a folha cobre quase tudo)
+    const raiz = document.documentElement
+    const antes = raiz.style.overflow
+    raiz.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', onKey); raiz.style.overflow = antes }
   }, [open, onClose])
 
   if (!open) return null
@@ -42,7 +46,7 @@ export function Modal({ open, onClose, title, subtitle, actions, size = 'md', fo
           <header className="flex items-start justify-between gap-3 border-b border-line px-5 pb-4 pt-5 sm:px-6">
             <div className="min-w-0">
               {title && <h2 className="text-section font-semibold text-fg">{title}</h2>}
-              {subtitle && <p className="mt-0.5 text-dense text-fg-muted">{subtitle}</p>}
+              {subtitle && <p className="mt-0.5 text-dense text-fg-muted max-md:line-clamp-3 max-md:text-label">{subtitle}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {actions}
@@ -50,7 +54,7 @@ export function Modal({ open, onClose, title, subtitle, actions, size = 'md', fo
             </div>
           </header>
         )}
-        <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+        <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">{children}</div>
         {footer && <footer className="flex items-center justify-end gap-2 border-t border-line px-5 py-4 sm:px-6">{footer}</footer>}
       </div>
     </div>

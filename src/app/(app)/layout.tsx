@@ -32,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <MobileOverlay />
         <div className="com-barra-inferior flex min-h-screen flex-col">
           <Header role={profile.role} nome={profile.nome} corretoraPadrao={corretoraPadrao} corretoras={permitidas} dataHoje={dataHoje} />
-          <TopBar />
+          <TopBar corretoraPadrao={corretoraPadrao} corretoras={permitidas} />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
         <BottomNav role={profile.role} corretoraPadrao={corretoraPadrao} />

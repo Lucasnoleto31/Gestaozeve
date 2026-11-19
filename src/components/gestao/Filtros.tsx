@@ -35,7 +35,8 @@ export function MesPicker({ valor, param = 'mes', label = 'Mês de referência',
   const { set, pending } = useParamNav()
   return (
     <label className={cn('flex flex-wrap items-center gap-2', className)}>
-      <span className="label whitespace-nowrap">{label}</span>
+      {/* no celular o campo já diz o mês: o rótulo fica só para o leitor de tela */}
+      <span className="label whitespace-nowrap max-md:sr-only">{label}</span>
       <input
         type="month"
         className="field-sm"

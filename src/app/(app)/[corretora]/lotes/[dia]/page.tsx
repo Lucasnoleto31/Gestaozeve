@@ -34,6 +34,7 @@ export default async function OperacoesDoDiaPage({ params }: { params: ParamsDia
       <PageHeader
         eyebrow={ctx.eyebrow}
         title={`Operações de ${dataPt(dia)}`}
+        tituloNoCelular
         description={
           <>
             {diaSemana} · cada linha do relatório desse dia com a corretagem em uso. Ajuste a corretagem de uma operação quando o cliente foi cobrado diferente do cadastro.{' '}

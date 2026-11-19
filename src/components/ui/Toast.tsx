@@ -30,7 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4 sm:items-end sm:px-6" aria-live="polite">
+      <div className="pointer-events-none fixed inset-x-0 bottom-28 z-[60] lg:bottom-4 flex flex-col items-center gap-2 px-4 sm:items-end sm:px-6" aria-live="polite">
         {itens.map(t => {
           const tom = t.tom ?? 'neutral'
           const Icon = ICON[tom]

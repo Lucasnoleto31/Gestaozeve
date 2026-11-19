@@ -2,15 +2,17 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useTransition } from 'react'
 import {
-  BarChart3, ChevronRight, Coins, Filter, Gift, Home, KeyRound, LayoutDashboard, LineChart, ListChecks, SlidersHorizontal, Upload, Users, UserSearch, Wallet, X,
+  BarChart3, ChevronRight, Coins, Filter, Gift, Home, KeyRound, LayoutDashboard, LineChart, ListChecks, Loader2, LogOut, SlidersHorizontal, Upload, Users, UserSearch, Wallet, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Marca } from '@/components/ui/Marca'
 import type { Role } from '@/types'
 import { useSidebar } from '@/lib/sidebar-context'
 import { CORRETORA_COLOR, CORRETORA_LABEL, CORRETORA_SLUG, type Corretora } from '@/lib/corretoras'
+import { ThemeToggle } from '@/lib/theme'
+import { sair } from '@/lib/auth/sair'
 import { seletorCorretora } from './seletorCorretora'
 
 type NavItem = { label: string; href: string; icon: React.ElementType; exact?: boolean }
@@ -54,9 +56,19 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
   const pathname = usePathname()
   const busca = useSearchParams().toString()
   const { isOpen, close } = useSidebar()
+  const [saindo, iniciarSaida] = useTransition()
 
   // Fecha o menu ao navegar (mobile), também quando só o filtro do endereço muda
   useEffect(() => { close() }, [pathname, busca, close])
+
+  // Com o menu aberto a página de trás não rola
+  useEffect(() => {
+    if (!isOpen) return
+    const raiz = document.documentElement
+    const antes = raiz.style.overflow
+    raiz.style.overflow = 'hidden'
+    return () => { raiz.style.overflow = antes }
+  }, [isOpen])
 
   // Seletor de corretora: numa página de corretora troca a corretora e fica na mesma página (ou vai para o
   // painel); em Comissões é o filtro da tela, com a opção "Todas"
@@ -83,7 +95,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
           href={item.href}
           aria-current={active ? 'page' : undefined}
           className={cn(
-            'group flex items-center gap-2.5 rounded-md px-3 py-2.5 text-dense font-medium lg:py-2',
+            'group flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2.5 text-dense font-medium lg:min-h-0 lg:py-2',
             active ? 'bg-accent-soft text-fg shadow-[inset_2px_0_0_var(--accent)]' : 'text-fg-muted hover:bg-surface-3 hover:text-fg',
           )}
         >
@@ -97,7 +109,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
   return (
     <aside
       className={cn(
-        'safe-top fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-surface text-fg',
+        'safe-top fixed inset-y-0 left-0 z-40 flex w-[88vw] max-w-[340px] flex-col border-r border-line bg-surface text-fg',
         'transition-transform duration-200 lg:hidden',
         isOpen ? 'translate-x-0' : '-translate-x-full',
       )}
@@ -115,7 +127,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
         </button>
       </div>
 
-      <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4 pt-2">
+      <nav className="flex-1 space-y-5 overflow-y-auto overscroll-contain px-3 pb-4 pt-2">
         {sections.filter(s => s.label === 'Visão geral').map(section => (
           <div key={section.label}>
             <Secao label={section.label} />
@@ -130,7 +142,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
             <div className="mb-2 flex rounded-md bg-surface-3 p-0.5" role="tablist" aria-label={sel.filtro ? 'Corretora: filtro desta tela' : 'Corretora'}>
               {sel.filtro && (
                 <Link role="tab" aria-selected={sel.marcada == null} href={sel.href(null)}
-                  className={cn('flex min-h-[30px] flex-1 items-center justify-center rounded-sm text-label font-medium', sel.marcada == null ? 'bg-surface text-fg font-semibold' : 'text-fg-muted hover:text-fg')}>
+                  className={cn('flex min-h-[40px] flex-1 items-center justify-center rounded-sm text-label font-medium', sel.marcada == null ? 'bg-surface text-fg font-semibold' : 'text-fg-muted hover:text-fg')}>
                   Todas
                 </Link>
               )}
@@ -143,7 +155,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
                     aria-selected={ativa}
                     href={sel.href(c)}
                     className={cn(
-                      'flex min-h-[30px] flex-1 items-center justify-center gap-1.5 rounded-sm text-label font-medium',
+                      'flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-sm text-label font-medium',
                       ativa ? 'bg-surface text-fg font-semibold' : 'text-fg-muted hover:text-fg',
                     )}
                   >
@@ -153,7 +165,8 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
                 )
               })}
             </div>
-            <ul className="space-y-0.5">
+            {/* duas colunas: as nove páginas cabem sem rolar */}
+            <ul className="grid grid-cols-2 gap-x-1 gap-y-0.5">
               {paginas.map(p => renderItem({ label: p.label, href: `/${slug}/${p.id}`, icon: p.icon }))}
             </ul>
           </div>
@@ -162,7 +175,7 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
         {sections.filter(s => s.label !== 'Visão geral').map(section => (
           <div key={section.label}>
             <Secao label={section.label} />
-            <ul className="space-y-0.5">{section.items.map(renderItem)}</ul>
+            <ul className="grid grid-cols-2 gap-x-1 gap-y-0.5">{section.items.map(renderItem)}</ul>
           </div>
         ))}
       </nav>
@@ -180,6 +193,15 @@ export function Sidebar({ role, nome, corretoraPadrao, corretoras }: { role: Rol
           </div>
           <ChevronRight className="h-4 w-4 text-fg-subtle" aria-hidden />
         </Link>
+        {/* tema e sair moram aqui no celular: a barra do topo fica para o nome da tela e a corretora */}
+        <div className="mt-2 flex items-center justify-between gap-2 px-2">
+          <ThemeToggle />
+          <button type="button" onClick={() => iniciarSaida(() => sair())} disabled={saindo}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md px-2.5 text-label font-medium text-fg-muted hover:bg-surface-3 hover:text-fg disabled:opacity-60">
+            {saindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <LogOut className="h-4 w-4" aria-hidden />}
+            Sair
+          </button>
+        </div>
       </div>
     </aside>
   )

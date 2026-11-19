@@ -15,7 +15,7 @@ import { seletorCorretora } from './seletorCorretora'
 
 type Item = { label: string; href: string; icon: React.ElementType; exact?: boolean }
 
-const ITEM = 'flex h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-[20px] text-[10px] font-medium leading-3 active:scale-[.97]'
+const ITEM = 'flex h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-[20px] text-[11px] font-medium leading-3 active:scale-[.97]'
 
 export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadrao: Corretora }) {
   const pathname = usePathname()
@@ -37,9 +37,16 @@ export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadr
       ? [{ label: 'Fila', href: '/fila', icon: ListChecks }, { label: 'Meus leads', href: '/leads', icon: Filter }]
       : [{ label: 'Início', href: '/dashboard', icon: Home, exact: true }]
 
+  // tela sem atalho próprio (Giro diário, Receita, Funil, Comissões…): quem acende é o Menu, que é onde ela mora
+  const semAtalho = !itens.some(it => isActivePath(pathname, it.href, it.exact))
+  const menuAceso = isOpen || semAtalho
+
   return (
+    <>
+    {/* o conteúdo some aos poucos antes de passar por trás da barra, em vez de aparecer cortado no vidro */}
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 h-32 bg-gradient-to-t from-bg via-bg/85 to-transparent lg:hidden" aria-hidden />
     <nav
-      className="bottom-nav fixed inset-x-4 z-30 rounded-[26px] border border-line-strong/60 bg-surface/80 p-1.5 shadow-float backdrop-blur-xl backdrop-saturate-150 lg:hidden"
+      className="bottom-nav fixed inset-x-4 z-30 rounded-[26px] border border-line-strong/60 bg-surface/85 p-1.5 shadow-float backdrop-blur-xl backdrop-saturate-150 lg:hidden"
       aria-label="Atalhos"
     >
       <ul className="grid" style={{ gridTemplateColumns: `repeat(${itens.length + 1}, minmax(0, 1fr))` }}>
@@ -56,12 +63,13 @@ export function BottomNav({ role, corretoraPadrao }: { role: Role; corretoraPadr
           )
         })}
         <li>
-          <button type="button" onClick={toggle} aria-expanded={isOpen} className={cn(ITEM, isOpen ? 'bg-accent-soft text-fg' : 'text-fg-muted')}>
-            <Menu className="h-[22px] w-[22px]" aria-hidden strokeWidth={isOpen ? 2.25 : 1.75} />
+          <button type="button" onClick={toggle} aria-expanded={isOpen} className={cn(ITEM, menuAceso ? 'bg-accent-soft text-fg' : 'text-fg-muted')}>
+            <Menu className="h-[22px] w-[22px]" aria-hidden strokeWidth={menuAceso ? 2.25 : 1.75} />
             Menu
           </button>
         </li>
       </ul>
     </nav>
+    </>
   )
 }

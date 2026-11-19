@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { AbaVisivel } from './AbaVisivel'
 
 export type OpcaoAba = { valor: string; label: string; conta?: string | number | null }
 
@@ -23,7 +24,8 @@ export function Abas({ caminho, query, valor, opcoes, padrao, param = 'aba', rot
     return qs ? `${caminho}?${qs}` : caminho
   }
   return (
-    <nav className="mt-4 flex gap-1 overflow-x-auto border-b border-line" aria-label={rotulo}>
+    <nav className="abas-pagina mt-2 flex gap-1 overflow-x-auto border-b border-line md:mt-4" aria-label={rotulo}>
+      <AbaVisivel valor={valor} />
       {opcoes.map(o => {
         const ativa = o.valor === valor
         return (

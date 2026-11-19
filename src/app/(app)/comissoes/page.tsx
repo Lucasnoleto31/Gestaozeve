@@ -133,7 +133,7 @@ export default async function ComissoesPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PageHeader eyebrow="Comissões" title={parceiro} actions={filtros}
+      <PageHeader eyebrow="Comissões" title={parceiro} tituloNoCelular actions={filtros}
         description={pessoaModelo
           ? noModelo
             ? `Remuneração por níveis desde ${mesCurto(pessoaModelo.nivelDesde)}: fixo do nível, cada conta pelo valor do nível e bônus da base ativa${corretora ? `, na ${CORRETORA_LABEL[corretora]}` : ''}, em ${mesLongo(mesRef)}.`

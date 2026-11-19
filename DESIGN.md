@@ -242,6 +242,7 @@ de planilha. A mesma `<table>` do computador ganha a classe `tbl-lista` e cada c
 | `cel-marca` | a caixa de marcar a linha, à esquerda |
 | `cel-bloco` | uma linha inteira embaixo (barra, detalhe que abre) |
 
+- `truncate` e `max-w-*` na célula são anulados no celular: o nome aparece inteiro.
 - **Célula sem papel some no celular.** Só pode ficar sem papel o que a linha de apoio já diz ou o que a
   tela de destino mostra (a ficha, a edição). Nada some sem ter onde ser achado.
 - A linha de apoio diz o **estado em palavras** ("Operando", "Parou há 12 dias") e mais um ou dois fatos.
@@ -261,7 +262,8 @@ de planilha. A mesma `<table>` do computador ganha a classe `tbl-lista` e cada c
 No celular `max-h-[…]` em `.tbl-wrap` não vale: a lista corre com a página e termina em "mostrar mais".
 Rolagem dentro de rolagem prende o dedo.
 Lista longa que não é o último bloco da tela mostra as primeiras linhas e o resto atrás de `MostrarMais`
-(`components/ui/MostrarMais.tsx`; as linhas além do limite levam `ALEM_NO_CELULAR`). Bloco que não responde
+(`components/ui/MostrarMais.tsx`; as linhas além do limite levam `ALEM_NO_CELULAR`, que mora em
+`components/ui/mostrarMaisClasses.ts`, sem `'use client'`, para o componente de servidor poder importar). Bloco que não responde
 à pergunta da tela fica atrás do próprio título com `RecolheNoCelular` (`components/ui/RecolheNoCelular.tsx`):
 fechado no celular, aberto no computador, o mesmo conteúdo nos dois.
 
@@ -272,7 +274,8 @@ fechado no celular, aberto no computador, o mesmo conteúdo nos dois.
   Filtro ligado aparece fora da folha, como etiqueta que se remove.
 - Fileira de etiquetas (etapas, grupos, atalhos): classe `trilho`, rola de lado até a borda da tela.
 - "Colunas" (visões de colunas) não aparece no celular: a linha da lista já diz o que importa.
-- `Abas` rola de lado e traz a aba aberta para a vista.
+- `Abas` rola de lado, traz a aba aberta para a vista e esfuma a borda direita enquanto há aba fora dela.
+- Etiqueta que é botão (`.chip`) tem 44 px no celular.
 
 ### 8.9 Toque e texto
 

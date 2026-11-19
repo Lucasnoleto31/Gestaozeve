@@ -1029,12 +1029,24 @@ html {
     white-space: normal;
   }
 
+  .tbl-lista td.cel-sub .selo.bg-fg {
+    display: inline;
+    height: auto;
+    padding: 0;
+    background: none;
+    font-size: inherit;
+    font-weight: 600;
+    white-space: normal;
+    color: var(--fg);
+  }
+
   .tbl-lista > :is(tbody, tfoot) > tr > td.vazio {
     display: none;
   }
 
   .tbl-lista td.cel-sub[data-rotulo]::before {
     content: attr(data-rotulo) "\00a0";
+    white-space: nowrap;
   }
 
   /* data-sufixo: a palavra depois do número ("26 tombaram") */
@@ -1043,11 +1055,11 @@ html {
   }
 
   .tbl-lista td.cel-sub:not(.vazio) ~ td.cel-sub:not(.vazio)::before {
-    content: " · ";
+    content: " ·\00a0";
   }
 
   .tbl-lista td.cel-sub:not(.vazio) ~ td.cel-sub[data-rotulo]:not(.vazio)::before {
-    content: " · " attr(data-rotulo) "\00a0";
+    content: " ·\00a0" attr(data-rotulo) "\00a0";
   }
 
   .tbl-lista > :is(tbody, tfoot) > tr > td.cel-valor {
@@ -1155,6 +1167,7 @@ html {
     content: "";
     position: absolute;
     inset: 0;
+    z-index: 1;
   }
 
   .tbl-lista > :is(tbody, tfoot) > tr.total {
@@ -1175,8 +1188,8 @@ html {
 
   /* ── Etiquetas, seletores e abas no tamanho do dedo ── */
   .chip {
-    min-height: 38px;
-    padding: 0 13px;
+    min-height: 44px;
+    padding: 0 14px;
     font-size: 14px;
   }
 
@@ -1214,6 +1227,12 @@ html {
   .abas-pagina > a {
     padding-inline: 8px;
     font-size: 14px;
+  }
+
+  /* há aba fora da vista à direita: a borda esfuma (AbaVisivel marca data-mais) */
+  .abas-pagina[data-mais="true"] {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
   }
 
   /* ── Folha de filtros (FolhaCelular): os filtros da tela ficam atrás do botão "Filtros" e sobem

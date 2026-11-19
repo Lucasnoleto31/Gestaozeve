@@ -8,10 +8,10 @@ import { cn } from '@/lib/utils'
 // é o último bloco da tela empurraria o resto várias telas para baixo. A lista é a mesma do computador
 // (vem pronta, em children): as linhas além do essencial levam a classe ALEM_NO_CELULAR, que as esconde
 // no celular enquanto este bloco está fechado. No computador nada muda: o botão não existe e as linhas
-// aparecem todas. Um dentro do outro não funciona com o mesmo nome de grupo: use um por lista.
-export const ALEM_NO_CELULAR = 'max-md:group-data-[tudo=false]/mais:hidden!'
-// para a i-ésima linha de uma lista que mostra `limite` linhas no celular
-export const alemDe = (limite: number) => (i: number) => (i >= limite ? ALEM_NO_CELULAR : undefined)
+// aparecem todas. Um dentro do outro funciona: a linha só aparece quando todos os que a envolvem foram abertos.
+// As classes (ALEM_NO_CELULAR, alemDe) ficam em mostrarMaisClasses.ts, sem 'use client': componente de
+// servidor importa de lá.
+export { ALEM_NO_CELULAR, alemDe } from './mostrarMaisClasses'
 
 export function MostrarMais({ rotulo, children, className }: {
   rotulo: ReactNode      // "mostrar os 40 dias anteriores", "mostrar mais (12 restantes)"

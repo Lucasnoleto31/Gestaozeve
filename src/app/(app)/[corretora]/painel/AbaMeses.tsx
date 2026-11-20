@@ -18,7 +18,12 @@ import { TRACO, n0, n2, p1, r0, rCurto } from '@/components/gestao/Celulas'
 import { GraficoSeries } from '@/components/gestao/Graficos'
 import { Resumo } from '@/components/gestao/Resumo'
 import { economiaDoPainel } from '@/lib/gestao/economiaPainel'
+import { custosDoPainel, haCustosFixos, parametroCustosFixos } from '@/lib/gestao/consultasCustos'
+import { getProfile } from '@/lib/auth/getProfile'
+import { fraseDaCobertura, resultadoDepoisDosCustos, type CustosDoMes, type ItemCustoMes } from '@/lib/gestao/custos'
+import { normTexto } from '@/lib/texto'
 import { fraseDosMeses } from './frases'
+import { ChaveCustos, custosNaQuery, semCustosNaUrl } from './ChaveCustos'
 
 // A coluna do nome da linha no celular: mais estreita (sobra lugar para dois meses) e com o nome inteiro,
 // quebrando em linhas. O "!" é preciso porque a regra da base para a primeira coluna (46vw, sem quebra,
@@ -35,33 +40,55 @@ type Linha = {
   destaque?: 'bold' | 'total' | 'sub'
   total?: boolean                 // soma os meses na última coluna
   so?: 'principal' | 'todas'      // sem isto, a linha aparece nas duas visões
+  perda?: boolean                 // negativo na cor de perda (o resultado depois dos custos e as partes dos sócios)
 }
 type Bloco = { titulo: string; linhas: Linha[] }
 
 export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }) {
   const { corretora, mesRef, base } = ctx
-  const [eco, funil, comissoes, painel] = await Promise.all([
+  const janela = janelaMeses(mesRef, 12)
+  // custos do escritório (só com cadeia de repasse, hoje o BTG): a chave custos_fixos é lida sozinha e começa
+  // junto com a economia; a remuneração da equipe só é lida quando há pessoa em vigor na janela. Sem custo
+  // lançado, nada a mais. O uso fica condicionado a comRepasse (custoDe, abaixo).
+  // "Sem custos" (a chave da aba, ?custos=sem): os custos não são lidos e a aba sai como era antes deles
+  const semCustos = semCustosNaUrl(ctx.q)
+  const paramCustosP = parametroCustosFixos(corretora)
+  const custosP = paramCustosP.then(p => (!semCustos && haCustosFixos(p, janela)
+    ? custosDoPainel(p, janela)
+    : new Map<string, CustosDoMes>()))
+  const [eco, funil, comissoes, painel, custos, profile, paramCustos] = await Promise.all([
     economiaDoPainel(corretora, mesRef),
     funilMensal(mesRef, 12),
     comissaoMensal(mesRef, 12, null, corretora),
     todas ? painelResumo(corretora, mesRef) : Promise.resolve(null),   // só para o "% ativos do total levado"
+    custosP,
+    getProfile(),
+    paramCustosP,
   ])
+  // o valor de cada pessoa da equipe só para o admin (em Comissões, só o admin e a própria pessoa veem)
+  const verEquipe = profile?.role === 'admin'
   const { cfg, atp, comRepasse, mensal, mensalPorMes, repasseDe, foraDe, bankingDe, liquidoCom, temFora, temBanking, parceirosComReceita, pctGeralSempre } = eco
   const temExtras = temFora || temBanking
   const temLivros = parceirosComReceita.length > 0
 
   // Só os meses com dados da corretora: do primeiro com base ou giro até o mês de referência
-  const janela = janelaMeses(mesRef, 12)
   const comDado = (m: string) => { const x = mensalPorMes.get(m); return !!x && (x.lotes > 0 || x.receita > 0 || x.clientes_ativos > 0 || x.migrados_acumulados > 0 || x.novas_migracoes > 0 || x.entradas > 0) }
   const primeiro = janela.findIndex(comDado)
   const meses = primeiro < 0 ? janela.slice(-1) : janela.slice(primeiro)
+  // a chave "Com custos | Sem custos" só aparece quando algum mês mostrado tem custo lançado
+  const temChave = comRepasse && haCustosFixos(paramCustos, meses)
+  const chaveCustos = (className: string) => (temChave ? <ChaveCustos caminho={`${base}/painel`} query={ctx.q} className={className} /> : null)
 
   const funilPorMes = new Map(funil.map(f => [f.mes_ref, f]))
-  // Comissão de parceiros (abertura e ativação de conta) nesta corretora, somando os parceiros
+  // Comissão de parceiros (abertura e ativação de conta) nesta corretora, somando os parceiros. Nos meses com
+  // custo, o valor de quem já está descontado em Equipe (com valor) sai da soma, como na conta do Resumo; sem
+  // custo, nada muda. As contagens continuam de todos.
+  const descontadoNoMes = (mes: string, parceiro: string) => comRepasse && !!custos.get(mes)?.itens.some(i => i.tipo !== 'valor' && i.valor != null && normTexto(i.nome) === normTexto(parceiro))
   const comissaoPorMes = new Map<string, { valor: number; aberturas: number; ativacoes: number }>()
   for (const c of comissoes) {
     const x = comissaoPorMes.get(c.mes_ref) ?? { valor: 0, aberturas: 0, ativacoes: 0 }
-    x.valor += c.valor_abertura + c.valor_ativacao; x.aberturas += c.aberturas; x.ativacoes += c.ativacoes + c.reativacoes
+    if (!descontadoNoMes(c.mes_ref, c.parceiro)) x.valor += c.valor_abertura + c.valor_ativacao
+    x.aberturas += c.aberturas; x.ativacoes += c.ativacoes + c.reativacoes
     comissaoPorMes.set(c.mes_ref, x)
   }
 
@@ -118,6 +145,53 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
     { label: `(–) Imposto do ${curto}`, valores: porMes(m => de(m)?.imposto ?? null), fmt: rc, destaque: 'sub', total: true, so: 'todas' },
     { label: `${nome}: comissão líquida`, valores: porMes(m => de(m)?.liquida ?? null), fmt: rc, destaque: 'bold', total: true, so: 'todas' },
   ]
+  // Custos do escritório (Parâmetros › custos_fixos): só com cadeia de repasse e algum custo em vigor nos
+  // meses mostrados. Sem isso, nenhuma linha muda.
+  const custoDe = (mes: string) => (comRepasse ? custos.get(mes) : undefined)
+  const comCusto = (mes: string) => !!custoDe(mes)?.temCusto
+  const temCustos = meses.some(comCusto)
+  const ehEquipe = (i: ItemCustoMes) => i.tipo !== 'valor'
+  const chaveItem = (i: ItemCustoMes) => `${i.tipo}|${normTexto(i.nome)}`
+  // cada item que aparece em algum mês, uma vez só, na ordem dos custos (custos mensais, depois a equipe)
+  const itensJanela: ItemCustoMes[] = []
+  for (const m of meses) for (const i of custoDe(m)?.itens ?? []) if (!itensJanela.some(x => chaveItem(x) === chaveItem(i))) itensJanela.push(i)
+  const nomesEquipe = [...new Set(itensJanela.filter(ehEquipe).map(i => i.nome))]
+  const juntar = (nomes: string[]) => (nomes.length <= 1 ? nomes.join('') : `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`)
+  // a comissão líquida do escritório do mês (a mesma da linha da tabela) menos os custos; null no mês sem custo
+  const resultadoDoMes = (mes: string) => {
+    if (!comCusto(mes)) return null
+    const x = mensalPorMes.get(mes)
+    return resultadoDepoisDosCustos(liquidoCom(mes, x ? repasseDe(x).liquido : 0), custoDe(mes))
+  }
+  // negativo com o sinal de menos (é quanto falta), como na conta do Resumo
+  const rs = (v: number | null) => (v == null ? TRACO : v < 0 ? `− ${rCurto(-v)}` : rCurto(v))
+  // Para quem não é admin, uma linha só por mês, sem linha por item: nem a das pessoas nem a dos custos
+  // mensais (o total menos os custos mensais daria a equipe por subtração). Para o admin, tudo separado.
+  const linhasCustosSeparadas: Linha[] = [
+    ...(itensJanela.some(i => !ehEquipe(i)) ? [{ label: '(–) Custos mensais', valores: porMes(m => (custoDe(m)?.itens.some(i => !ehEquipe(i)) ? custoDe(m)!.mensais : null)), fmt: rr, destaque: 'sub', total: true, so: 'principal' } as Linha] : []),
+    ...(nomesEquipe.length ? [{ label: `(–) Equipe (${juntar(nomesEquipe)})`, valores: porMes(m => (custoDe(m)?.itens.some(ehEquipe) ? custoDe(m)!.equipe : null)), fmt: rr, destaque: 'sub', total: true, so: 'principal' } as Linha] : []),
+    ...itensJanela.map((it): Linha => ({
+      label: `(–) ${it.nome}${it.tipo === 'equipe' ? ' (fixo e comissões)' : it.tipo === 'equipe-btg' ? ` (parte do ${ctx.label})` : ''}`,
+      valores: porMes(m => custoDe(m)?.itens.find(i => chaveItem(i) === chaveItem(it))?.valor ?? null),
+      fmt: rr, destaque: 'sub', total: true, so: 'todas',
+    })),
+  ]
+  const linhasCustos: Linha[] = temCustos ? [
+    ...(verEquipe
+      ? linhasCustosSeparadas
+      : [{ label: '(–) Custos do escritório', valores: porMes(m => custoDe(m)?.total ?? null), fmt: rr, destaque: 'sub', total: true } as Linha]),
+    // sem Total: a soma só dos meses com custo não fecha com a comissão líquida dos 12 meses
+    { label: 'Resultado depois dos custos', valores: porMes(resultadoDoMes), fmt: rs, destaque: 'bold', perda: true },
+  ] : []
+  // pessoa da equipe sem valor em Comissões num mês: a conta segue sem ela e a nota avisa
+  const semValor = temCustos
+    ? [...new Set(meses.flatMap(m => (custoDe(m)?.itens ?? []).filter(i => ehEquipe(i) && i.valor == null).map(i => `${i.nome} (${mesLongo(m)})`)))]
+    : []
+  // a frase da cobertura: desde quando a comissão líquida cobre os custos
+  const cobertura = temCustos
+    ? fraseDaCobertura(meses.map(m => ({ mes: m, resultado: resultadoDoMes(m), emAndamento: m === mesRef && mesRef === mesDeHoje() })))
+    : null
+
   const blocoComissao: Bloco | null = comRepasse ? {
     titulo: `Comissão (o que o ${ctx.label} paga e o que fica)`,
     linhas: [
@@ -154,7 +228,20 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
       ...(temFora ? quatro('Fora do giro', 'fora do giro', foraDe, 'CDB, saldo remunerado, aluguel, fundos…') : []),
       ...(temBanking ? quatro('Banking', 'Banking', bankingDe, 'cartão, saldo remunerado e outros produtos bancários') : []),
       { label: 'Comissão líquida do escritório', valores: rep((r, m) => liquidoCom(m.mes_ref, r.liquido)), fmt: rr, destaque: 'total', total: true },
-      ...cfg.participacoes.map((p): Linha => ({ label: `${p.nome} (${fmtPct(p.pct, 0)})`, valores: rep((r, m) => (liquidoCom(m.mes_ref, r.liquido) * p.pct) / 100), fmt: rr, destaque: 'sub', total: true })),
+      ...linhasCustos,
+      // nos meses com custo, cada sócio leva a sua parte do resultado depois dos custos (negativa = quanto cobre)
+      ...cfg.participacoes.map((p): Linha => (temCustos
+        ? {
+          label: `${p.nome} (${fmtPct(p.pct, 0)})`,
+          valores: porMes(m => {
+            const res = resultadoDoMes(m)
+            if (res != null) return (res * p.pct) / 100
+            const x = mensalPorMes.get(m)
+            return x ? (liquidoCom(m, repasseDe(x).liquido) * p.pct) / 100 : null
+          }),
+          fmt: rs, destaque: 'sub', total: true, perda: true,
+        }
+        : { label: `${p.nome} (${fmtPct(p.pct, 0)})`, valores: rep((r, m) => (liquidoCom(m.mes_ref, r.liquido) * p.pct) / 100), fmt: rr, destaque: 'sub', total: true })),
       { label: 'Líquido do giro ÷ receita do giro', valores: rep((r, m) => (m.receita ? (r.liquido / m.receita) * 100 : null)), fmt: pp, destaque: 'sub', so: 'todas' },
     ],
   } : null
@@ -162,7 +249,7 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
     titulo: 'Parceiros e leads',
     linhas: [
       ...(comissoes.length ? [
-        { label: 'Comissão de parceiros por conta (abertura e ativação)', valores: porMes(m => comissaoPorMes.get(m)?.valor ?? null), fmt: rr, total: true } as Linha,
+        { label: `Comissão de parceiros por conta (abertura e ativação${temCustos && nomesEquipe.length ? '; sem quem já está na Equipe' : ''})`, valores: porMes(m => comissaoPorMes.get(m)?.valor ?? null), fmt: rr, total: true } as Linha,
         { label: 'contas abertas por parceiros', valores: porMes(m => comissaoPorMes.get(m)?.aberturas ?? null), fmt: nn, destaque: 'sub', total: true, so: 'todas' } as Linha,
         { label: 'ativações por parceiros (inclui reativações)', valores: porMes(m => comissaoPorMes.get(m)?.ativacoes ?? null), fmt: nn, destaque: 'sub', total: true, so: 'todas' } as Linha,
       ] : []),
@@ -181,7 +268,7 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
     const x = mensalPorMes.get(m)
     return { label: mesCurto(m), lotes: x?.lotes ?? 0, receita: x ? eco.receitaTotal(x) : 0, ativos: x?.clientes_ativos ?? 0 }
   })
-  const hrefLinhas = `${base}/painel?${ctx.mesEscolhido ? `mes=${mesRef.slice(0, 7)}&` : ''}aba=meses${todas ? '' : '&linhas=todas'}`
+  const hrefLinhas = `${base}/painel?${custosNaQuery(ctx.q)}${ctx.mesEscolhido ? `mes=${mesRef.slice(0, 7)}&` : ''}aba=meses${todas ? '' : '&linhas=todas'}`
   const periodo = meses.length > 1 ? `${mesCurto(meses[0])} a ${mesCurto(mesRef)}` : mesCurto(mesRef)
   const somaDe = (l: Linha) => (l.total ? l.valores.reduce<number>((s, v) => s + (v ?? 0), 0) : null)
 
@@ -199,6 +286,10 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
       {todas && ` A receita bruta do ${ctx.label} é maior que a receita do giro porque o preço cobrado do cliente embute ${fmtPct(cfg.impostosEmbutidosPct, 2)} de impostos e a tarifa cadastrada (R$/lote) é o valor sem eles.`}
       {todas && temLivros && ' Os clientes de parceiros com participação na comissão seguem a divisão combinada com cada parceiro: imposto, parte do parceiro e o que fica para o escritório.'}
       {temExtras && ' O fora do giro e o Banking vêm das planilhas do mês (Importar), já com a parte do escritório e o imposto de lá.'}
+      {temCustos && (nomesEquipe.length
+        ? ' Os custos do escritório vêm de Parâmetros. No mês em andamento, os custos mensais são os do mês inteiro e a equipe é o valor de hoje.'
+        : ' Os custos do escritório vêm de Parâmetros; no mês em andamento entram os do mês inteiro.')}
+      {semValor.length > 0 && ` Sem valor em Comissões: ${juntar(semValor)}. A conta segue sem esse valor.`}
       {' '}A conta de um mês só, explicada, está na aba Resumo ({mesLongo(mesRef)}).
     </>
   )
@@ -207,7 +298,13 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
   // de começar na primeira tela). O espaço entre os blocos é o mesmo que a página dava.
   return (
     <div className="flex flex-col gap-6 md:gap-8">
-      {frase && <div className="md:hidden"><Resumo frase={frase} /></div>}
+      {(frase || temChave) && (
+        <div className="md:hidden">
+          {frase && <Resumo frase={frase} apoio={cobertura} />}
+          {/* logo abaixo da frase que fala dos custos: um toque mostra a aba sem eles */}
+          {chaveCustos(frase ? 'mt-3' : '')}
+        </div>
+      )}
 
       <Panel className="max-md:order-last" title="Lotes, receita e clientes ativos"
         subtitle={<>
@@ -230,10 +327,10 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
 
       <Panel title={todas ? 'Mês a mês · todas as linhas' : 'Mês a mês'}
         subtitle={<>
-          <span className="max-md:hidden">{`${periodo}; o último mês pode estar parcial. ${todas ? 'A conta completa do fechamento, passo a passo.' : 'O essencial de cada bloco.'}`}</span>
+          <span className="max-md:hidden">{`${periodo}; o último mês pode estar parcial. ${todas ? 'A conta completa do fechamento, passo a passo.' : 'O essencial de cada bloco.'}${cobertura ? ` ${cobertura}` : ''}`}</span>
           <span className="md:hidden">{meses.length > 2 ? 'Arraste para ver os meses anteriores.' : periodo}</span>
         </>}
-        action={<Link href={hrefLinhas} scroll={false} className="link text-label max-md:-my-3 max-md:inline-block max-md:py-3">{todas ? 'mostrar só o essencial' : `ver todas as linhas (${totalLinhas})`}</Link>}>
+        action={<>{chaveCustos('max-md:hidden')}<Link href={hrefLinhas} scroll={false} className="link text-label max-md:-my-3 max-md:inline-block max-md:py-3">{todas ? 'mostrar só o essencial' : `ver todas as linhas (${totalLinhas})`}</Link></>}>
         {/* com poucos meses a tabela não se estica pela tela toda: os números ficam perto dos rótulos.
             No celular a matriz continua tabela (DESIGN.md §8.6), com todos os meses: a moldura nasce rolada
             para os mais novos (direção invertida só na moldura; a tabela continua da esquerda para a direita),
@@ -259,9 +356,9 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
                     <tr key={l.label} className={l.destaque === 'total' ? 'total' : ''}>
                       <td className={cn('sticky-col', COL_NOME, l.destaque === 'sub' && 'pl-6 text-fg-muted max-md:pl-4', l.destaque === 'bold' && 'font-semibold')}>{l.label}</td>
                       {l.valores.map((v, i) => (
-                        <td key={i} className={cn('num', (v == null || v === 0) && 'subtle', l.destaque === 'bold' && 'font-semibold')}>{l.fmt(v)}</td>
+                        <td key={i} className={cn('num', (v == null || v === 0) && 'subtle', l.destaque === 'bold' && 'font-semibold', l.perda && v != null && v < 0 && 'text-loss')}>{l.fmt(v)}</td>
                       ))}
-                      {meses.length > 1 && <td className="num font-semibold max-md:hidden">{soma == null ? '' : l.fmt(soma)}</td>}
+                      {meses.length > 1 && <td className={cn('num font-semibold max-md:hidden', l.perda && soma != null && soma < 0 && 'text-loss')}>{soma == null ? '' : l.fmt(soma)}</td>}
                     </tr>
                   )
                 })}
@@ -280,12 +377,16 @@ export async function AbaMeses({ ctx, todas }: { ctx: Contexto; todas: boolean }
                   return (
                     <Fragment key={b.titulo}>
                       <tr><td colSpan={2} className="border-b-0 pb-1 pt-4"><span className="label">{b.titulo}</span></td></tr>
-                      {somaveis.map(l => (
-                        <tr key={l.label} className={l.destaque === 'total' ? 'total' : ''}>
-                          <td className={cn(l.destaque === 'sub' && 'pl-6 text-fg-muted', l.destaque === 'bold' && 'font-semibold')}>{l.label}</td>
-                          <td className={cn('num align-top', l.destaque === 'sub' && 'text-fg-muted', l.destaque === 'bold' && 'font-semibold')}>{l.fmt(somaDe(l))}</td>
-                        </tr>
-                      ))}
+                      {somaveis.map(l => {
+                        const soma = somaDe(l)
+                        const negativo = !!l.perda && soma != null && soma < 0
+                        return (
+                          <tr key={l.label} className={l.destaque === 'total' ? 'total' : ''}>
+                            <td className={cn(l.destaque === 'sub' && 'pl-6 text-fg-muted', l.destaque === 'bold' && 'font-semibold')}>{l.label}</td>
+                            <td className={cn('num align-top', negativo ? 'text-loss' : l.destaque === 'sub' && 'text-fg-muted', l.destaque === 'bold' && 'font-semibold')}>{l.fmt(soma)}</td>
+                          </tr>
+                        )
+                      })}
                     </Fragment>
                   )
                 })}

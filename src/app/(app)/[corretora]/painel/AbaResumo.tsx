@@ -22,14 +22,25 @@ import { MOMENTO_RESUMO } from '@/lib/gestao/momentoCliente'
 import { TRACO, dataCurta, n0, r0, rCurto } from '@/components/gestao/Celulas'
 import { ContaDoMes } from '@/components/gestao/ContaDoMes'
 import { economiaDoPainel } from '@/lib/gestao/economiaPainel'
+import { custosDoPainel, haCustosFixos, parametroCustosFixos } from '@/lib/gestao/consultasCustos'
+import { getProfile } from '@/lib/auth/getProfile'
+import { normTexto } from '@/lib/texto'
+import { fraseDosCustos, resultadoDepoisDosCustos } from '@/lib/gestao/custos'
 import { frasesDoResumo } from './frases'
+import { ChaveCustos, custosNaQuery, semCustosNaUrl } from './ChaveCustos'
 import { LINHA_INTEIRA, TOQUE, apoio, soNoComputador } from './celular'
 
 // Projeção: meses de histórico que entram no perfil intra-mês
 const MESES_PROJECAO = 24
 
+// Valor que pode ser negativo (resultado depois dos custos): "− R$ 500", como na conta do mês
+const rSinal = (v: number) => (Math.round(v) === 0 ? 'R$ 0' : v < 0 ? `− ${rCurto(-v)}` : rCurto(v))
+// 'Aikon', 'Aikon e Milena', 'A, B e C'
+const eLista = (nomes: string[]) => (nomes.length > 1 ? `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}` : nomes[0] ?? '')
+
 // Uma linha da previsão de fechamento: a mesma na tabela (computador) e na lista (celular)
-type LinhaPrevista = { label: string; nota?: string; total?: boolean; realizado: string; projetado: string; faixa: string; linear: string; anterior: string; pct: number | null }
+// perda: as colunas que saem negativas (só na linha do giro depois dos custos), na cor de perda
+type LinhaPrevista = { label: string; nota?: string; total?: boolean; realizado: string; projetado: string; faixa: string; linear: string; anterior: string; pct: number | null; perda?: { realizado: boolean; projetado: boolean; anterior: boolean } }
 
 export async function AbaResumo({ ctx }: { ctx: Contexto }) {
   const { corretora, mesRef, base } = ctx
@@ -38,7 +49,15 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
   const mesCorrente = mesRef === mesDeHoje()
   // Tudo em paralelo. O giro por dia (até 24 meses) alimenta a projeção e a comparação com o mês anterior;
   // os pontos por cliente só servem à projeção do incentivo no mês corrente
-  const [eco, painel, naoCad, comissoes, giro, ultima, incentivo] = await Promise.all([
+  // Custos fixos do escritório (só onde há cadeia de repasse, hoje o BTG): do mês e do anterior, para a conta e
+  // para a previsão. A chave custos_fixos é lida sozinha (uma linha) e começa junto com a economia; a
+  // remuneração da equipe só é lida quando alguma pessoa está em vigor, e corre ao lado do resto.
+  const mesesCustos = [mesRef, somarMeses(mesRef, -1)]
+  // "Sem custos" (a chave da aba, ?custos=sem): os custos não são lidos e a aba sai como era antes deles
+  const semCustos = semCustosNaUrl(ctx.q)
+  const paramCustosP = parametroCustosFixos(corretora)
+  const custosP = paramCustosP.then(p => (!semCustos && haCustosFixos(p, mesesCustos) ? custosDoPainel(p, mesesCustos) : null))
+  const [eco, painel, naoCad, comissoes, giro, ultima, incentivo, custosMap, profile, paramCustos] = await Promise.all([
     economiaDoPainel(corretora, mesRef),
     painelResumo(corretora, mesRef),
     lotesNaoCadastrados(corretora),
@@ -46,8 +65,19 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
     giroDiario(corretora, somarMeses(mesRef, -MESES_PROJECAO), lim.fim),
     ultimaData(corretora),
     mesCorrente ? incentivoMes(corretora, mesRef) : Promise.resolve([]),
+    custosP,
+    getProfile(),
+    paramCustosP,
   ])
   const { cfg, atp, comRepasse, mensal, par } = eco
+  // a chave "Com custos | Sem custos" só aparece quando o mês tem custo lançado (com ou sem a chave ligada)
+  const temChave = comRepasse && haCustosFixos(paramCustos, [mesRef])
+  const chaveCustos = (className: string) => (temChave ? <ChaveCustos caminho={`${base}/painel`} query={ctx.q} className={className} /> : null)
+  // o valor de cada pessoa da equipe só para o admin (em Comissões, só o admin e a própria pessoa veem)
+  const verEquipe = profile?.role === 'admin'
+  // sem custo em vigor no mês, nada abaixo muda: custosMes fica null e a tela é a de sempre
+  const custosMes = comRepasse && custosMap?.get(mesRef)?.temCusto ? custosMap.get(mesRef)! : null
+  const custosAnt = comRepasse && custosMap?.get(mesesCustos[1])?.temCusto ? custosMap.get(mesesCustos[1])! : null
 
   // Fechamento previsto do mês corrente (perfil intra-mês de todo o histórico) e variações
   const proj = projetarMes(giro, mesRef, ultima, hoje, { maxMeses: MESES_PROJECAO })
@@ -60,7 +90,9 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
   const liquidoAnt = repasseAnt ? eco.liquidoCom(proj.mesAnterior, repasseAnt.liquido) : null
   const extrasMes = eco.extrasDe(mesRef)
   const rotuloExtras = [eco.foraDe(mesRef) ? 'fora do giro' : null, eco.bankingDe(mesRef) ? 'Banking' : null].filter(Boolean).join(' e ')
-  const partes = cfg.participacoes.map(p => ({ nome: p.nome, valor: (liquidoMes * p.pct) / 100 }))
+  // nos meses com custo, a parte de cada sócio sai do resultado depois dos custos (a mesma conta de contaComRepasse)
+  const resultadoMes = resultadoDepoisDosCustos(liquidoMes, custosMes)
+  const partes = cfg.participacoes.map(p => ({ nome: p.nome, valor: (resultadoMes * p.pct) / 100 }))
   // A receita da tabela mensal (todos os lançamentos, inclusive contas ainda não vinculadas) é a base do
   // dinheiro do mês; a projeção dela escala pela mesma proporção prevista para o giro dos clientes cadastrados
   const escalaR = (v: number) => (proj.receita.realizado > 0 ? ((mesAtual?.receita ?? 0) * v) / proj.receita.realizado : v)
@@ -80,15 +112,17 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
   const pctAtivosLevados = r.levados ? (r.ativos / r.levados) * 100 : 0
   const naoCadLinhas = naoCad.reduce((s, l) => s + l.linhas, 0)
   const naoCadLotes = naoCad.reduce((s, l) => s + l.lotes, 0)
-  // comissão de parceiros por conta (abertura e ativação) no mês: paga à parte, entra na conta como lembrete
-  const comissaoParceiros = comissoes.filter(c => c.mes_ref === mesRef).reduce((s, c) => s + c.valor_abertura + c.valor_ativacao, 0)
+  // comissão de parceiros por conta (abertura e ativação) no mês: paga à parte, entra na conta como lembrete.
+  // Quem da equipe já está descontado nos custos do mês (só quem tem valor) sai daqui; sem custo, nada muda
+  const equipeDescontada = new Set((custosMes?.itens ?? []).filter(i => i.tipo !== 'valor' && i.valor != null).map(i => normTexto(i.nome)))
+  const comissaoParceiros = comissoes.filter(c => c.mes_ref === mesRef && !equipeDescontada.has(normTexto(c.parceiro))).reduce((s, c) => s + c.valor_abertura + c.valor_ativacao, 0)
   const receitaComIncentivo = mesAtual ? eco.receitaTotal(mesAtual) : 0
   const receitaComIncentivoAnt = mesAnt ? eco.receitaTotal(mesAnt) : undefined
 
   const conta = comRepasse
     ? contaComRepasse({
       corretora: ctx.label, repasse: repasseMes, pctDoFechamento: eco.pctDoFechamento(mesRef), deltaPct: cfg.deltaPct, impostoPct: cfg.impostoPct,
-      fora: eco.foraDe(mesRef), banking: eco.bankingDe(mesRef), participacoes: cfg.participacoes, comissaoParceiros,
+      fora: eco.foraDe(mesRef), banking: eco.bankingDe(mesRef), participacoes: cfg.participacoes, comissaoParceiros, custos: custosMes, verEquipe,
     })
     : contaDaReceita({
       corretora: ctx.label, corretagem: mesAtual?.receita_corretagem ?? 0, zeragem: mesAtual?.receita_zeragem ?? 0, fixa: mesAtual?.receita_acoes ?? 0, receita: mesAtual?.receita ?? 0,
@@ -96,7 +130,15 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
     })
   // as planilhas do que fica fora dos lotes chegam depois do mês: sem elas, a conta avisa que ainda falta
   const faltamExtras = comRepasse && (eco.temFora || eco.temBanking) && !eco.foraDe(mesRef) && !eco.bankingDe(mesRef)
-  const hrefMeses = `${base}/painel?${ctx.mesEscolhido ? `mes=${mesRef.slice(0, 7)}&` : ''}aba=meses`
+  // A resposta sobre os custos em uma frase (null sem custo) e quem da equipe ficou sem valor em Comissões
+  const dadosFrase = { mes: mesRef, parcial: proj.parcial, liquido: liquidoMes, custos: custosMes, previsto: repasseProj?.liquido ?? null }
+  const fraseCustos = fraseDosCustos(dadosFrase)
+  const fraseCustosCurta = fraseDosCustos({ ...dadosFrase, curta: true })   // a do celular, depois do apoio da frase de abertura
+  const semValorEquipe = custosMes?.equipeIncompleta ? custosMes.itens.filter(i => i.tipo !== 'valor' && i.valor == null).map(i => i.nome) : []
+  // no mês em andamento os custos mensais entram inteiros, mas a equipe é o que está em Comissões até hoje
+  const notaCustosParcial = !custosMes ? null
+    : custosMes.itens.some(i => i.tipo !== 'valor') ? 'os custos mensais são os do mês inteiro; a equipe, o valor de hoje' : 'os custos são os do mês inteiro'
+  const hrefMeses = `${base}/painel?${custosNaQuery(ctx.q)}${ctx.mesEscolhido ? `mes=${mesRef.slice(0, 7)}&` : ''}aba=meses`
 
   // ── Só para o celular: a frase de abertura e os apoios curtos, com os números já calculados acima ──
   const antCurto = mesCurto(proj.mesAnterior)
@@ -142,6 +184,25 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
       faixa: historico ? `${rCurto(liquidoPrevisto(receitaProj.baixo))} – ${rCurto(liquidoPrevisto(receitaProj.alto))}` : TRACO, linear: rCurto(liquidoPrevisto(receitaProj.linear)),
       anterior: rCurto(repasseAnt?.liquido), pct: variacaoPrevista(repasseProj.liquido, repasseAnt?.liquido),
     }] : []),
+    // só com custo no mês: a comissão líquida do giro de cima menos os custos do mês (custos mensais inteiros,
+    // equipe até hoje). É só giro, sem fora do giro e Banking: por isso não se chama "Resultado depois dos custos"
+    ...(repasseProj && custosMes ? (() => {
+      const menos = (v: number) => rSinal(resultadoDepoisDosCustos(v, custosMes))
+      const comoAcima = (v: number) => (rCurto(v) === TRACO ? TRACO : menos(v))   // "–" onde a linha de cima mostra "–"
+      const anterior = repasseAnt && custosAnt ? resultadoDepoisDosCustos(repasseAnt.liquido, custosAnt) : null
+      const projetado = resultadoDepoisDosCustos(repasseProj.liquido, custosMes)
+      const realizadoNum = resultadoDepoisDosCustos(repasseMes.liquido, custosMes)
+      return [{
+        label: 'Giro depois dos custos', nota: 'comissão líquida do giro prevista menos os custos do mês (sem fora do giro e Banking); equipe pelo valor de hoje', total: true,
+        realizado: rSinal(realizadoNum), projetado: rSinal(projetado),
+        // a mesma regra de arredondamento do rSinal: "R$ 0" não fica vermelho
+        perda: { realizado: Math.round(realizadoNum) < 0, projetado: Math.round(projetado) < 0, anterior: anterior != null && Math.round(anterior) < 0 },
+        faixa: historico ? `${comoAcima(liquidoPrevisto(receitaProj.baixo))} – ${comoAcima(liquidoPrevisto(receitaProj.alto))}` : TRACO,
+        linear: comoAcima(liquidoPrevisto(receitaProj.linear)),
+        // variação só contra um mês anterior positivo: contra um resultado negativo o percentual engana
+        anterior: anterior == null ? TRACO : rSinal(anterior), pct: anterior != null && anterior > 0 ? variacaoPrevista(projetado, anterior) : null,
+      }]
+    })() : []),
   ]
   const diasLancados = `${fmtNum(proj.diasDecorridos)} de ${fmtNum(proj.diasTotal)} dias úteis lançados (até ${dataCurta(proj.ultimaData)})`
   const metodoDaPrevisao = historico
@@ -166,15 +227,17 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
   return (
     <div className="flex flex-col gap-6 md:gap-8">
       <div className="md:hidden">
-        <Resumo frase={frases.frase} apoio={frases.apoio}
+        <Resumo frase={frases.frase} apoio={fraseCustos ? (frases.apoio ? `${frases.apoio} ${fraseCustosCurta}` : fraseCustos) : frases.apoio}
           nota={proj.parcial ? `Lotes lançados até ${dataCurta(proj.ultimaData)}: ${fmtNum(proj.diasDecorridos)} de ${fmtNum(proj.diasTotal)} dias úteis.` : undefined} />
+        {/* logo abaixo da frase que fala dos custos: um toque mostra a aba sem eles */}
+        {chaveCustos('mt-3')}
       </div>
 
       <KpiRow cols={6}>
         {comRepasse ? (
           <KpiCard destaque label="Comissão líquida no mês" value={rCurto(liquidoMes)} className={semVariacaoParcial}
             sub={apoio(
-              repasseProj ? `fecha em ${rCurto(repasseProj.liquido)} · comissão ${ctx.label} ${rCurto(repasseMes.comissao)}` : `comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${extrasMes ? ` · ${rotuloExtras} ${r0(extrasMes)}` : ''}${partes.length ? ' · ' + partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`,
+              repasseProj ? `fecha em ${rCurto(repasseProj.liquido)} · comissão ${ctx.label} ${rCurto(repasseMes.comissao)}` : `comissão ${ctx.label} ${rCurto(repasseMes.comissao)}${extrasMes ? ` · ${rotuloExtras} ${r0(extrasMes)}` : ''}${custosMes ? ` · depois dos custos ${rSinal(resultadoMes)}` : partes.length ? ' · ' + partes.map(p => `${p.nome} ${rCurto(p.valor)}`).join(' · ') : ''}`,
               // o mês anterior na mesma medida do cartão (com fora do giro e Banking), o valor que a aba Mês a mês mostra
               repasseProj ? contraAnterior(repasseProj.liquido, liquidoAnt) : `comissão ${ctx.label} ${rCurto(repasseMes.comissao)}`,
             )}
@@ -215,11 +278,14 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
       <div className="grid gap-8 max-md:order-last xl:grid-cols-2">
         <Panel title={`A conta de ${mesLongo(mesRef)}`}
           subtitle={<>
-            <span className="max-md:hidden">{`${comRepasse ? `Do que o ${ctx.label} paga ao que fica para o escritório` : 'O que os clientes geraram no mês'}, de cima para baixo${proj.parcial ? ` · parcial, com os lotes até ${dataCurta(proj.ultimaData)}` : ''}.`}</span>
-            {proj.parcial && <span className="md:hidden">Parcial, com os lotes até {dataCurta(proj.ultimaData)}.</span>}
+            <span className="max-md:hidden">{`${comRepasse ? `Do que o ${ctx.label} paga ao que fica para o escritório` : 'O que os clientes geraram no mês'}, de cima para baixo${proj.parcial ? ` · parcial, com os lotes até ${dataCurta(proj.ultimaData)}${notaCustosParcial ? ` · ${notaCustosParcial}` : ''}` : ''}.`}</span>
+            {proj.parcial && <span className="md:hidden">Parcial, com os lotes até {dataCurta(proj.ultimaData)}{notaCustosParcial ? `; ${notaCustosParcial}` : ''}.</span>}
           </>}
-          action={<Link href={hrefMeses} className={cn('link text-label', TOQUE)}>ver mês a mês</Link>}>
+          action={<>{chaveCustos('max-md:hidden')}<Link href={hrefMeses} className={cn('link text-label', TOQUE)}>ver mês a mês</Link></>}>
+          {/* no celular a mesma frase já está no topo da aba, junto da resposta */}
+          {fraseCustos && <p className="mb-4 max-w-2xl text-dense max-md:hidden">{fraseCustos}</p>}
           <ContaDoMes linhas={conta} className="max-w-2xl" />
+          {semValorEquipe.length > 0 && <p className="mt-3 text-label text-fg-subtle">Sem o valor de {eLista(semValorEquipe)} em Comissões: a conta está sem essa parte.</p>}
           {faltamExtras && <p className="mt-3 text-label text-fg-subtle">O fora do giro e o Banking de {mesCurto(mesRef)} entram quando as planilhas do mês forem lançadas em Importar.</p>}
         </Panel>
 
@@ -266,11 +332,11 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
                     <td className={cn('cel-titulo', !l.total && 'font-medium')}>
                       {l.label}{l.nota && <span className={cn('ml-1.5 text-micro text-fg-subtle max-md:ml-0 max-md:block', l.total && 'font-normal')}>{l.nota}</span>}
                     </td>
-                    <td className="num col-p2">{l.realizado}</td>
-                    <td className="num cel-valor font-semibold">{l.projetado}</td>
+                    <td className={cn('num col-p2', l.perda?.realizado && 'text-loss')}>{l.realizado}</td>
+                    <td className={cn('num cel-valor font-semibold', l.perda?.projetado && 'text-loss')}>{l.projetado}</td>
                     <td className="num col-p2 text-fg-muted">{l.faixa}</td>
                     <td className="num col-p3 text-fg-muted">{l.linear}</td>
-                    <td className="num cel-sub" data-rotulo={antCurto}>{l.anterior}</td>
+                    <td className={cn('num cel-sub', l.perda?.anterior && 'text-loss max-md:text-loss')} data-rotulo={antCurto}>{l.anterior}</td>
                     <td className={cn('num col-p2 cel-sub', l.pct == null && 'vazio')}><DeltaText pct={l.pct} /></td>
                   </tr>
                 ))}
@@ -287,7 +353,7 @@ export async function AbaResumo({ ctx }: { ctx: Contexto }) {
               <ul className="space-y-1">
                 {linhasPrevistas.map(l => (
                   <li key={l.label}>
-                    <span className="text-fg">{l.label}:</span> até {ateData}, {l.realizado}
+                    <span className="text-fg">{l.label}:</span> até {ateData}, <span className={cn(l.perda?.realizado && 'text-loss')}>{l.realizado}</span>
                     {l.faixa !== TRACO && ` · faixa de ${l.faixa}`}{historico && l.linear !== TRACO && ` · ritmo linear ${l.linear}`}
                   </li>
                 ))}

@@ -8,6 +8,7 @@ import { Abas } from '@/components/gestao/Abas'
 import { AbaResumo } from './AbaResumo'
 import { AbaMeses } from './AbaMeses'
 import { AbaClientes } from './AbaClientes'
+import { PARAM_CUSTOS, semCustosNaUrl } from './ChaveCustos'
 
 const ABAS = [
   { valor: 'resumo', label: 'Resumo' },
@@ -33,7 +34,8 @@ export default async function PainelPage({ params, searchParams }: { params: Par
   return (
     <>
       <PageHeader eyebrow={ctx.eyebrow} title="Painel" description={descricao[aba]} actions={<MesPicker valor={ctx.mesRef} />}>
-        <Abas caminho={`${ctx.base}/painel`} query={{ mes: ctx.mesEscolhido ? ctx.mesRef.slice(0, 7) : null }} valor={aba} opcoes={ABAS} padrao="resumo" rotulo="Seções do painel" />
+        {/* a escolha "sem custos" (ChaveCustos, nas abas Resumo e Mês a mês) segue de uma aba para a outra */}
+        <Abas caminho={`${ctx.base}/painel`} query={{ mes: ctx.mesEscolhido ? ctx.mesRef.slice(0, 7) : null, [PARAM_CUSTOS]: semCustosNaUrl(ctx.q) ? 'sem' : null }} valor={aba} opcoes={ABAS} padrao="resumo" rotulo="Seções do painel" />
       </PageHeader>
       <PageBody>
         {aba === 'resumo' && <AbaResumo ctx={ctx} />}

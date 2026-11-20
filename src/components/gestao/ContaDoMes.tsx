@@ -16,7 +16,9 @@ export function ContaDoMes({ linhas, className }: { linhas: LinhaConta[]; classN
             return <tr key={i}><td colSpan={2} className={cn('border-b-0 pb-1', i === 0 ? 'pt-0' : 'pt-5')}><span className="label">{l.rotulo}</span></td></tr>
           }
           const soma = l.tipo === 'mais' && primeiroSubtotal >= 0 && i > primeiroSubtotal   // o que entra depois de um subtotal
-          const valor = l.valor == null ? '' : `${l.tipo === 'menos' ? '− ' : soma ? '+ ' : ''}${fmtBRL2(l.valor)}`
+          // o total e as partes depois dos custos do escritório podem ser negativos: sinal de menos e cor de perda
+          const negativo = (l.tipo === 'total' || l.tipo === 'parte') && l.valor != null && l.valor < 0
+          const valor = l.valor == null ? '' : negativo ? `− ${fmtBRL2(-l.valor)}` : `${l.tipo === 'menos' ? '− ' : soma ? '+ ' : ''}${fmtBRL2(l.valor)}`
           const recuo = l.tipo === 'menos' || l.tipo === 'mais' || l.tipo === 'parte'
           const forte = l.tipo === 'entrada' || l.tipo === 'subtotal'
           const apagado = l.tipo === 'menos' || l.tipo === 'parte' || l.tipo === 'info'
@@ -28,7 +30,7 @@ export function ContaDoMes({ linhas, className }: { linhas: LinhaConta[]; classN
                 </span>
                 {l.nota && <span className="block text-micro font-normal text-fg-subtle">{l.nota}</span>}
               </td>
-              <td className={cn('num align-top', forte && 'font-semibold', apagado && 'text-fg-muted', l.tipo === 'info' && 'pt-5')}>{valor}</td>
+              <td className={cn('num align-top', forte && 'font-semibold', negativo ? 'text-loss' : apagado && 'text-fg-muted', l.tipo === 'info' && 'pt-5')}>{valor}</td>
             </tr>
           )
         })}

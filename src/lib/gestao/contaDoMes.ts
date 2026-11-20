@@ -4,6 +4,7 @@
 // na aba Mês a mês. Só funções puras (testes em contaDoMes.test.ts).
 import type { Participacao, Repasse } from './btg'
 import type { TotaisBanking } from './banking'
+import { resultadoDepoisDosCustos, type CustosDoMes, type ItemCustoMes } from './custos'
 
 export type LinhaConta = {
   // titulo = cabeçalho de um bloco · base = de onde a conta parte (não entra na soma) · entrada = o valor de
@@ -11,7 +12,9 @@ export type LinhaConta = {
   // info = lembrete fora da conta
   tipo: 'titulo' | 'base' | 'entrada' | 'menos' | 'mais' | 'subtotal' | 'total' | 'parte' | 'info'
   rotulo: string
-  valor: number | null   // sempre positivo: o tipo diz se soma ou desconta
+  // sempre positivo (o tipo diz se soma ou desconta), EXCETO no total e nas partes depois dos custos do
+  // escritório: o resultado pode ser negativo, e a parte negativa é quanto cada sócio cobre
+  valor: number | null
   nota?: string
 }
 
@@ -28,7 +31,21 @@ export type DadosContaRepasse = {
   fora: TotaisBanking | null     // produtos fora do giro gravados para o mês
   banking: TotaisBanking | null  // Banking gravado para o mês
   participacoes: Participacao[]  // divisão entre os sócios
-  comissaoParceiros: number      // comissão por conta (abertura e ativação), paga à parte
+  // comissão por conta (abertura e ativação), paga à parte; nos meses com equipe nos custos, chega sem a parte
+  // de quem já está em Equipe (com valor)
+  comissaoParceiros: number
+  custos?: CustosDoMes | null    // custos fixos do escritório no mês (custosDoMes); sem custo, a conta é a de sempre
+  // true só para o admin: os custos aparecem separados (custos mensais e equipe, com o valor de cada pessoa).
+  // Para o resto da equipe, uma linha só com o total, sem valor por pessoa: em Comissões o valor de cada
+  // comissionado só aparece para o admin e para a própria pessoa
+  verEquipe?: boolean
+}
+
+// "Aikon R$ 1.976,12 e Milena R$ 1.995,01 · fixo e comissões do mês, como em Comissões"
+function notaDaEquipe(itens: ItemCustoMes[]): string {
+  const cada = itens.map(i => i.valor == null ? `${i.nome} sem valor em Comissões`
+    : `${i.nome} ${brl(i.valor)}${i.tipo === 'equipe-btg' ? ' (só a parte do BTG)' : ''}`)
+  return `${lista(cada)} · fixo e comissões do mês, como em Comissões`
 }
 
 // Corretora com cadeia de repasse (BTG): a comissão que a corretora paga, o que sai dela (Delta, imposto,
@@ -61,9 +78,38 @@ export function contaComRepasse(d: DadosContaRepasse): LinhaConta[] {
     if (d.fora) linhas.push({ tipo: 'mais', rotulo: 'Fora do giro', valor: d.fora.liquida, nota: `CDB, saldo remunerado, aluguel e fundos · comissão de ${brl(d.fora.comissao)}, já sem a parte de terceiros e o imposto` })
     if (d.banking) linhas.push({ tipo: 'mais', rotulo: 'Banking', valor: d.banking.liquida, nota: `cartão e saldo remunerado · comissão de ${brl(d.banking.comissao)}, já sem a parte de terceiros e o imposto` })
   }
-  linhas.push({ tipo: 'total', rotulo: 'Comissão líquida do escritório', valor: total })
-  for (const p of d.participacoes) linhas.push({ tipo: 'parte', rotulo: `${p.nome} (${pct(p.pct, 0)})`, valor: (total * p.pct) / 100 })
-  if (d.comissaoParceiros > 0) linhas.push({ tipo: 'info', rotulo: 'Comissão de parceiros por conta', valor: d.comissaoParceiros, nota: 'abertura e ativação de conta: paga à parte, não está descontada acima' })
+  const custos = d.custos?.temCusto ? d.custos : null
+  if (!custos) {
+    linhas.push({ tipo: 'total', rotulo: 'Comissão líquida do escritório', valor: total })
+    for (const p of d.participacoes) linhas.push({ tipo: 'parte', rotulo: `${p.nome} (${pct(p.pct, 0)})`, valor: (total * p.pct) / 100 })
+  } else {
+    // custos fixos do escritório: saem da comissão líquida antes da divisão entre os sócios
+    const mensais = custos.itens.filter(i => i.tipo === 'valor')
+    const equipe = custos.itens.filter(i => i.tipo !== 'valor')
+    linhas.push({ tipo: 'subtotal', rotulo: 'Comissão líquida do escritório', valor: total })
+    if (d.verEquipe) {
+      linhas.push({ tipo: 'titulo', rotulo: 'Custos do escritório', valor: null })
+      if (mensais.length) linhas.push({ tipo: 'menos', rotulo: 'Custos mensais', valor: custos.mensais, nota: lista(mensais.map(i => i.nome)) })
+      if (equipe.length) linhas.push({ tipo: 'menos', rotulo: 'Equipe', valor: custos.equipe, nota: notaDaEquipe(equipe) })
+    } else {
+      // uma linha só, com nomes e sem valores: nem o valor de cada pessoa nem o total da equipe aparecem
+      linhas.push({
+        tipo: 'menos', rotulo: 'Custos do escritório', valor: custos.total,
+        nota: `custos mensais${equipe.length ? ` e equipe (${lista(equipe.map(i => i.nome))})` : ''}`,
+      })
+    }
+    const resultado = resultadoDepoisDosCustos(total, custos)   // a mesma conta das frases e do Mês a mês
+    linhas.push({ tipo: 'total', rotulo: 'Resultado depois dos custos', valor: resultado })
+    for (const p of d.participacoes) linhas.push({ tipo: 'parte', rotulo: `${p.nome} (${pct(p.pct, 0)})`, valor: (resultado * p.pct) / 100 })
+  }
+  // a comissão por conta de quem está em Equipe já chega fora deste valor (AbaResumo); o resto continua à parte
+  const equipeNosCustos = !!custos?.itens.some(i => i.tipo !== 'valor')
+  if (d.comissaoParceiros > 0) {
+    linhas.push({
+      tipo: 'info', rotulo: 'Comissão de parceiros por conta', valor: d.comissaoParceiros,
+      nota: equipeNosCustos ? 'abertura e ativação de conta de quem não está nos custos: paga à parte, não está descontada acima' : 'abertura e ativação de conta: paga à parte, não está descontada acima',
+    })
+  }
   return linhas
 }
 

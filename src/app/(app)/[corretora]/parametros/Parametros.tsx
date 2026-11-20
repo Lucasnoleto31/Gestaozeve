@@ -16,6 +16,8 @@ import {
 } from '@/lib/gestao/acoes'
 import { salvarParceirosReceita } from '@/lib/gestao/acoesParticipacao'
 import { CHAVE_PARCEIROS_RECEITA, lerParceirosReceita, nomesComRegra, textoDaRegra } from '@/lib/gestao/participacao'
+import { salvarCustosFixos } from '@/lib/gestao/acoesCustos'
+import { CHAVE_CUSTOS_FIXOS, emVigor, lerCustosFixos, textoCustosFixos, validarCustosFixos, type CustoFixo } from '@/lib/gestao/custos'
 import { mesLongo } from '@/lib/gestao/meses'
 import { normTexto } from '@/lib/texto'
 import type { parametrosDaCorretora } from '@/lib/gestao/consultas'
@@ -23,7 +25,7 @@ import type { AssessorParam, Resultado } from '@/lib/gestao/tipos'
 import type { Corretora } from '@/lib/corretoras'
 import { numeroBR } from '@/lib/gestao/planilhas'
 import { n0, n2, r0, TRACO } from '@/components/gestao/Celulas'
-import { fmtNum } from '@/lib/format'
+import { fmtBRL2, fmtNum, MESES_LONGOS } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 type Dados = Awaited<ReturnType<typeof parametrosDaCorretora>>
@@ -64,7 +66,7 @@ const qtd = (n: number, um: string, varios: string) => `${fmtNum(n)} ${n === 1 ?
 // a pendência em âmbar na linha do índice
 const pendente = (texto: string) => <span className="text-warn">{texto}</span>
 
-export function Parametros({ corretora, label, dados }: { corretora: Corretora; label: string; dados: Dados }) {
+export function Parametros({ corretora, label, dados, mesAtual }: { corretora: Corretora; label: string; dados: Dados; mesAtual: string }) {
   // Quem pode ser o parceiro de um assessor: os comissionados e quem tem participação na receita desta corretora
   const regrasReceita = dados.parametros.find(p => p.chave === CHAVE_PARCEIROS_RECEITA)?.valor ?? ''
   const comissionados = dados.responsaveis.filter(r => r.ativo && r.comissionado).map(r => r.nome)
@@ -84,7 +86,7 @@ export function Parametros({ corretora, label, dados }: { corretora: Corretora; 
           ? <Resumo frase={`Pendente: ${pendencias.join('; ')}.`} apoio={`Regras de cálculo da ${label}. Toda mudança recalcula os lotes na hora.`} />
           : <Resumo frase={`Regras de cálculo da ${label}. Toda mudança recalcula os lotes na hora.`} />}
       </div>
-      <div className="grid gap-5 xl:grid-cols-2 max-md:gap-0">
+      <div className="grid gap-5 xl:grid-cols-2 xl:grid-flow-row-dense max-md:gap-0">
         <SecaoGerais corretora={corretora} label={label} parametros={dados.parametros} gerais={dados.gerais} />
         {corretora === 'BTG' ? <SecaoManutencao corretora={corretora} /> : (
           // no BTG a participação de parceiro segue a cadeia do repasse (cartão Repasse, mais abaixo)
@@ -93,7 +95,7 @@ export function Parametros({ corretora, label, dados }: { corretora: Corretora; 
             <SecaoParceirosReceita key={regrasReceita} corretora={corretora} label={label} valor={regrasReceita} />
           </div>
         )}
-        {corretora === 'BTG' && <SecaoBtg corretora={corretora} label={label} parametros={dados.parametros} />}
+        {corretora === 'BTG' && <SecaoBtg corretora={corretora} label={label} parametros={dados.parametros} responsaveis={dados.responsaveis} mesAtual={mesAtual} />}
       </div>
       <SecaoAssessores corretora={corretora} assessores={dados.assessores} naoCadastrados={dados.assessoresNaoCadastrados} responsaveis={dados.responsaveis.filter(r => r.ativo && r.atende_clientes).map(r => r.nome)} parceiros={[...comissionados, ...comReceita]} />
       <div className="grid gap-5 xl:grid-cols-2 max-md:gap-0">
@@ -213,7 +215,7 @@ function SecaoParceirosReceita({ corretora, label, valor }: { corretora: Correto
 }
 
 // ── Economia do BTG: repasse, impostos, sócios e ATP Turbo ─────────────────
-function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; label: string; parametros: Dados['parametros'] }) {
+function SecaoBtg({ corretora, label, parametros, responsaveis, mesAtual }: { corretora: Corretora; label: string; parametros: Dados['parametros']; responsaveis: Dados['responsaveis']; mesAtual: string }) {
   const { erro, rodar } = useAcao()
   const valorDe = (chave: string) => parametros.find(p => p.chave === chave)?.valor ?? ''
   const repasse = [
@@ -235,6 +237,7 @@ function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; labe
   const ajudaRepasse = 'Faturamento bruto → repasse → (–) imposto → (–) Delta → receita líquida dividida entre os sócios. Aparece nos Indicadores mensais do Painel.'
   const ajudaAtp = 'Prêmios por comissão acumulada dentro do prazo, contado da assinatura. A tela Incentivo acompanha cada meta.'
   const metas = valorDe('atp_metas').split(';').filter(s => s.trim()).length
+  const custosGravados = valorDe(CHAVE_CUSTOS_FIXOS)
   // no resumo do índice o percentual gravado ("16.5") sai como se lê: "16,5%"
   const pct = (v: string) => (v.trim() ? `${v.trim().replace('.', ',')}%` : TRACO)
   return (
@@ -247,6 +250,11 @@ function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; labe
         </div>
       </Panel>
       </NoCelular>
+      {/* logo depois da divisão dos sócios: os custos saem antes dela */}
+      {/* no computador ocupa as duas colunas: as linhas de custo e da equipe não cabem em meia largura */}
+      <div className="min-w-0 xl:col-span-2">
+        <SecaoCustos key={custosGravados} corretora={corretora} valor={custosGravados} responsaveis={responsaveis} mesAtual={mesAtual} />
+      </div>
       <NoCelular titulo="ATP Turbo Receita" dica={ajudaAtp} resumo={metas ? qtd(metas, 'meta', 'metas') : 'nenhuma meta'}>
       <Panel variant="card" title="ATP Turbo Receita" subtitle={ajudaAtp} {...CARTAO_NO_CELULAR}>
         <div className="space-y-4">
@@ -255,6 +263,182 @@ function SecaoBtg({ corretora, label, parametros }: { corretora: Corretora; labe
       </Panel>
       </NoCelular>
     </>
+  )
+}
+
+// ── Custos do escritório (só no BTG) ───────────────────────────────────────
+// Lucas, 20/11/2026: "Assim saberemos quando vamos começar a lucrar de verdade. Eles vem antes da divisão Lucas e
+// Artur". O parâmetro custos_fixos é editado aqui em linhas (custos mensais e equipe) e gravado de uma vez na forma
+// canônica (custos.ts). O cartão remonta quando o valor gravado muda (key no pai).
+type LinhaCusto = { id: string; nome: string; valor: string; desde: string; ate: string }
+type LinhaEquipe = { id: string; nome: string; tipo: 'equipe' | 'equipe-btg'; desde: string; ate: string }
+let seqLinha = 0
+const novoId = () => `n${++seqLinha}`
+// "228.01" gravado aparece como se digita: "228,01"
+const valorNoCampo = (v: number) => String(v).replace('.', ',')
+function linhasDe(lista: CustoFixo[]): { mensais: LinhaCusto[]; equipe: LinhaEquipe[] } {
+  return {
+    mensais: lista.filter(c => c.tipo === 'valor').map((c, i) => ({ id: `m${i}`, nome: c.nome, valor: valorNoCampo(c.valor), desde: c.desde, ate: c.ate ?? '' })),
+    equipe: lista.flatMap((c, i) => c.tipo === 'valor' ? [] : [{ id: `e${i}`, nome: c.nome, tipo: c.tipo, desde: c.desde, ate: c.ate ?? '' }]),
+  }
+}
+// para saber se mudou: as linhas sem o id
+const serial = (m: LinhaCusto[], e: LinhaEquipe[]) => JSON.stringify([m.map(l => [l.nome, l.valor, l.desde, l.ate]), e.map(l => [l.nome, l.tipo, l.desde, l.ate])])
+// "Aikon", "Aikon e Milena", "Aikon, Milena e Karen"
+const juntarNomes = (n: string[]) => (n.length <= 1 ? n.join('') : `${n.slice(0, -1).join(', ')} e ${n[n.length - 1]}`)
+// rótulo do campo, só no celular (no computador a linha de títulos fica em cima das linhas)
+const rotuloCel = (t: string) => <span className="label mb-1 block md:hidden">{t}</span>
+const GRADE_CUSTO = 'grid grid-cols-[1fr_1fr_auto] gap-2 max-md:rounded-lg max-md:border max-md:border-line max-md:p-3 md:grid-cols-[minmax(0,1fr)_8rem_10rem_10rem_2.25rem] md:items-center'
+const GRADE_EQUIPE = 'grid grid-cols-[1fr_1fr_auto] gap-2 max-md:rounded-lg max-md:border max-md:border-line max-md:p-3 md:grid-cols-[minmax(0,1fr)_11rem_10rem_10rem_2.25rem] md:items-center'
+// no celular a lixeira fica ao lado do nome, na primeira linha do bloco
+const LIXEIRA_CEL = 'max-md:col-start-3 max-md:row-start-1 self-end md:self-center'
+
+function SecaoCustos({ corretora, valor, responsaveis, mesAtual }: { corretora: Corretora; valor: string; responsaveis: Dados['responsaveis']; mesAtual: string }) {
+  const { erro, ocupado, rodar } = useAcao()
+  const gravados = lerCustosFixos(valor)
+  const ilegivel = !!valor.trim() && gravados.length === 0
+  const [mensais, setMensais] = useState<LinhaCusto[]>(() => linhasDe(gravados).mensais)
+  const [equipe, setEquipe] = useState<LinhaEquipe[]>(() => linhasDe(gravados).equipe)
+  const [inicial, setInicial] = useState(() => serial(linhasDe(gravados).mensais, linhasDe(gravados).equipe))
+  const mudou = serial(mensais, equipe) !== inicial
+  const mes7 = mesAtual.slice(0, 7)
+  const nomeMes = MESES_LONGOS[Number(mesAtual.slice(5, 7)) - 1] ?? mes7
+
+  // Quem pode entrar na equipe: os responsáveis ativos e comissionados (quem tem valor em Comissões), mais quem já
+  // está numa linha e saiu dessa lista (continua escolhido até alguém trocar)
+  const pessoas = responsaveis.filter(r => r.ativo && r.comissionado).map(r => r.nome)
+  const opcoes = [...pessoas, ...[...new Set(equipe.map(l => l.nome))].filter(n => n && !pessoas.includes(n))]
+
+  // O que vale no mês atual, pelo que está gravado: a linha do índice no celular e a primeira linha do cartão
+  const valendo = gravados.filter(c => emVigor(c, mesAtual))
+  const somaMensal = valendo.filter(c => c.tipo === 'valor').reduce((s, c) => s + c.valor, 0)
+  const nomesEquipe = [...new Set(valendo.filter(c => c.tipo !== 'valor').map(c => c.nome))]
+  const partes = [somaMensal > 0 ? `${fmtBRL2(somaMensal)} por mês` : null, nomesEquipe.length ? juntarNomes(nomesEquipe) : null].filter((p): p is string => !!p)
+  const resumo: ReactNode = ilegivel ? pendente('texto gravado com erro')
+    : !gravados.length ? 'nenhum custo lançado'
+    : partes.length ? partes.join(' · ') : `nada valendo em ${nomeMes}`
+
+  // As linhas → lista de custos. Linha toda em branco é ignorada; o resto passa pela mesma validação do servidor,
+  // para a mensagem sair legível antes de gravar
+  const montar = (): { lista: CustoFixo[]; erro: string | null } => {
+    const m = mensais.filter(l => l.nome.trim() || l.valor.trim())
+    const e = equipe.filter(l => l.nome.trim())
+    const comPontoEVirgula = [...m, ...e].find(l => l.nome.includes(';'))
+    if (comPontoEVirgula) return { lista: [], erro: `Tire o ";" do nome ${comPontoEVirgula.nome.trim()}.` }
+    const lista: CustoFixo[] = [
+      ...m.map(l => ({ nome: l.nome.trim(), tipo: 'valor' as const, valor: numeroBR(l.valor), desde: l.desde, ate: l.ate || null })),
+      ...e.map(l => ({ nome: l.nome.trim(), tipo: l.tipo, valor: 0, desde: l.desde, ate: l.ate || null })),
+    ]
+    const invalido = validarCustosFixos(lista)
+    if (invalido) return { lista, erro: invalido }
+    if (lerCustosFixos(textoCustosFixos(lista)).length !== lista.length) return { lista, erro: 'Não consegui ler um dos nomes. Tire os sinais ";" e ":" do nome.' }
+    return { lista, erro: null }
+  }
+  const salvar = () => rodar(async () => {
+    const { lista, erro: invalido } = montar()
+    if (invalido) return { ok: false as const, erro: invalido }
+    const r = await salvarCustosFixos(corretora, textoCustosFixos(lista))
+    if (r.ok) {
+      // as linhas passam a mostrar a forma gravada
+      const novas = linhasDe(lerCustosFixos(r.dados.valor))
+      setMensais(novas.mensais); setEquipe(novas.equipe); setInicial(serial(novas.mensais, novas.equipe))
+    }
+    return r
+  }, undefined, 'Custos salvos')
+
+  const mudaMensal = (id: string, campo: Partial<LinhaCusto>) => setMensais(ls => ls.map(l => (l.id === id ? { ...l, ...campo } : l)))
+  const mudaEquipe = (id: string, campo: Partial<LinhaEquipe>) => setEquipe(ls => ls.map(l => (l.id === id ? { ...l, ...campo } : l)))
+  const ajuda = 'Saem da comissão líquida do BTG antes da divisão entre os sócios. Aparecem no Painel.'
+  const campoMes = (rotulo: string, v: string, onChange: (v: string) => void, quem: string) => (
+    <label className="block min-w-0">
+      {rotuloCel(rotulo)}
+      <input type="month" className="field-sm w-full" placeholder="AAAA-MM" value={v} onChange={e => onChange(e.target.value)} aria-label={`${rotulo} · ${quem || 'linha nova'}`} />
+    </label>
+  )
+
+  return (
+    <NoCelular titulo="Custos do escritório" dica={ajuda} resumo={resumo}>
+    <Panel variant="card" title="Custos do escritório" subtitle={ajuda} {...CARTAO_NO_CELULAR}>
+      {erro && <Alert tone="loss" className="mb-3">{erro}</Alert>}
+      {ilegivel && (
+        <Alert tone="warn" className="mb-3" title="O texto gravado não pôde ser lido">
+          <p className="mt-1 break-words">A tela começou vazia. Gravado hoje: {valor}</p>
+        </Alert>
+      )}
+      {/* no celular a linha do índice já diz isso */}
+      {partes.length > 0 && <p className="mb-4 text-dense text-fg-muted max-md:hidden">Valendo em {nomeMes}: <span className="text-fg">{partes.join(' · ')}</span>.</p>}
+
+      <h3 className="text-dense font-medium text-fg">Custos mensais</h3>
+      <div className="mt-2 space-y-2">
+        {mensais.length > 0 && (
+          <div className={cn(GRADE_CUSTO, 'label max-md:hidden')} aria-hidden>
+            <span>Nome</span><span>Valor por mês</span><span>Desde</span><span>Até (opcional)</span><span />
+          </div>
+        )}
+        {mensais.map(l => (
+          <div key={l.id} className={GRADE_CUSTO}>
+            <label className="block min-w-0 max-md:col-span-2">
+              {rotuloCel('Nome')}
+              <input className="field-sm w-full" placeholder="Ex.: Supabase" value={l.nome} onChange={e => mudaMensal(l.id, { nome: e.target.value })} aria-label="Nome do custo" />
+            </label>
+            <label className="block min-w-0 max-md:col-span-3">
+              {rotuloCel('Valor por mês (R$)')}
+              <input className="field-sm w-full text-right max-md:text-left" inputMode="decimal" placeholder="0,00" value={l.valor} onChange={e => mudaMensal(l.id, { valor: e.target.value })} aria-label={`Valor por mês · ${l.nome || 'linha nova'}`} />
+            </label>
+            {campoMes('Desde', l.desde, v => mudaMensal(l.id, { desde: v }), l.nome)}
+            <div className="max-md:col-span-2">{campoMes('Até (opcional)', l.ate, v => mudaMensal(l.id, { ate: v }), l.nome)}</div>
+            <IconButton tone="danger" className={LIXEIRA_CEL} aria-label={`Tirar ${l.nome || 'linha nova'}`} onClick={() => setMensais(ls => ls.filter(x => x.id !== l.id))}><Trash2 className="h-4 w-4" aria-hidden /></IconButton>
+          </div>
+        ))}
+        <Button size="sm" variant="secondary" className="max-md:w-full" onClick={() => setMensais(ls => [...ls, { id: novoId(), nome: '', valor: '', desde: mes7, ate: '' }])}>
+          <Plus className="h-4 w-4" aria-hidden />Adicionar custo
+        </Button>
+      </div>
+
+      <h3 className="mt-6 text-dense font-medium text-fg">Equipe</h3>
+      <p className="mt-0.5 text-label text-fg-muted">O valor vem de Comissões: o fixo do nível e as comissões do mês.</p>
+      <div className="mt-2 space-y-2">
+        {equipe.length > 0 && (
+          <div className={cn(GRADE_EQUIPE, 'label max-md:hidden')} aria-hidden>
+            <span>Pessoa</span><span>Entra</span><span>Desde</span><span>Até (opcional)</span><span />
+          </div>
+        )}
+        {equipe.map(l => (
+          <div key={l.id} className={GRADE_EQUIPE}>
+            <label className="block min-w-0 max-md:col-span-2">
+              {rotuloCel('Pessoa')}
+              <select className="field-sm w-full" value={l.nome} onChange={e => mudaEquipe(l.id, { nome: e.target.value })} aria-label="Pessoa">
+                <option value="">Escolha…</option>
+                {opcoes.map(p => <option key={p}>{p}</option>)}
+              </select>
+            </label>
+            <label className="block min-w-0 max-md:col-span-3">
+              {rotuloCel('Entra')}
+              <select className="field-sm w-full" value={l.tipo} onChange={e => mudaEquipe(l.id, { tipo: e.target.value as LinhaEquipe['tipo'] })} aria-label={`Entra · ${l.nome || 'linha nova'}`}>
+                <option value="equipe">Tudo o que recebe</option>
+                <option value="equipe-btg">Só a parte do BTG</option>
+              </select>
+            </label>
+            {campoMes('Desde', l.desde, v => mudaEquipe(l.id, { desde: v }), l.nome)}
+            <div className="max-md:col-span-2">{campoMes('Até (opcional)', l.ate, v => mudaEquipe(l.id, { ate: v }), l.nome)}</div>
+            <IconButton tone="danger" className={LIXEIRA_CEL} aria-label={`Tirar ${l.nome || 'linha nova'}`} onClick={() => setEquipe(ls => ls.filter(x => x.id !== l.id))}><Trash2 className="h-4 w-4" aria-hidden /></IconButton>
+          </div>
+        ))}
+        <Button size="sm" variant="secondary" className="max-md:w-full" onClick={() => setEquipe(ls => [...ls, { id: novoId(), nome: '', tipo: 'equipe', desde: mes7, ate: '' }])}>
+          <Plus className="h-4 w-4" aria-hidden />Adicionar pessoa
+        </Button>
+      </div>
+
+      <div className="mt-6 flex items-center gap-3 max-md:flex-col max-md:items-stretch">
+        <Button variant={mudou ? 'primary' : 'secondary'} disabled={!mudou} loading={ocupado} onClick={salvar}>Salvar custos</Button>
+        {mudou && <span className="text-label text-warn">Há mudanças sem salvar.</span>}
+      </div>
+      <p className="mt-3 text-label text-fg-subtle">
+        Mudou de valor? Ponha o último mês em Até e lance o novo valor a partir do mês seguinte: os meses anteriores não mudam.
+        Não lance Delta, imposto nem a parte dos parceiros do BTG: já saem antes na conta. Salvar aqui não recalcula os lotes.
+      </p>
+    </Panel>
+    </NoCelular>
   )
 }
 
